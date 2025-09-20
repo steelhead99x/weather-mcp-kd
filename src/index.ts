@@ -1,14 +1,5 @@
-import dotenv from 'dotenv';
-import { runWeatherAgent } from './agents/weather-agent.js';
+import mastra from './mastra/index.js';
 
-dotenv.config();
-
-async function main() {
-    // Run the advanced weather agent experience
-    await runWeatherAgent();
-}
-
-main().catch((error) => {
-    console.error("❌ Application failed:", error);
-    process.exit(1);
-});
+// Export the Mastra instance
+export default mastra;
+export { default as mastra } from './mastra/index.js';
