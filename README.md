@@ -1,16 +1,15 @@
 # Weather Agent KD
 
-A TypeScript weather agent and tooling suite featuring:
-- Weather lookup via the U.S. National Weather Service (Weather.gov) using ZIP code or coordinates
-- Optional Anthropic-powered weather prompt generation in multiple tones
-- Text-to-Speech (TTS) via Deepgram and Cartesia (WS preferred with REST fallback)
-- Basic Speech-to-Text (STT) test via Deepgram (Cartesia placeholder)
-- An experimental MCP server exposing a weather tool
+A TypeScript project that demonstrates a weather-focused agent built with Mastra. It includes:
+- A Mastra Agent that can call a weather tool
+- A weather tool that fetches forecasts from api.weather.gov (via ZIP geocoding from Zippopotam.us)
+- An MCP server exposing the same weather tool
+- Several test scripts (agent, TTS, STT, etc.)
 
-This README reflects the current codebase and package.json scripts.
+This README is freshly written to reflect the current codebase and package.json scripts as of 2025-09-20.
 
 ## Requirements
-- Node.js 18.18 or newer (provides global fetch and ESM)
+- Node.js 20+ (required by package engines)
 - npm 9+ recommended
 
 ## Install
@@ -18,168 +17,135 @@ This README reflects the current codebase and package.json scripts.
 npm install
 ```
 
-## Environment Setup
-Use the provided sample to configure keys and options, then create your own .env:
+## Environment Variables
+Create a `.env` file in the project root (do not commit secrets). Variables used by this project include:
+- ANTHROPIC_API_KEY: Required if you plan to use the Anthropic-backed agent or the Claude test script
+- ANTHROPIC_MODEL: Optional Anthropic model override (defaults in code to "claude-3-haiku-20240307")
+- WEATHER_MCP_USER_AGENT: Optional but recommended courtesy header for Weather.gov requests (e.g. "YourApp/1.0 (email@example.com)")
+- DEEPGRAM_API_KEY: Optional for TTS/STT tests using Deepgram
+- CARTESIA_API_KEY: Optional for TTS tests using Cartesia
+- Additional optional variables exist for STT/TTS scripts (see scripts section below)
+
+You can start from an example of your own. If you created a local example file, copy and edit it:
 ```
 cp .env.example .env
-# Edit .env and fill in values
+# Edit .env to add your keys and options
 ```
-Key variables (see .env.example for the full list and comments):
-- ANTHROPIC_API_KEY — Required for Anthropic test scripts (Claude text generation)
-- ANTHROPIC_MODEL — Optional model override (default currently set to "claude-3-haiku-20240307")
-- CARTESIA_API_KEY, CARTESIA_VOICE, CARTESIA_TTS_MODEL, CARTESIA_SAMPLE_RATE — Optional; enable Cartesia TTS
-- DEEPGRAM_API_KEY, DEEPGRAM_TTS_MODEL/DEEPGRAM_VOICE — Optional; enable Deepgram TTS
-- WEATHER_MCP_USER_AGENT — Courtesy header for Weather.gov requests (recommended)
-- STT_INPUT_FILE, STT_OUTPUT_FILE, STT_PROVIDER — Optional; configure STT test script
-- TTS_TEXT, TTS_OUTPUT_BASE, TTS_PROVIDER, TTS_FORMAT — Optional; configure TTS test script
 
-Note: Please set a descriptive WEATHER_MCP_USER_AGENT per Weather.gov policy.
+## Project Layout (key files)
+- src/mastra/index.ts — Creates and exports the Mastra instance (agents + MCP servers)
+- src/mastra/agents/weather-agent.ts — Defines the Weather Agent (Anthropic model + weatherTool)
+- src/mastra/tools/weather.ts — Defines and exports weatherTool (id: "get-weather")
+- src/mastra/mcp/weather-server.ts — Exposes weatherTool via an MCPServer
+- src/mastra/scripts/ — Test scripts for agent, ZIP tool, STT, TTS, etc.
 
-## Project Layout
-- src/index.ts — App entry; runs a minimal weather agent stub
-- src/agents/weather-agent.ts — Agent facade and Claude-generation tester
-- src/tools/weather.ts — Weather tools (get_weather_by_zip, get_weather_by_coordinates)
-- src/mcp/weather-server.ts — Experimental MCP server exposing getWeatherByZip
-- src/scripts/test-zip.ts — Test the ZIP weather tool
-- src/scripts/test-claude.ts — Test Anthropic weather prompt generation with tones
-- src/scripts/test-weather-agent.ts — Test the agent stub
-- src/scripts/test-stt.ts — Test STT providers (Deepgram supported; Cartesia placeholder)
-- src/scripts/test-tts.ts — Test TTS providers (Deepgram and Cartesia)
-
-TypeScript is configured to compile everything under src to dist via `tsc` (see tsconfig.json).
-
-## Scripts (from package.json)
-- dev: Build then launch Mastra Dev Playground (uses dist/mastra/index.js)
-- build: Compile TypeScript to dist/
-- start: Run dist/index.js
-- typecheck: Type-check only (no emit)
-- test:zip: Build then run dist/scripts/test-zip.js
-- test:claude: Build then run dist/scripts/test-claude.js (requires ANTHROPIC_API_KEY)
-- test:weather-agent: Build then run dist/scripts/test-weather-agent.js
-- test:stt: Build then run dist/scripts/test-stt.js
-- test:stt:deepgram: Build then run Deepgram STT on files/sample.wav
-- test:stt:cartesia: Build then run Cartesia STT placeholder on files/sample.wav
-- test:tts: Build then run dist/scripts/test-tts.js
-- test:tts:deepgram: Build then TTS via Deepgram
-- test:tts:cartesia: Build then TTS via Cartesia
+## Scripts (package.json)
+- dev: `mastra dev` — Launch Mastra Dev Playground for this app
+- build: `mastra build` — Build the project into dist/
+- start: `node dist/index.js` — If you have a built entry file at dist/index.js (not required for most flows)
+- typecheck: `tsc --noEmit`
+- test:zip: Build then run `dist/mastra/scripts/test-zip.js`
+- test:claude: Build then run `dist/mastra/scripts/test-claude.js`
+- test:weather-agent: Build then run `dist/mastra/scripts/test-weather-agent.js`
+- test:stt: Build then run `dist/mastra/scripts/test-stt.js`
+- test:stt:deepgram: Build then run STT via Deepgram
+- test:stt:cartesia: Build then run STT via Cartesia (placeholder)
+- test:tts: Build then run `dist/mastra/scripts/test-tts.js`
+- test:tts:deepgram: Build then run TTS via Deepgram
+- test:tts:cartesia: Build then run TTS via Cartesia
 - test:all: Run all of the above tests sequentially
 
-Run any script using npm, for example:
-```
-npm run test:zip
-npm run test:claude
-npm run test:tts:deepgram
-npm run test:stt:deepgram
-```
+Notes:
+- The test scripts require specific environment variables depending on the provider (see their headers). Some scripts are experimental:
+  - test-zip.ts currently imports a symbol name that does not exist in the tool file; see the programmatic usage section below if you call the tool directly.
+  - test-claude.ts references a missing config file for models and may require adjustment.
 
-## Usage Examples
-
-### Start the Mastra Dev Playground
+## Development
+Start the Mastra Dev Playground:
 ```
 npm run dev
 ```
-This builds the project and launches the Mastra Dev Playground, which loads dist/mastra/index.js by default (a shim that re-exports from app.js). Set ANTHROPIC_API_KEY in your .env to use the Anthropic-powered agent.
+- Ensure your `.env` contains the variables you intend to use (e.g., ANTHROPIC_API_KEY for text generation).
+- The Mastra dev server will load the Mastra app exported from src/mastra/index.ts (compiled to dist during dev/build).
 
-### Run the minimal agent stub (optional)
+Build the project:
 ```
-npm start
+npm run build
 ```
-This runs dist/index.js and prints a simple echo; no API keys required for this path.
 
-### Weather by ZIP (tool test)
-```
-npm run test:zip
-```
-This calls the Weather.gov API via Zippopotam.us geocoding. Recommend setting WEATHER_MCP_USER_AGENT in .env.
+## Using the Weather Agent (programmatic)
+The Weather Agent uses Anthropic and the weatherTool behind the scenes to fulfill user queries. Minimal example:
+```ts
+import 'dotenv/config';
+import { weatherAgent } from './dist/mastra/agents/weather-agent.js';
 
-### Weather by Coordinates (programmatic)
-The tool `getWeatherByCoordinates` is exported from src/tools/weather.ts and can be imported in your code. It validates latitude/longitude and returns a normalized forecast array.
+async function main() {
+  const res = await weatherAgent.generate(
+    "Hello! Please get the forecast for ZIP 94102"
+  );
+  console.log(res.text || res);
+}
 
-### Claude-generated weather prompts (requires ANTHROPIC_API_KEY)
+main();
 ```
-npm run test:claude
-```
-Generates a short, TTS-friendly weather report in several tones:
-- professional, groovy, librarian, sports
-Override model by setting ANTHROPIC_MODEL in .env.
+Requirements:
+- ANTHROPIC_API_KEY set
+- Network access for Zippopotam.us and api.weather.gov
 
-### Text-to-Speech
-- Deepgram (REST):
-```
-npm run test:tts:deepgram
-```
-- Cartesia (WebSocket preferred; REST fallback automatically):
-```
-npm run test:tts:cartesia
-```
-Configure via .env: CARTESIA_API_KEY, CARTESIA_VOICE, CARTESIA_TTS_MODEL, TTS_FORMAT (mp3|wav for Cartesia; multiple formats for Deepgram). Output files save under TTS_OUTPUT_BASE with provider-specific suffixes.
+## Using the Weather Tool Directly (programmatic)
+The tool is exported as `weatherTool` and expects a `zipCode` in its context. It returns basic location info and a short forecast array.
+```ts
+import 'dotenv/config';
+import { weatherTool } from './dist/mastra/tools/weather.js';
 
-### Speech-to-Text
-- Deepgram (REST):
-```
-npm run test:stt:deepgram
-```
-- Cartesia: placeholder (requires CARTESIA_API_URL/CARTESIA_API_KEY if available) — adjust as needed.
+async function main() {
+  const result = await weatherTool.execute({
+    context: { zipCode: '94102' }
+  });
+  console.log(result);
+}
 
-Use STT_INPUT_FILE and STT_OUTPUT_FILE in .env to control input and where transcripts are written (supports .json or .txt).
+main();
+```
+Optional:
+- Set `WEATHER_MCP_USER_AGENT` in your environment to include a descriptive User-Agent for Weather.gov requests.
 
 ## MCP Server (experimental)
-The file src/mcp/weather-server.ts exports an MCPServer instance that exposes the getWeatherByZip tool. This project does not stand up a long-running server process by default; embed or adapt it into your own MCP host as needed.
+An MCP server is defined that exposes the weather tool:
+- File: src/mastra/mcp/weather-server.ts
+- Export: `weatherMcpServer`
+You can embed this server in your own MCP-capable host or extend it according to your needs.
 
-## Mastra Dev Playground Integration
-This repo exposes a Mastra app you can load in the Mastra Dev Playground:
-- Mastra app file: src/mastra/app.ts (compiled to dist/mastra/app.js)
-- Agents: weather
-- Tools: getWeatherByZip, getWeatherByCoordinates
-
-Local sanity test:
+## Test Scripts
+After building, you can run:
 ```
-npm run test:mastra
+# Simple agent smoke test (uses Anthropic)
+npm run test:weather-agent
+
+# STT tests (Deepgram supported; Cartesia placeholder)
+npm run test:stt
+npm run test:stt:deepgram
+npm run test:stt:cartesia
+
+# TTS tests (Deepgram and Cartesia)
+npm run test:tts
+npm run test:tts:deepgram
+npm run test:tts:cartesia
 ```
+Environment variables commonly used by these scripts include:
+- STT_INPUT_FILE, STT_OUTPUT_FILE, STT_PROVIDER
+- TTS_TEXT, TTS_OUTPUT_BASE, TTS_PROVIDER, TTS_FORMAT
+- DEEPGRAM_API_KEY, CARTESIA_API_KEY
 
-Using in a Mastra Dev Playground (one approach):
-- Point your playground to import the default export from dist/mastra/app.js, or import { weather } for the single agent.
-- The agent uses Anthropic by default; set ANTHROPIC_API_KEY and optionally ANTHROPIC_MODEL in .env.
-- Weather.gov requests include WEATHER_MCP_USER_AGENT when provided.
+Caveats:
+- test-zip.ts currently uses an import name mismatch relative to src/mastra/tools/weather.ts (exports `weatherTool`). If you need a direct ZIP test, prefer the programmatic example above or adjust the script to import `weatherTool`.
+- test-claude.ts references a non-existent `../config/models.js`. You may replace the `getAnthropicModel()` usage with a direct `process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307'` until a config helper is added.
 
-If you are using a separate Mastra playground host/app, add this package as a workspace/dependency and import:
-```
-import mastra from 'weather-agent-kd/dist/mastra/app.js';
-// or
-import { weather } from 'weather-agent-kd/dist/mastra/app.js';
-```
-
-### How to start the Mastra Dev Playground
-There are two common ways to use this project with the Mastra Dev Playground:
-
-1) If you already have the Mastra Dev Playground app
-- Build this repo so the compiled app exists at dist/mastra/index.js (and dist/mastra/app.js):
-  - `npm run build`
-- In the Playground, add/import your app by pointing it to the built file:
-  - Default export: `dist/mastra/app.js` (exports the Mastra instance)
-  - Named export: `{ weather }` (single agent)
-- Set environment variables before launching (at minimum for Anthropic if you plan to generate text):
-  - `ANTHROPIC_API_KEY`
-  - Optionally `ANTHROPIC_MODEL` (defaults to `claude-3-haiku-20240307`)
-  - `WEATHER_MCP_USER_AGENT` recommended for Weather.gov
-
-2) If you don’t have the Playground yet
-- Follow the official Mastra documentation to install or open the Dev Playground.
-- Once running, follow the same steps above to point it to `dist/mastra/app.js`.
-
-Troubleshooting
-- If the Playground doesn’t find your agent:
-  - Ensure you ran `npm run build` and that `dist/mastra/index.js` (and `dist/mastra/app.js`) exists.
-  - Ensure the file path you point to is absolute or correctly relative to the Playground’s import method.
-- If requests to Weather.gov fail:
-  - Provide a descriptive `WEATHER_MCP_USER_AGENT` in your `.env`.
-- If text generation fails:
-  - Make sure `ANTHROPIC_API_KEY` is set. You can also run `npm run test:mastra` locally to confirm the app loads.
-
-
-## Legal / Attribution
-- Weather data from api.weather.gov — follow their usage policy and include a descriptive User-Agent
-- Geocoding via api.zippopotam.us
+## Troubleshooting
+- Weather.gov requests fail or are throttled: Set a descriptive `WEATHER_MCP_USER_AGENT` per their guidelines.
+- Anthropic calls fail: Ensure `ANTHROPIC_API_KEY` is set and valid; confirm your model name if overriding via `ANTHROPIC_MODEL`.
+- STT/TTS failures: Verify the respective provider API keys and that your input/output parameters are valid.
+- Mastra Dev issues: Rebuild (`npm run build`) and ensure dist files exist; check Node version (>= 20).
 
 ## License
 MIT
