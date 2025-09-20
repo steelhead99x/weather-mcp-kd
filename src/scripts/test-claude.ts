@@ -2,14 +2,16 @@ import 'dotenv/config';
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { pathToFileURL } from 'url';
+import { getAnthropicModel } from "../config/models";
 
-// Get model from environment
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-7-sonnet-20250219';
+// Get model from environment (centralized)
+const ANTHROPIC_MODEL = getAnthropicModel();
 
 // Standalone Claude weather prompt generator for testing
+import { TONE_OPTIONS, Tone } from "../config/tones";
 export async function generateWeatherPrompt(
     weatherData: any,
-    tone: 'professional' | 'groovy' | 'librarian' | 'sports',
+    tone: Tone,
     location: string
 ) {
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -58,7 +60,7 @@ Generate one flowing paragraph:`
         .replace(/[°]/g, ' degrees ')
         .replace(/%/g, ' percent ')
         .replace(/&/g, ' and ')
-        .replace(/[""'']/g, '')
+        .replace(/["']/g, '')
         .replace(/[^\w\s.,!?-]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -82,8 +84,7 @@ export async function testClaudeGeneration() {
         }]
     };
 
-    const tones: Array<'professional' | 'groovy' | 'librarian' | 'sports'> =
-        ['professional', 'groovy', 'librarian', 'sports'];
+    const tones: Array<Tone> = [...TONE_OPTIONS];
 
     console.log(`🤖 Testing ${ANTHROPIC_MODEL} Weather Generation\n`);
 

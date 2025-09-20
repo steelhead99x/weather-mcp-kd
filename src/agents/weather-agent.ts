@@ -8,19 +8,20 @@ import { mkdir } from "fs/promises";
 import { join } from "path";
 import { v4 as uuidv4 } from "uuid";
 import { pathToFileURL } from "url";
+import { TONE_OPTIONS, Tone } from "../config/tones";
+import { getAnthropicModel } from "../config/models";
 
-// Get Anthropic model from environment or use default
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-3-7-sonnet-20250219";
+// Get Anthropic model from environment or use default (centralized)
+const ANTHROPIC_MODEL = getAnthropicModel();
 
-interface ToneStyles {
-    [key: string]: {
-        personality: string;
-        examples: string[];
-        characteristics: string[];
-    };
+interface ToneStylesMap {
+    personality: string;
+    examples: string[];
+    characteristics: string[];
 }
 
-const toneStyles: ToneStyles = {
+const toneStyles: Record<Tone, ToneStylesMap> = {
+
     professional: {
         personality: "authoritative weather forecaster on television",
         examples: [
@@ -93,13 +94,16 @@ const generateTTSPromptTool = createTool({
             .optional()
             .describe("Weather forecast data (optional; will be fetched if not provided)"),
         tone: z
-            .enum(["professional", "groovy", "librarian", "sports"])
+            .enum(TONE_OPTIONS)
             .describe("Tone of voice for the weather report"),
         zipCode: z.string().describe("ZIP code for the weather report"),
-    }),
+    }) as unknown as any,
     execute: async ({ context, runtimeContext }) => {
-        let { weatherData, tone, zipCode } = context;
-        const style = toneStyles[tone as keyof typeof toneStyles];
+        const { weatherData: ctxWeatherData, tone: ctxTone, zipCode: ctxZip } = (context || {}) as any;
+        let weatherData = ctxWeatherData;
+        const tone = ctxTone as Tone;
+        const zipCode = ctxZip as string;
+        const style = toneStyles[tone];
 
         if (!style) {
             throw new Error(`Invalid tone style: ${tone}`);
@@ -110,17 +114,15 @@ const generateTTSPromptTool = createTool({
             if (!zipCode) {
                 throw new Error("ZIP code is required to fetch weather data");
             }
+            // Validate tool availability outside of try-catch to avoid local throw/catch
+            if (!getWeatherByZipTool.execute) {
+                throw new Error("Weather tool execute method is not available");
+            }
             try {
-                // Check if execute method exists before calling it
-                if (!getWeatherByZipTool.execute) {
-                    throw new Error("Weather tool execute method is not available");
-                }
-                
-                const fetched = await getWeatherByZipTool.execute({
+                weatherData = await getWeatherByZipTool.execute({
                     context: { zipCode },
                     runtimeContext,
                 });
-                weatherData = fetched;
             } catch (e) {
                 throw new Error(
                     `Failed to fetch weather data for ${zipCode}: ${
@@ -173,7 +175,7 @@ REQUIREMENTS:
 Generate a single, flowing weather report paragraph:`,
                     },
                 ],
-                maxOutputTokens: 300,
+                maxTokens: 300,
                 temperature: 0.8, // Add creativity while maintaining accuracy
             });
 
@@ -185,7 +187,7 @@ Generate a single, flowing weather report paragraph:`,
                 .replace(/%/g, " percent ")
                 .replace(/&/g, " and ")
                 .replace(/\//g, " ")
-                .replace(/[""'']/g, "") // Remove smart quotes
+                .replace(/["']/g, "") // Remove quotes
                 .replace(/[^\w\s.,!?-]/g, " ") // Remove other special chars
                 .replace(/\s+/g, " ")
                 .trim();
@@ -219,9 +221,9 @@ const generateAudioTool = createTool({
     inputSchema: z.object({
         text: z.string().describe("Text to convert to speech"),
         tone: z.string().describe("Voice tone used (for filename)"),
-    }),
+    }) as unknown as any,
     execute: async ({ context }) => {
-        const { text, tone } = context;
+        const { text, tone } = (context || {}) as any;
 
         // Create unique filename base and ensure files directory exists
         const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, "");
@@ -246,6 +248,7 @@ const generateAudioTool = createTool({
         const deepgramKey = process.env.DEEPGRAM_API_KEY;
 
         try {
+            let lastErrorMessage = "";
             // 1) Try Cartesia first if available
             if (cartesiaKey) {
                 const cartesiaUrl = `https://api.cartesia.ai/tts`;
@@ -270,14 +273,12 @@ const generateAudioTool = createTool({
                     } catch {
                         // Ignore text extraction errors
                     }
-                    throw new Error(
-                        `Cartesia TTS failed: ${cartesiaRes.status} ${cartesiaRes.statusText} ${errText}`.trim()
-                    );
+                    lastErrorMessage = `Cartesia TTS failed: ${cartesiaRes.status} ${cartesiaRes.statusText} ${errText}`.trim();
+                } else {
+                    const cartesiaArrayBuf = await cartesiaRes.arrayBuffer();
+                    const cartesiaBuffer = Buffer.from(cartesiaArrayBuf);
+                    return await writeBuffer(cartesiaBuffer);
                 }
-
-                const cartesiaArrayBuf = await cartesiaRes.arrayBuffer();
-                const cartesiaBuffer = Buffer.from(cartesiaArrayBuf);
-                return await writeBuffer(cartesiaBuffer);
             }
 
             // 2) Fallback to Deepgram if available
@@ -306,27 +307,29 @@ const generateAudioTool = createTool({
                     } catch {
                         // Ignore text extraction errors
                     }
-                    throw new Error(
-                        `Deepgram TTS request failed: ${res.status} ${res.statusText} ${bodyText}`.trim()
-                    );
+                    lastErrorMessage = `Deepgram TTS request failed: ${res.status} ${res.statusText} ${bodyText}`.trim();
+                } else {
+                    const arrayBuf = await res.arrayBuffer();
+                    const buffer = Buffer.from(arrayBuf);
+                    return await writeBuffer(buffer);
                 }
-
-                const arrayBuf = await res.arrayBuffer();
-                const buffer = Buffer.from(arrayBuf);
-                return await writeBuffer(buffer);
             }
 
-            // 3) No TTS providers available — save text
+            // 3) If we reach here, either no providers are configured or both failed — save text
             const txtFilename = `weather-${tone}-${timestamp}-${uniqueId}.txt`;
             const txtPath = join(filesDir, txtFilename);
             const fs = await import("fs/promises");
             await fs.writeFile(txtPath, text, "utf8");
+            const noProviders = !cartesiaKey && !deepgramKey;
+            const baseMsg = noProviders
+                ? "No TTS provider configured. Saved text instead."
+                : (lastErrorMessage || "TTS providers failed. Saved text instead.");
             return {
                 success: false,
                 filename: txtFilename,
                 filePath: txtPath,
-                message: `⚠️ No TTS provider configured. Saved text instead.`,
-                error: "No CARTESIA_API_KEY or DEEPGRAM_API_KEY found",
+                message: `⚠️ ${baseMsg}`,
+                error: noProviders ? "No CARTESIA_API_KEY or DEEPGRAM_API_KEY found" : lastErrorMessage,
             };
         } catch (error) {
             // Fallback to text file

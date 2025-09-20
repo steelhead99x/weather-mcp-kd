@@ -51,7 +51,7 @@ npm start -- mcp.get_weather_by_zip '{"zipCode":"90210"}'
 ```
 
 ## Configuration
-You can copy .env.example to .env and adjust values as needed.
+Create a .env file and adjust values as needed.
 
 Optional environment variables (via .env or shell):
 - AGENT_NAME — Overrides the agent display name used by the CLI
@@ -63,7 +63,7 @@ Optional environment variables (via .env or shell):
 
 Example .env:
 ```
-# See .env.example for full details
+# Example variables
 AGENT_NAME=weather-agent
 WEATHER_MCP_USER_AGENT=WeatherAgentKD/0.1 (me@example.com)
 # Required for the advanced agent

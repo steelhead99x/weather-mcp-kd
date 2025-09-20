@@ -20,6 +20,10 @@ const USER_AGENT =
     process.env.WEATHER_MCP_USER_AGENT ||
     "WeatherMCP/0.1 (mail@streamingportfolio.com)";
 
+interface ZipContext {
+    zipCode: string;
+}
+
 export const getWeatherByZipTool = createTool({
     id: "get_weather_by_zip",
     description:
@@ -27,7 +31,7 @@ export const getWeatherByZipTool = createTool({
     inputSchema: z.object({
         zipCode: z.string().describe("5-digit ZIP code for weather lookup"),
     }),
-    execute: async ({ context }) => {
+    execute: async ({ context }: { context: ZipContext }) => {
         const { zipCode } = context;
 
         if (!zipCode || !/^\d{5}$/.test(zipCode)) {
@@ -103,6 +107,11 @@ export const getWeatherByZipTool = createTool({
     },
 });
 
+interface CoordinatesContext {
+    latitude: number;
+    longitude: number;
+}
+
 export const getWeatherByCoordinatesTool = createTool({
     id: "get_weather_by_coordinates",
     description:
@@ -114,13 +123,28 @@ export const getWeatherByCoordinatesTool = createTool({
             .min(-180)
             .max(180)
             .describe("Longitude in decimal degrees"),
-    }),
-    execute: async ({ context }) => {
+    }) as unknown as any,
+    execute: async ({ context }: { context: CoordinatesContext }) => {
         const { latitude, longitude } = context;
 
-            const pointUrl = `https://api.weather.gov/points/${latitude.toFixed(
-                4
-            )},${longitude.toFixed(4)}`;
+            // Runtime validation and coercion to guard against NaN or unexpected types
+            const latNum = Number(latitude);
+            const lonNum = Number(longitude);
+
+            if (!Number.isFinite(latNum)) {
+                throw new Error("Invalid latitude: must be a finite number between -90 and 90");
+            }
+            if (!Number.isFinite(lonNum)) {
+                throw new Error("Invalid longitude: must be a finite number between -180 and 180");
+            }
+            if (latNum < -90 || latNum > 90) {
+                throw new Error("Latitude out of range: expected -90 to 90");
+            }
+            if (lonNum < -180 || lonNum > 180) {
+                throw new Error("Longitude out of range: expected -180 to 180");
+            }
+
+            const pointUrl = `https://api.weather.gov/points/${latNum.toFixed(4)},${lonNum.toFixed(4)}`;
 
             const pointResponse = await fetch(pointUrl, {
                 headers: { "User-Agent": USER_AGENT },
@@ -153,7 +177,7 @@ export const getWeatherByCoordinatesTool = createTool({
             }
 
             return {
-                coordinates: { latitude, longitude },
+                coordinates: { latitude: latNum, longitude: lonNum },
                 forecast: periods.map((period) => ({
                     name: period.name,
                     startTime: period.startTime,
