@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { getWeatherByZipTool } from "../tools/weather.js";
+import { getWeatherByZipTool } from "../tools/weather";
 
 dotenv.config();
 

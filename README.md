@@ -49,7 +49,7 @@ Note: Please set a descriptive WEATHER_MCP_USER_AGENT per Weather.gov policy.
 TypeScript is configured to compile everything under src to dist via `tsc` (see tsconfig.json).
 
 ## Scripts (from package.json)
-- dev: Build then run dist/index.js
+- dev: Build then launch Mastra Dev Playground (uses dist/mastra/index.js)
 - build: Compile TypeScript to dist/
 - start: Run dist/index.js
 - typecheck: Type-check only (no emit)
@@ -74,13 +74,17 @@ npm run test:stt:deepgram
 
 ## Usage Examples
 
-### Run the app (minimal agent stub)
+### Start the Mastra Dev Playground
 ```
 npm run dev
-# or
+```
+This builds the project and launches the Mastra Dev Playground, which loads dist/mastra/index.js by default (a shim that re-exports from app.js). Set ANTHROPIC_API_KEY in your .env to use the Anthropic-powered agent.
+
+### Run the minimal agent stub (optional)
+```
 npm start
 ```
-Output shows a simple echo from the agent stub. No API keys required for this path.
+This runs dist/index.js and prints a simple echo; no API keys required for this path.
 
 ### Weather by ZIP (tool test)
 ```
@@ -122,9 +126,56 @@ Use STT_INPUT_FILE and STT_OUTPUT_FILE in .env to control input and where transc
 ## MCP Server (experimental)
 The file src/mcp/weather-server.ts exports an MCPServer instance that exposes the getWeatherByZip tool. This project does not stand up a long-running server process by default; embed or adapt it into your own MCP host as needed.
 
-## Debugging
-- Set DEBUG=1 to log additional details in some scripts (e.g., Cartesia frames)
-- Review .env.example comments for provider-specific tuning
+## Mastra Dev Playground Integration
+This repo exposes a Mastra app you can load in the Mastra Dev Playground:
+- Mastra app file: src/mastra/app.ts (compiled to dist/mastra/app.js)
+- Agents: weather
+- Tools: getWeatherByZip, getWeatherByCoordinates
+
+Local sanity test:
+```
+npm run test:mastra
+```
+
+Using in a Mastra Dev Playground (one approach):
+- Point your playground to import the default export from dist/mastra/app.js, or import { weather } for the single agent.
+- The agent uses Anthropic by default; set ANTHROPIC_API_KEY and optionally ANTHROPIC_MODEL in .env.
+- Weather.gov requests include WEATHER_MCP_USER_AGENT when provided.
+
+If you are using a separate Mastra playground host/app, add this package as a workspace/dependency and import:
+```
+import mastra from 'weather-agent-kd/dist/mastra/app.js';
+// or
+import { weather } from 'weather-agent-kd/dist/mastra/app.js';
+```
+
+### How to start the Mastra Dev Playground
+There are two common ways to use this project with the Mastra Dev Playground:
+
+1) If you already have the Mastra Dev Playground app
+- Build this repo so the compiled app exists at dist/mastra/index.js (and dist/mastra/app.js):
+  - `npm run build`
+- In the Playground, add/import your app by pointing it to the built file:
+  - Default export: `dist/mastra/app.js` (exports the Mastra instance)
+  - Named export: `{ weather }` (single agent)
+- Set environment variables before launching (at minimum for Anthropic if you plan to generate text):
+  - `ANTHROPIC_API_KEY`
+  - Optionally `ANTHROPIC_MODEL` (defaults to `claude-3-haiku-20240307`)
+  - `WEATHER_MCP_USER_AGENT` recommended for Weather.gov
+
+2) If you don’t have the Playground yet
+- Follow the official Mastra documentation to install or open the Dev Playground.
+- Once running, follow the same steps above to point it to `dist/mastra/app.js`.
+
+Troubleshooting
+- If the Playground doesn’t find your agent:
+  - Ensure you ran `npm run build` and that `dist/mastra/index.js` (and `dist/mastra/app.js`) exists.
+  - Ensure the file path you point to is absolute or correctly relative to the Playground’s import method.
+- If requests to Weather.gov fail:
+  - Provide a descriptive `WEATHER_MCP_USER_AGENT` in your `.env`.
+- If text generation fails:
+  - Make sure `ANTHROPIC_API_KEY` is set. You can also run `npm run test:mastra` locally to confirm the app loads.
+
 
 ## Legal / Attribution
 - Weather data from api.weather.gov — follow their usage policy and include a descriptive User-Agent

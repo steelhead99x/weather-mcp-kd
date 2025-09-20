@@ -2,8 +2,8 @@ import 'dotenv/config';
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { pathToFileURL } from 'url';
-import { getAnthropicModel } from "../config/models.js";
-import { TONE_OPTIONS, type Tone } from "../config/tones.js";
+import { getAnthropicModel } from "../config/models";
+import { TONE_OPTIONS, type Tone } from "../config/tones";
 
 // Get model from environment (centralized)
 const ANTHROPIC_MODEL = getAnthropicModel();
@@ -28,7 +28,7 @@ export async function generateWeatherPrompt(
     const currentWeather = weatherData.forecast[0];
 
     const result = await generateText({
-        model: anthropic(ANTHROPIC_MODEL) as any, // Type assertion to fix compatibility issue
+        model: anthropic(ANTHROPIC_MODEL) as any,
         messages: [{
             role: 'user',
             content: `You are a ${toneDescriptions[tone]}. Create a natural, conversational weather report for text-to-speech.
@@ -100,24 +100,6 @@ export async function testClaudeGeneration() {
             console.error(`❌ Failed to generate ${tone}: ${error instanceof Error ? error.message : String(error)}\n`);
         }
     }
-}
-
-// Minimal agent facade used by scripts and index
-export const weatherAgent = {
-    async generate(messages: Array<{ role: string; content: string }>) {
-        const userMsg = messages.find((m) => m.role === 'user')?.content ?? '';
-        // Return a simple echo to avoid requiring API keys for build/test
-        const text = `Weather agent received: ${userMsg}`;
-        return { text, toolCalls: [] as any[] } as any;
-    },
-};
-
-export async function runWeatherAgent() {
-    console.log('🚀 Running Weather Agent (minimal stub)');
-    const res = await weatherAgent.generate([
-        { role: 'user', content: 'Hello from index runner.' },
-    ]);
-    console.log(res.text);
 }
 
 // Direct execution with better error handling

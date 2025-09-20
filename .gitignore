@@ -21,3 +21,7 @@ misc.xml
 modules.xml
 vcs.xml
 
+
+.mastra
+files/*
+package-lock.json
