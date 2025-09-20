@@ -17,13 +17,6 @@ function assertContainsAny(haystack: string, needles: string[], message: string)
   }
 }
 
-function assertContainsAll(haystack: string, needles: string[], message: string) {
-  const missing = needles.filter(n => !haystack.toLowerCase().includes(n.toLowerCase()));
-  if (missing.length) {
-    throw new Error(`${message} | Missing: ${missing.join(', ')} in: ${haystack}`);
-  }
-}
-
 async function main() {
   console.log('🧪 Testing Weather Agent...\n');
 
