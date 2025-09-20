@@ -1,0 +1,19 @@
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store
+.build
+.DS_Store
+.env
+.env.local
+
+# TypeScript
+/dist
+/*.tsbuildinfo
+
+# IDE
+.idea
+.vscode
+weather-agent-kd.iml

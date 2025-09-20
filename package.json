@@ -1,0 +1,24 @@
+{
+  "name": "weather-agent-kd",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mastra agent template with MCP tool integration",
+  "scripts": {
+    "dev": "ts-node-esm src/index.ts",
+    "build": "tsc -p .",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p . --noEmit"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.2.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "ts-node": "^10.9.2"
+  }
+}
