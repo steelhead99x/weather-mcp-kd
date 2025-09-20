@@ -51,14 +51,23 @@ npm start -- mcp.get_weather_by_zip '{"zipCode":"90210"}'
 ```
 
 ## Configuration
+You can copy .env.example to .env and adjust values as needed.
+
 Optional environment variables (via .env or shell):
 - AGENT_NAME — Overrides the agent display name used by the CLI
 - WEATHER_MCP_USER_AGENT — Custom User-Agent header for weather.gov requests
+- ANTHROPIC_API_KEY — Required to run the advanced agent in src/index.ts
+- ANTHROPIC_MODEL — Optional model override for Anthropic (default set in code)
+- CARTESIA_API_KEY, CARTESIA_VOICE — Optional; enables Cartesia TTS
+- DEEPGRAM_API_KEY, DEEPGRAM_VOICE — Optional; enables Deepgram TTS
 
 Example .env:
 ```
+# See .env.example for full details
 AGENT_NAME=weather-agent
 WEATHER_MCP_USER_AGENT=WeatherAgentKD/0.1 (me@example.com)
+# Required for the advanced agent
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ## Notes on Extra Files
