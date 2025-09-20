@@ -18,41 +18,65 @@ npm install
 ```
 
 ## Environment Variables
-Create a `.env` file in the project root (do not commit secrets). Variables used by this project include:
-- ANTHROPIC_API_KEY: Required if you plan to use the Anthropic-backed agent or the Claude test script
-- ANTHROPIC_MODEL: Optional Anthropic model override (defaults in code to "claude-3-haiku-20240307")
-- WEATHER_MCP_USER_AGENT: Optional but recommended courtesy header for Weather.gov requests (e.g. "YourApp/1.0 (email@example.com)")
-- DEEPGRAM_API_KEY: Optional for TTS/STT tests using Deepgram
-- CARTESIA_API_KEY: Optional for TTS tests using Cartesia
-- Additional optional variables exist for STT/TTS scripts (see scripts section below)
-
-You can start from an example of your own. If you created a local example file, copy and edit it:
+Create a `.env` file in the project root (do not commit secrets). Start from the example:
 ```
 cp .env.example .env
 # Edit .env to add your keys and options
 ```
+
+Key groups supported by the codebase:
+- Development (optional):
+  - NODE_ENV, PORT, MASTRA_DEV_PORT
+- Anthropic:
+  - ANTHROPIC_API_KEY (required for agent/Claude tests)
+  - ANTHROPIC_MODEL (optional, default in code: "claude-3-haiku-20240307")
+- Weather:
+  - WEATHER_MCP_USER_AGENT (optional but recommended per Weather.gov)
+  - WEATHER_DB_URL (SQLite path used by memory/db helpers)
+- Cartesia (STT + TTS):
+  - CARTESIA_API_KEY
+  - CARTESIA_API_URL, CARTESIA_VERSION, CARTESIA_STT_MODEL, CARTESIA_LANGUAGE
+  - CARTESIA_VOICE, CARTESIA_TTS_HTTP_URL, CARTESIA_TTS_MODEL, CARTESIA_SAMPLE_RATE (optional)
+- Deepgram (TTS and optional STT depending on script):
+  - DEEPGRAM_API_KEY
+  - DEEPGRAM_VOICE or DEEPGRAM_TTS_MODEL
+- Mux (optional MCP clients for uploads/assets):
+  - MUX_TOKEN_ID, MUX_TOKEN_SECRET
+  - MUX_MCP_UPLOAD_ARGS, MUX_MCP_ASSETS_ARGS (advanced; defaults provided)
+  - MUX_CONNECTION_TIMEOUT (advanced; default 20000ms, bounded in code)
+  - MUX_MCP_INTERACTIVE_ARGS (advanced; optional)
+  - MUX_SAMPLE_FILE (used by test-mux-upload script)
+- Script I/O helpers (optional):
+  - STT_INPUT_FILE, STT_OUTPUT_FILE, STT_PROVIDER
+  - TTS_TEXT, TTS_OUTPUT_BASE, TTS_PROVIDER, TTS_FORMAT
+
+See .env.example for documented defaults and comments.
 
 ## Project Layout (key files)
 - src/mastra/index.ts — Creates and exports the Mastra instance (agents + MCP servers)
 - src/mastra/agents/weather-agent.ts — Defines the Weather Agent (Anthropic model + weatherTool)
 - src/mastra/tools/weather.ts — Defines and exports weatherTool (id: "get-weather")
 - src/mastra/mcp/weather-server.ts — Exposes weatherTool via an MCPServer
-- src/mastra/scripts/ — Test scripts for agent, ZIP tool, STT, TTS, etc.
+- src/mastra/mcp/mux-upload-client.ts — MCP client wrapper for Mux Uploads tools
+- src/mastra/mcp/mux-assets-client.ts — MCP client wrapper for Mux Assets tools
+- src/mastra/scripts/ — Test scripts for agent, ZIP tool, STT, TTS, and Mux.
 
 ## Scripts (package.json)
 - dev: `mastra dev` — Launch Mastra Dev Playground for this app
 - build: `mastra build` — Build the project into dist/
 - start: `node dist/index.js` — If you have a built entry file at dist/index.js (not required for most flows)
 - typecheck: `tsc --noEmit`
-- test:zip: Build then run `dist/mastra/scripts/test-zip.js`
-- test:claude: Build then run `dist/mastra/scripts/test-claude.js`
-- test:weather-agent: Build then run `dist/mastra/scripts/test-weather-agent.js`
-- test:stt: Build then run `dist/mastra/scripts/test-stt.js`
+- test:zip: Build then run `src/mastra/scripts/test-zip.ts`
+- test:claude: Build then run `src/mastra/scripts/test-claude.ts`
+- test:weather-agent: Build then run `src/mastra/scripts/test-weather-agent.ts`
+- test:stt: Build then run `src/mastra/scripts/test-stt.ts`
 - test:stt:deepgram: Build then run STT via Deepgram
-- test:stt:cartesia: Build then run STT via Cartesia (placeholder)
-- test:tts: Build then run `dist/mastra/scripts/test-tts.js`
+- test:stt:cartesia: Build then run STT via Cartesia
+- test:tts: Build then run `src/mastra/scripts/test-tts.ts`
 - test:tts:deepgram: Build then run TTS via Deepgram
 - test:tts:cartesia: Build then run TTS via Cartesia
+- test:mux:assets: Build then run `src/mastra/scripts/test-mux-assets.ts`
+- test:mux:upload: Build then run `src/mastra/scripts/test-mux-upload.ts`
 - test:all: Run all of the above tests sequentially
 
 Notes:

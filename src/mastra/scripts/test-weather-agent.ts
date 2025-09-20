@@ -24,7 +24,6 @@ function assertContainsAll(haystack: string, needles: string[], message: string)
   }
 }
 
-async function main() {
   console.log('🧪 Testing Weather Agent...\n');
 
   const threadId = `test-session-${Date.now()}`;
