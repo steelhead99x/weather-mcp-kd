@@ -48,7 +48,7 @@ async function main() {
   }
 
   // Call an execute to ensure it proxies correctly
-  const execRes = await tools['video.assets.get'].execute({ context: { id: 'tomcat' } });
+  await tools['video.assets.get'].execute({ context: { id: 'tomcat' } });
   const last = calls.at(-1);
   if (!last || last.name !== 'video.assets.get') throw new Error('callTool was not invoked');
   if (!last.arguments || last.arguments.id !== 'tomcat') throw new Error('Arguments not forwarded');
