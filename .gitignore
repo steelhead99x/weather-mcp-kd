@@ -17,3 +17,6 @@ yarn-error.log*
 .idea
 .vscode
 weather-agent-kd.iml
+misc.xml
+modules.xml
+vcs.xml
