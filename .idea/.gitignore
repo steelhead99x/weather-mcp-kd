@@ -6,7 +6,9 @@
 # Datasource local storage ignored files
 /dataSources/
 /dataSources.local.xml
-.env
-misc.xml
-modules.xml
-vcs.xml
+/.env
+/.idea
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/vcs.xml
+/files/*
