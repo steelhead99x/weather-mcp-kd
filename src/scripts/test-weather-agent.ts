@@ -2,7 +2,7 @@ import { weatherAgent } from "../agents/weather-agent";
 
 async function main() {
     const res = await weatherAgent.generate([
-        { role: "user", content: "Hello! Let's test the weather agent. My zipcode is 96021" },
+        { role: "user", content: "Hello! Let's test the weather agent. My zipcode is 94102" },
     ]);
     console.log(res.text);
 }

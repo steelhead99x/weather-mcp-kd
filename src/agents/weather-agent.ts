@@ -402,7 +402,7 @@ export async function runWeatherAgent() {
 
     try {
         // 1) Get a ZIP code: prefer env var, else use a reasonable default
-        const effectiveZip = zipCode ?? "10001"; // NYC default if none provided
+        const effectiveZip = zipCode ?? "94102"; // SF default if none provided
         console.log(`📍 Using ZIP code: ${effectiveZip}`);
         console.log(`🎭 Using tone: ${tone}`);
 

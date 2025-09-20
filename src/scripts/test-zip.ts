@@ -7,7 +7,7 @@ async function test() {
     }
 
     const result = await (getWeatherByZipTool as any).execute({
-        context: { zipCode: "13021" },
+        context: { zipCode: "94102" },
     });
     console.log(JSON.stringify(result, null, 2));
 }
