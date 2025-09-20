@@ -1,4 +1,4 @@
-import { weatherAgent } from "../agents/weather-agent.js";
+import { weatherAgent } from "../agents/weather-agent";
 
 async function main() {
     const res = await weatherAgent.generate([

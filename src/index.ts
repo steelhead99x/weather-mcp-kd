@@ -1,11 +1,11 @@
 import dotenv from 'dotenv';
-import { runWeatherAgent } from './agents/weather-agent';
+import { runWeatherAgent } from './agents/weather-agent.js';
 
 dotenv.config();
 
 async function main() {
-  // Run the advanced weather agent experience
-  await runWeatherAgent();
+    // Run the advanced weather agent experience
+    await runWeatherAgent();
 }
 
 main();

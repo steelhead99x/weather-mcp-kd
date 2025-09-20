@@ -1,5 +1,5 @@
 import { MCPServer } from "@mastra/mcp";
-import { getWeatherByZipTool } from "../tools/weather.ts";
+import { getWeatherByZipTool } from "../tools/weather";
 
 export const weatherMcpServer = new MCPServer({
     name: "weather-server",

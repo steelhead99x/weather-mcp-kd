@@ -148,7 +148,7 @@ export const getWeatherByCoordinatesTool = createTool({
             .max(180)
             .describe("Longitude in decimal degrees"),
     }) as unknown as any,
-    execute: async ({ context, runtimeContext: _runtimeContext }) => {
+    execute: async ({ context }) => {
         const { latitude, longitude } = (context || {}) as any;
 
         // Use shared parsing and validation for consistency

@@ -1,5 +1,4 @@
-
-import { getWeatherByZipTool } from "../tools/weather.js";
+import { getWeatherByZipTool } from "../tools/weather";
 
 async function test() {
     // Check if the tool and its execute method exist

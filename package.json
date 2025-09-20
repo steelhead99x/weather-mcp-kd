@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Weather agent using Mastra with AI-generated weather reports and audio",
   "scripts": {
-    "dev": "ts-node-esm src/index.ts",
+    "dev": "npm run build && node dist/index.js",
     "build": "tsc -p .",
     "start": "node dist/index.js",
     "typecheck": "tsc -p . --noEmit"
