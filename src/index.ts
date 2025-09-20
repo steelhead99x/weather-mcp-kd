@@ -8,4 +8,7 @@ async function main() {
     await runWeatherAgent();
 }
 
-main();
+main().catch((error) => {
+    console.error("❌ Application failed:", error);
+    process.exit(1);
+});

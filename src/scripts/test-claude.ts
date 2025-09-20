@@ -2,13 +2,13 @@ import 'dotenv/config';
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { pathToFileURL } from 'url';
-import { getAnthropicModel } from "../config/models";
+import { getAnthropicModel } from "../config/models.js";
+import { TONE_OPTIONS, type Tone } from "../config/tones.js";
 
 // Get model from environment (centralized)
 const ANTHROPIC_MODEL = getAnthropicModel();
 
 // Standalone Claude weather prompt generator for testing
-import { TONE_OPTIONS, Tone } from "../config/tones";
 export async function generateWeatherPrompt(
     weatherData: any,
     tone: Tone,
@@ -28,7 +28,7 @@ export async function generateWeatherPrompt(
     const currentWeather = weatherData.forecast[0];
 
     const result = await generateText({
-        model: anthropic(ANTHROPIC_MODEL),
+        model: anthropic(ANTHROPIC_MODEL) as any,
         messages: [{
             role: 'user',
             content: `You are a ${toneDescriptions[tone]}. Create a natural, conversational weather report for text-to-speech.
@@ -51,10 +51,10 @@ REQUIREMENTS:
 - End with appropriate tone-matching conclusion
 
 Generate one flowing paragraph:`
-    }],
-    maxOutputTokens: 250,
-    temperature: 0.9 // High creativity for varied outputs
-});
+        }],
+        maxTokens: 250,
+        temperature: 0.9 // High creativity for varied outputs
+    });
 
     return result.text.trim()
         .replace(/[°]/g, ' degrees ')
@@ -68,6 +68,8 @@ Generate one flowing paragraph:`
 
 // Test helper for manual/test runner invocation only.
 export async function testClaudeGeneration() {
+    console.log("🤖 Testing Claude weather generation...\n");
+
     if (!process.env.ANTHROPIC_API_KEY) {
         console.error("❌ ANTHROPIC_API_KEY environment variable is required");
         console.log("💡 Please set your API key in the .env file");

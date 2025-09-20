@@ -8,7 +8,11 @@
     "dev": "npm run build && node dist/index.js",
     "build": "tsc -p .",
     "start": "node dist/index.js",
-    "typecheck": "tsc -p . --noEmit"
+    "typecheck": "tsc -p . --noEmit",
+    "test:zip": "npm run build && node dist/scripts/test-zip.js",
+    "test:claude": "npm run build && node dist/scripts/test-claude.js",
+    "test:weather-agent": "npm run build && node dist/scripts/test-weather-agent.js",
+    "test:all": "npm run test:zip && npm run test:claude && npm run test:weather-agent"
   },
   "engines": {
     "node": ">=18.18"
