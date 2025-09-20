@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { getWeatherByZipTool } from "../tools/weather.js";
+import { weatherTool } from "../tools/weather.js";
 import { pathToFileURL } from "url";
 
 dotenv.config();
@@ -14,12 +14,12 @@ async function main() {
         console.log(`Testing with ZIP code: ${testZip}`);
         
         // Check if execute method exists before calling
-        if (!getWeatherByZipTool.execute) {
+        if (!weatherTool.execute) {
             console.error("❌ Tool execute method is not available");
             process.exit(1);
         }
         
-        const result = await getWeatherByZipTool.execute({
+        const result = await weatherTool.execute({
             context: { zipCode: testZip }
         });
         

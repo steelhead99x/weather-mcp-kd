@@ -4,7 +4,7 @@ import { weatherTool } from "../tools/weather";
 export const weatherMcpServer = new MCPServer({
     id: "weather-server",
     name: "Weather MCP Server",
-    version: "1.0.0",
+    version: "0.0.X",
     tools: {
         weatherTool
     }

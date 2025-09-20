@@ -80,7 +80,7 @@ import 'dotenv/config';
 import { weatherAgent } from './dist/mastra/agents/weather-agent.js';
 
 async function main() {
-  const res = await weatherAgent.generate(
+  const res = await weatherAgent.generateVNext(
     "Hello! Please get the forecast for ZIP 94102"
   );
   console.log(res.text || res);

@@ -55,25 +55,46 @@ async function transcribeWithDeepgram(audio: Buffer, contentType: string) {
   return { transcript, raw: json };
 }
 
-// Cartesia placeholder (unknown provider). Configure via env if available.
+// Cartesia transcription using multipart form data
 async function transcribeWithCartesia(audio: Buffer, contentType: string) {
   const apiKey = process.env.CARTESIA_API_KEY;
-  const apiUrl = process.env.CARTESIA_API_URL;
+  const apiUrl = process.env.CARTESIA_API_URL || 'https://api.cartesia.ai/stt/transcribe';
+  const version = process.env.CARTESIA_VERSION || '2025-04-16';
+  const model = process.env.CARTESIA_STT_MODEL || 'whisper-large-v3';
 
-  if (!apiKey || !apiUrl) {
+  if (!apiKey) {
     throw new Error(
-      'Cartesia STT not configured. Please set CARTESIA_API_URL and CARTESIA_API_KEY in your .env.'
+      'Cartesia STT not configured. Please set CARTESIA_API_KEY in your .env.'
     );
+  }
+
+  // Create FormData for multipart upload
+  const formData = new FormData();
+  
+  // Create a Blob from the audio buffer with the appropriate MIME type
+  const audioBlob = new Blob([audio], { type: contentType });
+  
+  // Append the audio file - the field name might be 'file' or 'audio'
+  formData.append('file', audioBlob, 'audio_file');
+  
+  // Add model parameter if specified
+  if (model) {
+    formData.append('model', model);
+  }
+
+  // Add any other optional parameters
+  if (process.env.CARTESIA_LANGUAGE) {
+    formData.append('language', process.env.CARTESIA_LANGUAGE);
   }
 
   const res = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      'Content-Type': contentType,
-      Accept: 'application/json',
+      'Cartesia-Version': version,
+      // Don't set Content-Type header - let fetch set it automatically for FormData
     },
-    body: audio,
+    body: formData,
   } as any);
 
   if (!res.ok) {
@@ -82,14 +103,14 @@ async function transcribeWithCartesia(audio: Buffer, contentType: string) {
   }
 
   const json = await res.json() as any;
-  // Try common fields
-  const transcript = json?.text ?? json?.transcript ?? json?.result ?? JSON.stringify(json);
+  // Try common fields for transcription response
+  const transcript = json?.transcript ?? json?.text ?? json?.result ?? JSON.stringify(json);
   return { transcript, raw: json };
 }
 
 async function main() {
   // Support env-configured input and output paths
-  const fileArg = process.env.STT_INPUT_FILE || process.argv[2] || 'files/sample.wav';
+  const fileArg = process.env.STT_INPUT_FILE || process.argv[2] || 'files/samples/mux-sample.wav';
   const providerArg = (process.env.STT_PROVIDER || process.argv[3] || 'both').toLowerCase(); // deepgram | cartesia | both
   const outputPath = process.env.STT_OUTPUT_FILE || process.argv[4]; // optional: where to save transcript(s)
   const contentType = guessContentType(fileArg);

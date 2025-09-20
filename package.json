@@ -7,33 +7,42 @@
   "scripts": {
     "dev": "mastra dev",
     "build": "mastra build",
+    "compile": "sh -c \"tsc --noEmit false || true\"",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test:zip": "npm run build && node dist/mastra/scripts/test-zip.js",
-    "test:claude": "npm run build && node dist/mastra/scripts/test-claude.js",
-    "test:weather-agent": "npm run build && node dist/mastra/scripts/test-weather-agent.js",
-    "test:stt": "npm run build && node dist/mastra/scripts/test-stt.js",
-    "test:stt:deepgram": "npm run build && node dist/mastra/scripts/test-stt.js files/sample.wav deepgram",
-    "test:stt:cartesia": "npm run build && node dist/mastra/scripts/test-stt.js files/sample.wav cartesia",
-    "test:tts": "npm run build && node dist/mastra/scripts/test-tts.js",
-    "test:tts:deepgram": "npm run build && node dist/mastra/scripts/test-tts.js \"Hello from Deepgram\" deepgram",
-    "test:tts:cartesia": "npm run build && node dist/mastra/scripts/test-tts.js \"Hello from Cartesia\" cartesia",
-    "test:all": "npm run test:zip && npm run test:claude && npm run test:weather-agent && npm run test:stt && npm run test:tts"
+    "test:zip": "npm run build && tsx src/mastra/scripts/test-zip.ts",
+    "test:claude": "npm run build && tsx src/mastra/scripts/test-claude.ts",
+    "test:weather-agent": "npm run build && tsx src/mastra/scripts/test-weather-agent.ts",
+    "test:stt": "npm run build && tsx src/mastra/scripts/test-stt.ts",
+    "test:stt:deepgram": "npm run build && tsx src/mastra/scripts/test-stt.ts files/sample.wav deepgram",
+    "test:stt:cartesia": "npm run build && tsx src/mastra/scripts/test-stt.ts files/sample.wav cartesia",
+    "test:tts": "npm run build && tsx src/mastra/scripts/test-tts.ts",
+    "test:tts:deepgram": "npm run build && tsx src/mastra/scripts/test-tts.ts \"Hello from Deepgram\" deepgram",
+    "test:tts:cartesia": "npm run build && tsx src/mastra/scripts/test-tts.ts \"Hello from Cartesia\" cartesia",
+    "test:mux:assets": "npm run build && tsx src/mastra/scripts/test-mux-assets.ts",
+    "test:mux:upload": "npm run build && tsx src/mastra/scripts/test-mux-upload.ts",
+    "test:all": "npm run test:zip && npm run test:claude && npm run test:weather-agent && npm run test:stt && npm run test:tts && npm run test:mux:assets && npm run test:mux:upload"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@mastra/core": "latest",
-    "@mastra/mcp": "latest",
     "@ai-sdk/anthropic": "latest",
+    "@mastra/chroma": "^0.11.9",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "^0.14.2",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "^0.15.2",
+    "@mastra/pinecone": "^0.11.9",
+    "@mastra/qdrant": "^0.11.12",
     "ai": "latest",
-    "mastra": "latest",
     "dotenv": "^16.4.5",
+    "mastra": "latest",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.6.3"
   }
 }
