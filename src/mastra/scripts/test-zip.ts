@@ -1,31 +1,44 @@
-import dotenv from 'dotenv';
-import { getWeatherByZipTool } from "../tools/weather";
+import dotenv from "dotenv";
+import { getWeatherByZipTool } from "../tools/weather.js";
+import { pathToFileURL } from "url";
 
 dotenv.config();
 
-async function test() {
-    console.log("🧪 Testing ZIP code weather tool...\n");
+console.log("Testing weather lookup by ZIP code...");
 
-    // Check if the tool and its execute method exist
-    if (!getWeatherByZipTool?.execute) {
-        throw new Error("Weather tool is not properly initialized or execute method is missing");
-    }
-
+async function main() {
     try {
-        const result = await (getWeatherByZipTool as any).execute({
-            context: { zipCode: "94102" },
+        console.log("🧪 Testing Weather ZIP Tool...\n");
+        
+        const testZip = "94102"; // San Francisco ZIP code
+        console.log(`Testing with ZIP code: ${testZip}`);
+        
+        // Check if execute method exists before calling
+        if (!getWeatherByZipTool.execute) {
+            console.error("❌ Tool execute method is not available");
+            process.exit(1);
+        }
+        
+        const result = await getWeatherByZipTool.execute({
+            context: { zipCode: testZip }
         });
-
-        console.log("✅ Weather data retrieved successfully!");
-        console.log("Location:", result.location?.displayName || "Unknown");
-        console.log("Current conditions:", result.forecast?.[0]?.shortForecast || "Unknown");
-        console.log("Temperature:", result.forecast?.[0]?.temperature || "Unknown");
-        console.log("\nFull response:");
+        
+        console.log("✅ Weather data retrieved:");
         console.log(JSON.stringify(result, null, 2));
+        
+        console.log("\n✅ ZIP test completed successfully!");
+        
     } catch (error) {
-        console.error("❌ Test failed:", error instanceof Error ? error.message : String(error));
+        console.error("❌ ZIP test failed:", error instanceof Error ? error.message : String(error));
         throw error;
     }
 }
 
-test().catch(console.error);
+// Only run if this file is executed directly
+const isDirectRun = import.meta.url === pathToFileURL(process.argv[1]!).href;
+if (isDirectRun) {
+    main().catch((error) => {
+        console.error("❌ Test execution failed:", error);
+        process.exit(1);
+    });
+}

@@ -2,8 +2,8 @@ import 'dotenv/config';
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { pathToFileURL } from 'url';
-import { getAnthropicModel } from "../config/models";
-import { TONE_OPTIONS, type Tone } from "../config/tones";
+import { getAnthropicModel } from "../config/models.js";
+import { type Tone } from "../config/tones.js";
 
 // Get model from environment (centralized)
 const ANTHROPIC_MODEL = getAnthropicModel();
@@ -18,7 +18,7 @@ export async function generateWeatherPrompt(
         throw new Error("ANTHROPIC_API_KEY environment variable is required");
     }
 
-    const toneDescriptions = {
+    const toneDescriptions: Record<Tone, string> = {
         professional: "authoritative TV weather forecaster",
         groovy: "laid-back musician giving weather updates between songs",
         librarian: "gentle librarian sharing weather information quietly",
@@ -86,7 +86,8 @@ export async function testClaudeGeneration() {
         }]
     };
 
-    const tones: Array<Tone> = [...TONE_OPTIONS];
+    // Define tones directly instead of importing TONE_OPTIONS
+    const tones: Array<Tone> = ["professional", "groovy", "librarian", "sports"];
 
     console.log(`🤖 Testing ${ANTHROPIC_MODEL} Weather Generation\n`);
 
