@@ -25,14 +25,22 @@ export const weatherTool = createTool({
             detailedForecast: z.string(),
         })),
     }),
-    execute: async ({ zipCode }) => {
-        if (!zipCode || !/^\d{5}$/.test(zipCode)) {
-            throw new Error("Please provide a valid 5-digit ZIP code");
+    execute: async ({ context, abortSignal }) => {
+        // In Mastra tools, parameters come in the context object
+        const { zipCode } = context;
+
+        console.log('Full context received:', context);
+        console.log('Received zipCode:', zipCode, 'Type:', typeof zipCode);
+
+        if (!zipCode || typeof zipCode !== 'string' || !/^\d{5}$/.test(zipCode)) {
+            throw new Error(`Please provide a valid 5-digit ZIP code. Received: ${zipCode} (type: ${typeof zipCode})`);
         }
 
         try {
             // Get location from ZIP code
-            const geoResponse = await fetch(`https://api.zippopotam.us/us/${zipCode}`);
+            const geoResponse = await fetch(`https://api.zippopotam.us/us/${zipCode}`, {
+                signal: abortSignal
+            });
             if (!geoResponse.ok) {
                 throw new Error(`Invalid ZIP code: ${zipCode}`);
             }
@@ -59,7 +67,10 @@ export const weatherTool = createTool({
             // Get weather grid info
             const pointsResponse = await fetch(
                 `https://api.weather.gov/points/${latitude},${longitude}`,
-                { headers: { "User-Agent": USER_AGENT } }
+                {
+                    headers: { "User-Agent": USER_AGENT },
+                    signal: abortSignal
+                }
             );
 
             if (!pointsResponse.ok) {
@@ -72,6 +83,7 @@ export const weatherTool = createTool({
             // Get forecast
             const forecastResponse = await fetch(forecastUrl, {
                 headers: { "User-Agent": USER_AGENT },
+                signal: abortSignal
             });
 
             if (!forecastResponse.ok) {
