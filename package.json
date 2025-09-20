@@ -21,6 +21,9 @@
     "zod": "^3.23.8",
     "uuid": "^9.0.1"
   },
+  "overrides": {
+    "zod": "^3.23.8"
+  },
   "devDependencies": {
     "typescript": "^5.6.3",
     "ts-node": "^10.9.2"
