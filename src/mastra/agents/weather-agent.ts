@@ -1,5 +1,6 @@
-import { anthropic } from '@ai-sdk/anthropic';
-import { Agent } from '@mastra/core';
+import { anthropic } from "@ai-sdk/anthropic";
+import { Agent } from "@mastra/core/agent";
+import { weatherTool } from "../tools/weather";
 
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307';
 
@@ -15,7 +16,7 @@ Your primary function is to help users get weather details for specific location
 - Keep responses concise but informative
 - Add some personality and warmth to your responses
 
-You have access to weather tools to fetch current weather data and forecasts.
-Always use the get_weather_by_zip tool for ZIP codes and get_weather_by_coordinates for latitude/longitude pairs.`,
+Use the weatherTool to fetch current weather data.`,
     model: anthropic(ANTHROPIC_MODEL),
+    tools: { weatherTool }
 });

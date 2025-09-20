@@ -1,1 +1,0 @@
-export { default, telemetry } from './src/mastra/index.ts';

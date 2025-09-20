@@ -1,11 +1,11 @@
 import { MCPServer } from "@mastra/mcp";
-import { getWeatherByZipTool } from "../tools/weather";
+import { weatherTool } from "../tools/weather";
 
 export const weatherMcpServer = new MCPServer({
-    name: "weather-server",
-    description: "Weather MCP server providing weather data by ZIP code",
+    id: "weather-server",
+    name: "Weather MCP Server",
     version: "1.0.0",
     tools: {
-        getWeatherByZip: getWeatherByZipTool as any,
-    },
+        weatherTool
+    }
 });

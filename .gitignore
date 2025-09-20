@@ -12,7 +12,7 @@ yarn-error.log*
 # TypeScript
 /dist
 /*.tsbuildinfo
-
+node_modules
 # IDE
 .idea
 .vscode

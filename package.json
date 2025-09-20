@@ -3,44 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Weather agent using Mastra with AI-generated weather reports and audio",
+  "description": "Weather agent using Mastra with MCP tools",
   "scripts": {
-    "dev": "npm run build && mastra dev",
-    "dev:alt": "npm run build && mastra dev",
-    "build": "tsc -p .",
-    "start": "node dist/index.js",
-    "typecheck": "tsc -p . --noEmit",
-    "test:zip": "npm run build && node dist/mastra/scripts/test-zip.js",
-    "test:claude": "npm run build && node dist/mastra/scripts/test-claude.js",
-    "test:weather-agent": "npm run build && node dist/mastra/scripts/test-weather-agent.js",
-    "test:stt": "npm run build && node dist/mastra/scripts/test-stt.js",
-    "test:stt:deepgram": "npm run build && node dist/mastra/scripts/test-stt.js files/sample.wav deepgram",
-    "test:stt:cartesia": "npm run build && node dist/mastra/scripts/test-stt.js files/sample.wav cartesia",
-    "test:tts": "npm run build && node dist/mastra/scripts/test-tts.js",
-    "test:tts:deepgram": "npm run build && node dist/mastra/scripts/test-tts.js 'Testing Deepgram text to speech.' deepgram",
-    "test:tts:cartesia": "npm run build && node dist/mastra/scripts/test-tts.js 'Testing Cartesia text to speech.' cartesia",
-    "test:mastra": "npm run build && node dist/mastra/scripts/test-mastra.js",
-    "test:all": "npm run test:zip && npm run test:claude && npm run test:weather-agent && npm run test:stt && npm run test:tts"
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "node dist/index.js"
   },
   "engines": {
-    "node": ">=18.18"
+    "node": ">=20.0.0"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "latest",
     "@mastra/core": "latest",
-    "ai": "^3.4.33",
-    "dotenv": "^16.4.5",
+    "@mastra/mcp": "latest",
+    "@ai-sdk/anthropic": "latest",
+    "ai": "latest",
     "mastra": "latest",
-    "packages": "^0.0.8",
-    "uuid": "^9.0.1",
-    "ws": "^8.18.0",
-    "zod": "^3.23.8"
-  },
-  "overrides": {
+    "dotenv": "^16.4.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "ts-node": "^10.9.2",
+    "@types/node": "^20.0.0",
     "typescript": "^5.6.3"
   }
 }
