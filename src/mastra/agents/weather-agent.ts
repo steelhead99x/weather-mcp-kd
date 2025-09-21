@@ -238,7 +238,7 @@ const ttsWeatherTool = createTool({
             console.log(`[tts-weather-upload] Created TTS audio file: ${absAudioPath} (${audioStat.size} bytes)`);
 
             // Check if image exists, create a default one if not
-            const imagePath = resolve('files/uploads/images/baby.jpeg');
+            const imagePath = resolve('files/images/baby.jpeg');
             let finalImagePath = imagePath;
 
             try {
