@@ -33,9 +33,7 @@ async function uploadFileToMux(uploadUrl: string, filePath: string): Promise<voi
         
         if (!uploadResponse.ok) {
             const errorText = await uploadResponse.text().catch(() => 'Unknown error');
-            const error = new Error(`File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}. Response: ${errorText}`);
-            console.error('[mux-upload-verify-real] File upload failed:', error);
-            throw error;
+            throw new Error(`File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}. Response: ${errorText}`);
         }
         
         console.log('[mux-upload-verify-real] File uploaded successfully');
@@ -45,6 +43,11 @@ async function uploadFileToMux(uploadUrl: string, filePath: string): Promise<voi
         if (responseText) {
             console.log(`[mux-upload-verify-real] Upload response: ${responseText}`);
         }
+        
+    } catch (error) {
+        console.error('[mux-upload-verify-real] File upload failed:', error);
+        throw error;
+    }
 }
 
 /**
