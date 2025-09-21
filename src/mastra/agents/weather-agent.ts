@@ -15,10 +15,9 @@ const ttsWeatherTool = createTool({
     description: "Convert weather report to speech and upload to Mux for streaming",
     inputSchema: z.object({
         zipCode: z.string().describe("5-digit ZIP code for weather lookup"),
-        text: z.string().describe("Text to convert to speech"),
     }),
     execute: async ({ context }) => {
-        const { zipCode, text } = context;
+        const { zipCode } = context;
 
         console.log(`[tts-weather-upload] Processing TTS for ZIP ${zipCode}`);
 
