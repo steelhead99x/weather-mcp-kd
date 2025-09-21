@@ -611,7 +611,7 @@ export const weatherAgent = new Agent({
     - IMMEDIATELY after the brief chat response, call the ttsWeatherTool
     - Pass a comprehensive broadcaster-style script as the 'text' parameter
     - Structure the TTS script like this:
-      * "Good evening, I'm your meteorologist with your complete weather picture for [actual location from weatherTool]"
+      * "Good morning, I'm your meteorologist with your complete weather picture for [actual location from weatherTool]"
       * Current conditions using REAL data from weatherTool
       * Go through EVERY forecast period returned by weatherTool (tonight, tomorrow morning, tomorrow afternoon, tomorrow night, day after, etc.)
       * For EACH period, expand into 2-3 broadcaster sentences covering temperature, conditions, wind, precipitation
