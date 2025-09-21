@@ -27,7 +27,6 @@
     "@ai-sdk/anthropic": "latest",
     "@mastra/chroma": "^0.11.9",
     "@mastra/core": "latest",
-    "@mastra/libsql": "^0.14.2",
     "@mastra/mcp": "latest",
     "@mastra/memory": "^0.15.2",
     "dotenv": "^16.4.5",

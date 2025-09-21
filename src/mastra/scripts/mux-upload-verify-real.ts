@@ -33,7 +33,9 @@ async function uploadFileToMux(uploadUrl: string, filePath: string): Promise<voi
         
         if (!uploadResponse.ok) {
             const errorText = await uploadResponse.text().catch(() => 'Unknown error');
-            throw new Error(`File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}. Response: ${errorText}`);
+            const error = new Error(`File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}. Response: ${errorText}`);
+            console.error('[mux-upload-verify-real] File upload failed:', error);
+            throw error;
         }
         
         console.log('[mux-upload-verify-real] File uploaded successfully');
@@ -43,11 +45,6 @@ async function uploadFileToMux(uploadUrl: string, filePath: string): Promise<voi
         if (responseText) {
             console.log(`[mux-upload-verify-real] Upload response: ${responseText}`);
         }
-        
-    } catch (error) {
-        console.error('[mux-upload-verify-real] File upload failed:', error);
-        throw error;
-    }
 }
 
 /**
@@ -144,17 +141,18 @@ async function main() {
     }
 
     // Extract JSON from any text blocks if possible (collect best-effort ids)
-    let assetId: string | undefined;
-    let uploadId: string | undefined;
-    let uploadUrl: string | undefined;
+    let assetId: string | undefined = undefined;
+    let uploadId: string | undefined = undefined;
+    let uploadUrl: string | undefined = undefined;
+    
     for (const block of blocks as any[]) {
         const text = block && typeof block === 'object' && typeof block.text === 'string' ? block.text as string : undefined;
         if (!text) continue;
         try {
             const payload = JSON.parse(text);
-            assetId ||= payload.asset_id || payload.asset?.id;
-            uploadId ||= payload.upload_id || payload.id || payload.upload?.id;
-            uploadUrl ||= payload.url || payload.upload?.url;
+            assetId = assetId || payload.asset_id || payload.asset?.id;
+            uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
+            uploadUrl = uploadUrl || payload.url || payload.upload?.url;
         } catch {
             // ignore non-JSON text blocks
         }
@@ -184,15 +182,15 @@ async function main() {
                 try {
                     const retrieveRes = await retrieve.execute({ context: { id: uploadId } });
                     const retrieveBlocks = Array.isArray(retrieveRes) ? retrieveRes : [retrieveRes];
-
+                    
                     for (const block of retrieveBlocks as any[]) {
                         const text = block && typeof block === 'object' && typeof block.text === 'string' ? block.text : undefined;
                         if (!text) continue;
                         try {
                             const payload = JSON.parse(text);
                             console.log('[mux-upload-verify-real] Retrieved upload info:', JSON.stringify(payload, null, 2));
-                            assetId ||= payload.asset_id || payload.asset?.id;
-
+                            assetId = assetId || payload.asset_id || payload.asset?.id;
+                            
                             // Also check status
                             const status = payload.status;
                             console.log(`[mux-upload-verify-real] Upload status: ${status}`);
