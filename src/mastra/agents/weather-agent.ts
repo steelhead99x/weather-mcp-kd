@@ -241,13 +241,16 @@ const ttsWeatherTool = createTool({
 
             // Upload file to Mux
             const fileBuffer = await fs.readFile(absPath);
+            // Ensure Blob gets a proper ArrayBuffer (not ArrayBufferLike)
+            const copy = new Uint8Array(fileBuffer);
+            const fileAB = copy.buffer;
             const uploadResponse = await fetch(uploadUrl, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/octet-stream',
                     'Content-Length': fileBuffer.length.toString(),
                 },
-                body: fileBuffer,
+                body: new Blob([fileAB], { type: 'application/octet-stream' }),
             });
 
             if (!uploadResponse.ok) {
@@ -420,7 +423,7 @@ export const weatherAgent = new Agent({
     })
   `,
     model: anthropic("claude-3-5-haiku-20241022"),
-    tools: [weatherTool, ttsWeatherTool],
+    tools: { weatherTool, ttsWeatherTool },
     memory: new Memory({
         storage: new InMemoryStore(),
         options: {
@@ -517,7 +520,7 @@ export const weatherAgentTestWrapper = {
             // If Mux credentials are present, try real upload via the tool; otherwise, fall back to mock URL
             if (process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET) {
                 try {
-                    const res: any = await ttsWeatherTool.execute({ context: { zipCode: zip } });
+                    const res: any = await ttsWeatherTool.execute!({ runtimeContext: {} as any, context: { zipCode: zip } } as any);
                     if (res && res.success) {
                         const details: string[] = [];
                         if (res.uploadId) details.push(`upload_id=${res.uploadId}`);

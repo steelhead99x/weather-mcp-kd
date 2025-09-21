@@ -21,13 +21,15 @@ async function uploadFileToMux(uploadUrl: string, filePath: string): Promise<voi
 
     // Mux direct upload uses PUT method with the file as body
     console.log('[mux-upload-verify-real] Uploading file content...');
+    const copy = new Uint8Array(fileBuffer);
+    const fileAB = copy.buffer;
     const uploadResponse = await fetch(uploadUrl, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/octet-stream',
             'Content-Length': fileSize.toString(),
         },
-        body: fileBuffer,
+        body: new Blob([fileAB], { type: 'application/octet-stream' }),
     });
 
     if (!uploadResponse.ok) {

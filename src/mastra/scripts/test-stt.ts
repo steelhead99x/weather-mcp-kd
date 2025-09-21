@@ -72,7 +72,9 @@ async function transcribeWithCartesia(audio: Buffer, contentType: string) {
   const formData = new FormData();
   
   // Create a Blob from the audio buffer with the appropriate MIME type
-  const audioBlob = new Blob([audio], { type: contentType });
+  const copy = new Uint8Array(audio);
+  const audioAB = copy.buffer;
+  const audioBlob = new Blob([audioAB], { type: contentType });
   
   // Append the audio file - the field name might be 'file' or 'audio'
   formData.append('file', audioBlob, 'audio_file');

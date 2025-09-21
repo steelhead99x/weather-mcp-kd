@@ -20,8 +20,10 @@ async function main() {
         }
         
         const result = await weatherTool.execute({
+            // @ts-ignore minimal runtimeContext for test invocation
+            runtimeContext: {} as any,
             context: { zipCode: testZip }
-        });
+        } as any);
         
         console.log("✅ Weather data retrieved:");
         console.log(JSON.stringify(result, null, 2));
