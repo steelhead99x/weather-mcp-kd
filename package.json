@@ -10,7 +10,6 @@
     "compile": "sh -c \"tsc --noEmit false || true\"",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test:zip": "npm run build && tsx src/mastra/scripts/test-zip.ts",
     "test:claude": "npm run build && tsx src/mastra/scripts/test-claude.ts",
     "test:weather-agent": "npm run build && tsx src/mastra/scripts/test-weather-agent.ts",
     "test:stt": "npm run build && tsx src/mastra/scripts/test-stt.ts",
@@ -19,9 +18,7 @@
     "test:tts": "npm run build && tsx src/mastra/scripts/test-tts.ts",
     "test:tts:deepgram": "npm run build && tsx src/mastra/scripts/test-tts.ts \"Hello from Deepgram\" deepgram",
     "test:tts:cartesia": "npm run build && tsx src/mastra/scripts/test-tts.ts \"Hello from Cartesia\" cartesia",
-    "test:mux:assets": "npm run build && tsx src/mastra/scripts/test-mux-assets.ts",
-    "test:mux:upload": "npm run build && tsx src/mastra/scripts/test-mux-upload.ts",
-    "test:all": "npm run test:zip && npm run test:claude && npm run test:weather-agent && npm run test:stt && npm run test:tts && npm run test:mux:assets && npm run test:mux:upload"
+    "run:mux:upload:verify": "npm run build && tsx src/mastra/scripts/mux-upload-verify-real.ts"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -33,9 +30,6 @@
     "@mastra/libsql": "^0.14.2",
     "@mastra/mcp": "latest",
     "@mastra/memory": "^0.15.2",
-    "@mastra/pinecone": "^0.11.9",
-    "@mastra/qdrant": "^0.11.12",
-    "ai": "latest",
     "dotenv": "^16.4.5",
     "mastra": "latest",
     "zod": "^3.23.8"

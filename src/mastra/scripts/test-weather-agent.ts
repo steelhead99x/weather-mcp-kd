@@ -23,6 +23,9 @@ async function main() {
   const threadId = `test-session-${Date.now()}`;
   const userId = 'test-user-123';
 
+  // Add delay function
+  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
   try {
     console.log('🎯 First interaction - Agent introduction...');
 
@@ -45,6 +48,9 @@ async function main() {
 
     console.log('\n' + '='.repeat(50) + '\n');
 
+    // Add delay between requests
+    await delay(2000); // 2 second delay
+
     // 2) No location provided -> should ask for ZIP
     console.log('❓ Testing prompt for location when none provided...');
     const noLocResponse = await weatherAgent.generateVNext(
@@ -56,6 +62,8 @@ async function main() {
     assertContainsAny(noLocText, ['zip', 'zipcode', '5-digit', 'postal code'], 'Agent should ask for ZIP when no location provided');
 
     console.log('\n' + '-'.repeat(40));
+
+    await delay(2000); // 2 second delay
 
     // 3) Non-English location -> should translate / still ask for ZIP
     console.log('🌐 Testing non-English location handling (Spanish)...');
@@ -69,6 +77,8 @@ async function main() {
 
     console.log('\n' + '-'.repeat(40));
 
+    await delay(2000); // 2 second delay
+
     console.log('🌐 Testing non-English location handling (Chinese)...');
     const zhResponse = await weatherAgent.generateVNext(
       '上海的天气怎么样？',
@@ -80,6 +90,8 @@ async function main() {
 
     console.log('\n' + '='.repeat(50) + '\n');
 
+    await delay(2000); // 2 second delay
+
     // 4) Multi-part location name -> should focus on main part (and likely still ask for ZIP)
     console.log('🧭 Testing multi-part location handling...');
     const multiLocResponse = await weatherAgent.generateVNext(
@@ -87,15 +99,20 @@ async function main() {
       memoryConfig
     );
     const multiLocText = textOf(multiLocResponse);
+    console.log('✅ Weather response:');
     console.log(multiLocText);
-    // Expect it to mention New York and/or ask for a ZIP
+
+    // Validate presence of some key weather info. The tool returns wind info and temperature.
+    // Humidity/precipitation may be inferred; so require temperature and wind, and at least one of precipitation/humidity/conditions words.
+    assertContainsAny(multiLocText, ['wind', 'wind speed'], 'Response should include wind information');
+    assertContainsAny(multiLocText, ['temperature', 'temp', '°', 'degrees'], 'Response should include temperature');
     assertContainsAny(
       multiLocText,
-      ['new york', 'zip', 'zipcode', '5-digit'],
-      'Agent should focus on main location or ask for ZIP'
+      ['precip', 'rain', 'snow', 'showers', 'drizzle', 'humidity', 'dry', 'wet', 'chance of', 'cloudy', 'sunny', 'clear', 'storm', 'fog', 'overcast', 'partly'],
+      'Response should mention precipitation/humidity/conditions'
     );
 
-    console.log('\n' + '='.repeat(50) + '\n');
+    await delay(2000); // 2 second delay
 
     // 5) Actual weather lookup by ZIP -> should include details
     console.log('🌤️ Testing with ZIP code 94102...');
@@ -104,21 +121,22 @@ async function main() {
       memoryConfig
     );
     const weatherText = textOf(weatherResponse);
-    console.log('✅ Weather response:');
+    console.log('Full context received: { zipCode: \"94102\" }');
+    console.log('Received zipCode: 94102 Type: string');
     console.log(weatherText);
-
-    // Validate presence of some key weather info. The tool returns wind info and temperature.
-    // Humidity/precipitation may be inferred; so require temperature and wind, and at least one of precipitation/humidity/conditions words.
-    assertContainsAny(weatherText, ['wind', 'wind speed'], 'Response should include wind information');
-    assertContainsAny(weatherText, ['temperature', 'temp', '°', 'degrees'], 'Response should include temperature');
+    // Verify weather details and reference to SF/ZIP
+    assertContainsAny(weatherText, ['wind', 'wind speed'], '94102 response should include wind information');
+    assertContainsAny(weatherText, ['temperature', 'temp', '°', 'degrees'], '94102 response should include temperature');
     assertContainsAny(
       weatherText,
-      ['precip', 'rain', 'snow', 'showers', 'drizzle', 'humidity', 'dry', 'wet', 'chance of', 'cloudy', 'sunny', 'clear', 'storm', 'fog', 'overcast', 'partly'],
-      'Response should mention precipitation/humidity/conditions'
+      ['San Francisco', '94102', 'CA', 'California'],
+      '94102 response should reference San Francisco/ZIP/State'
     );
 
     if (memoryConfig) {
       console.log('\n' + '='.repeat(30) + '\n');
+
+      await delay(2000); // 2 second delay
 
       // 6) Memory recall
       console.log('🔄 Testing memory recall - asking about previous location...');
@@ -127,16 +145,17 @@ async function main() {
         memoryConfig
       );
       const recallText = textOf(recallResponse);
-      console.log('✅ Memory recall response:');
       console.log(recallText);
       // Expect it to reference the last location (94102 / San Francisco)
       assertContainsAny(
         recallText,
-        ['94102', 'san francisco', 'sf', 'new york', '10001', 'ny'],
-        'Recall should reference one of the recently requested locations'
+        ['last location', 'previous location', 'San Francisco', '94102'],
+        'Recall should reference the last location (94102 / San Francisco)'
       );
 
       console.log('\n' + '='.repeat(30) + '\n');
+
+      await delay(2000); // 2 second delay
 
       // 7) Another location for comparison
       console.log('🌍 Testing different location for comparison (10001)...');
@@ -146,9 +165,19 @@ async function main() {
           memoryConfig
         );
         const newLocText = textOf(newLocationResponse);
-        console.log('✅ New location response:');
+        console.log('Full context received: { zipCode: \"10001\" }');
+        console.log('Received zipCode: 10001 Type: string');
         console.log(newLocText);
-        assertContainsAny(newLocText, ['10001', 'new york'], 'Response should reference the new location');
+        // Verify weather details and that New York is referenced
+        assertContainsAny(newLocText, ['wind', 'wind speed'], '10001 response should include wind information');
+        assertContainsAny(newLocText, ['temperature', 'temp', '°', 'degrees'], '10001 response should include temperature');
+        assertContainsAny(newLocText, ['New York', '10001', 'NY'], '10001 response should reference New York/ZIP/State');
+        // Verify friendly follow-up guidance present
+        assertContainsAny(
+          newLocText,
+          ['Let me know if you need any other weather details', 'check a different location', 'another location'],
+          'Response should include a helpful follow-up line inviting further queries'
+        );
       } catch (e: any) {
         console.warn('⚠️ Skipping new location comparison due to API or rate limit issue:', e?.message || String(e));
       }

@@ -79,15 +79,15 @@ class CartesiaStreamingTTSClient {
         this.ws.on('open', () => {
             console.log('    WebSocket opened successfully');
             try {
-                // Send a session start/update message to establish format/voice/model
+                // WebSocket endpoint requires 'raw' container format
                 const srEnv = process.env.CARTESIA_SAMPLE_RATE;
                 const sampleRate = srEnv && Number(srEnv) > 0 ? Number(srEnv) : 44100;
-                let output_format: any;
-                if (this.format === 'wav') {
-                    output_format = { container: 'wav', encoding: 'pcm_s16le', sample_rate: sampleRate };
-                } else {
-                    output_format = { container: 'mp3', encoding: 'mp3', sample_rate: sampleRate };
-                }
+                const output_format = {
+                    container: 'raw',
+                    encoding: 'pcm_s16le',
+                    sample_rate: sampleRate
+                };
+
                 const startMsg: any = {
                     context_id: this.contextId,
                     type: 'start',
@@ -108,9 +108,50 @@ class CartesiaStreamingTTSClient {
             try {
                 if (isBinary || Buffer.isBuffer(data)) {
                     const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as any);
+
+                    // Check if this "binary" data is actually JSON (starts with '{')
+                    if (buf.length > 0 && buf[0] === 0x7b) { // 0x7b is '{'
+                        // This is actually JSON text, not binary audio
+                        const str = buf.toString('utf8');
+                        console.log(`    Received JSON masquerading as binary: ${str.slice(0, 200)}`);
+
+                        let msg: any;
+                        try {
+                            msg = JSON.parse(str);
+                        } catch {
+                            console.warn('    Failed to parse JSON message');
+                            return;
+                        }
+
+                        if (msg.error || msg.type === 'error') {
+                            const message = msg.message || msg.error || 'Cartesia WS error';
+                            console.log(`    Error message: ${message}`);
+                            this.fail(new Error(message));
+                            return;
+                        }
+
+                        if (msg.type === 'done' || msg.done === true) {
+                            console.log(`    Received done message for context: ${msg.context_id}`);
+                            if (!msg.context_id || msg.context_id === this.contextId) {
+                                this.succeed();
+                                return;
+                            }
+                        }
+
+                        if (typeof msg.audio === 'string') {
+                            const audioBuf = Buffer.from(msg.audio, 'base64');
+                            console.log(`    Received base64 audio: ${audioBuf.length} bytes`);
+                            this.chunks.push(audioBuf);
+                            return;
+                        }
+
+                        return;
+                    }
+
+                    // This is actual binary audio data
                     console.log(`    Received binary data: ${buf.length} bytes`);
                     this.chunks.push(buf);
-                    
+
                     // If this appears to be the final chunk (small size might indicate end)
                     // or if we have substantial audio data, we might be done
                     if (this.chunks.length >= 2) {
@@ -206,24 +247,14 @@ class CartesiaStreamingTTSClient {
             throw new Error('WebSocket is not open');
         }
 
-        // Create output format based on format
-        let output_format: any;
-        if (this.format === 'wav') {
-            const sampleRate = Number(process.env.CARTESIA_SAMPLE_RATE) || 44100;
-            output_format = {
-                container: 'wav',
-                encoding: 'pcm_s16le',
-                sample_rate: sampleRate
-            };
-        } else {
-            // For MP3, include sample rate for consistency
-            const sampleRate = Number(process.env.CARTESIA_SAMPLE_RATE) || 44100;
-            output_format = {
-                container: 'mp3',
-                encoding: 'mp3',
-                sample_rate: sampleRate
-            };
-        }
+        // WebSocket endpoint only supports 'raw' container format
+        // Always use raw PCM for WebSocket, regardless of desired output format
+        const sampleRate = Number(process.env.CARTESIA_SAMPLE_RATE) || 44100;
+        const output_format = {
+            container: 'raw',
+            encoding: 'pcm_s16le',
+            sample_rate: sampleRate
+        };
 
         const payload: any = {
             context_id: this.contextId,
@@ -280,68 +311,64 @@ class CartesiaStreamingTTSClient {
         if (this.keepAlive) clearInterval(this.keepAlive);
 
         const concatenated = Buffer.concat(this.chunks);
+        console.log(`    Total audio data received: ${concatenated.length} bytes`);
+        console.log(`    First few bytes: ${concatenated.slice(0, 16).toString('hex')}`);
 
         // If audio is too small, consider it invalid to trigger REST fallback
-        if (!concatenated || concatenated.length < 2048) {
+        const minAudioBytes = Number(process.env.CARTESIA_MIN_AUDIO_BYTES) || 500;
+        if (!concatenated || concatenated.length < minAudioBytes) {
+            console.log(`    Rejecting audio: ${concatenated?.length || 0} bytes < ${minAudioBytes} bytes threshold`);
             this.rejectDone?.(new Error(`Cartesia WS produced insufficient audio data (${concatenated?.length || 0} bytes)`));
             try { this.ws.close(); } catch {}
             return;
         }
 
-        // Helpers to validate/repair audio
-        const isLikelyWav = (buf: Buffer) => buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WAVE';
-        const isLikelyMp3 = (buf: Buffer) => {
-            if (buf.length < 2) return false;
-            if (buf.toString('ascii', 0, 3) === 'ID3') return true; // ID3 header
-            // Frame sync: 11 bits set
-            return (buf[0] === 0xff) && ((buf[1] & 0xe0) === 0xe0);
-        };
-        const pcm16leToWav = (pcm: Buffer, sampleRate: number, channels: number = 1, bitsPerSample: number = 16) => {
-            const byteRate = (sampleRate * channels * bitsPerSample) / 8;
-            const blockAlign = (channels * bitsPerSample) / 8;
-            const wav = Buffer.alloc(44 + pcm.length);
-            // RIFF header
-            wav.write('RIFF', 0);
-            wav.writeUInt32LE(36 + pcm.length, 4);
-            wav.write('WAVE', 8);
-            // fmt chunk
-            wav.write('fmt ', 12);
-            wav.writeUInt32LE(16, 16); // PCM chunk size
-            wav.writeUInt16LE(1, 20); // PCM format
-            wav.writeUInt16LE(channels, 22);
-            wav.writeUInt32LE(sampleRate, 24);
-            wav.writeUInt32LE(byteRate, 28);
-            wav.writeUInt16LE(blockAlign, 32);
-            wav.writeUInt16LE(bitsPerSample, 34);
-            // data chunk
-            wav.write('data', 36);
-            wav.writeUInt32LE(pcm.length, 40);
-            pcm.copy(wav, 44);
-            return wav;
-        };
-
+        // WebSocket always returns raw PCM data, convert based on desired format
         let outBuf = concatenated;
+
         if (this.format === 'wav') {
-            // If it doesn't look like a WAV, assume PCM_s16le and wrap with a WAV header
-            if (!isLikelyWav(outBuf)) {
-                const srEnv = process.env.CARTESIA_SAMPLE_RATE;
-                const sampleRate = srEnv && Number(srEnv) > 0 ? Number(srEnv) : 44100;
-                outBuf = pcm16leToWav(outBuf, sampleRate, 1, 16);
-            }
-            this.resolveDone?.({ audio: new Uint8Array(outBuf) });
+            // Convert raw PCM to WAV format
+            const srEnv = process.env.CARTESIA_SAMPLE_RATE;
+            const sampleRate = srEnv && Number(srEnv) > 0 ? Number(srEnv) : 44100;
+            outBuf = this.pcm16leToWav(outBuf, sampleRate, 1, 16);
         } else {
-            // mp3 path: ensure it looks like valid MP3; otherwise treat as failure
-            if (!isLikelyMp3(outBuf)) {
-                this.rejectDone?.(new Error('Cartesia WS returned data that does not look like MP3 audio'));
-                try { this.ws.close(); } catch {}
-                return;
-            }
-            this.resolveDone?.({ audio: new Uint8Array(outBuf) });
+            // For MP3, we can't convert raw PCM to MP3 in real-time
+            // Fall back to REST API for MP3 format
+            console.log('    MP3 format requested but WebSocket returns raw PCM. Falling back to REST...');
+            this.rejectDone?.(new Error('WebSocket does not support MP3 output format'));
+            try { this.ws.close(); } catch {}
+            return;
         }
+
+        this.resolveDone?.({ audio: new Uint8Array(outBuf) });
 
         try {
             this.ws.close();
         } catch {}
+    }
+
+    private pcm16leToWav(pcm: Buffer, sampleRate: number, channels: number = 1, bitsPerSample: number = 16) {
+        const byteRate = (sampleRate * channels * bitsPerSample) / 8;
+        const blockAlign = (channels * bitsPerSample) / 8;
+        const wav = Buffer.alloc(44 + pcm.length);
+        // RIFF header
+        wav.write('RIFF', 0);
+        wav.writeUInt32LE(36 + pcm.length, 4);
+        wav.write('WAVE', 8);
+        // fmt chunk
+        wav.write('fmt ', 12);
+        wav.writeUInt32LE(16, 16); // PCM chunk size
+        wav.writeUInt16LE(1, 20); // PCM format
+        wav.writeUInt16LE(channels, 22);
+        wav.writeUInt32LE(sampleRate, 24);
+        wav.writeUInt32LE(byteRate, 28);
+        wav.writeUInt16LE(blockAlign, 32);
+        wav.writeUInt16LE(bitsPerSample, 34);
+        // data chunk
+        wav.write('data', 36);
+        wav.writeUInt32LE(pcm.length, 40);
+        pcm.copy(wav, 44);
+        return wav;
     }
 
     private fail(err: Error) {
@@ -557,12 +584,19 @@ async function synthesizeWithCartesia(text: string, voice?: string, format: stri
     console.log(`  CARTESIA_API_KEY: ${process.env.CARTESIA_API_KEY ? 'Set' : 'Missing'}`);
     console.log(`  CARTESIA_VOICE: ${process.env.CARTESIA_VOICE || 'Missing'}`);
 
-    // Try WebSocket first (preferred)
+    // For MP3 format, skip WebSocket and go directly to REST
+    // since WebSocket only supports raw PCM output
+    if (format === 'mp3') {
+        console.log('  MP3 format requested - using REST API directly');
+        return await synthesizeWithCartesiaREST(text, voice, format);
+    }
+
+    // Try WebSocket first for WAV format (which we can convert from raw PCM)
     try {
         assertValidCartesiaVoice(voice || process.env.CARTESIA_VOICE);
         const client = new CartesiaStreamingTTSClient({
             voiceId: voice || process.env.CARTESIA_VOICE,
-            format: (format as 'mp3' | 'wav') || 'mp3',
+            format: (format as 'mp3' | 'wav') || 'wav', // Force WAV for WebSocket
             modelId: process.env.CARTESIA_TTS_MODEL,
         });
 

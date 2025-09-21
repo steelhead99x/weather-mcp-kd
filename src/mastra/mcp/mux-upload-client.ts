@@ -91,8 +91,6 @@ class MuxMCPClient {
         return parsedTimeout;
     }
 
-// ... existing code ...
-
     private async ensureConnected(): Promise<void> {
         // If already connected, return immediately
         if (this.connected && this.client) {
@@ -118,7 +116,7 @@ class MuxMCPClient {
     private async performConnection(): Promise<void> {
         // Validate environment before attempting connection
         if (!process.env.MUX_TOKEN_ID || !process.env.MUX_TOKEN_SECRET) {
-            const errorMsg = "Missing required environment variables: MUX_TOKEN_ID and MUX_TOKEN_SECRET are required. MUX_MCP_INTERACTIVE_ARGS is optional but may affect connection behavior if misconfigured.";
+            const errorMsg = "Missing required environment variables: MUX_TOKEN_ID and MUX_TOKEN_SECRET are required. MUX_MCP_UPLOAD_ARGS is optional but may affect connection behavior if misconfigured.";
             Logger.error("Environment validation failed:", errorMsg);
             throw new Error(errorMsg);
         }
@@ -184,9 +182,7 @@ class MuxMCPClient {
         }
     }
 
-
     /**
-     /**
      * Parse and validate MCP arguments from environment variable
      * Provides comprehensive security validation and fallback logic
      */
@@ -195,19 +191,19 @@ class MuxMCPClient {
 
         // Use default if environment variable is not set
         if (!envValue) {
-            Logger.debug("Using default MCP args (MUX_MCP_INTERACTIVE_ARGS not set)");
+            Logger.debug("Using default MCP args (MUX_MCP_UPLOAD_ARGS not set)");
             return defaultArgs;
         }
 
         const trimmedValue = envValue.trim();
 
         if (!trimmedValue) {
-            Logger.warn("MUX_MCP_INTERACTIVE_ARGS is empty, using defaults");
+            Logger.warn("MUX_MCP_UPLOAD_ARGS is empty, using defaults");
             return defaultArgs;
         }
 
         if (trimmedValue.length > 1000) {
-            Logger.warn("MUX_MCP_INTERACTIVE_ARGS too long (>1000 chars), using defaults");
+            Logger.warn("MUX_MCP_UPLOAD_ARGS too long (>1000 chars), using defaults");
             return defaultArgs;
         }
 
@@ -245,7 +241,7 @@ class MuxMCPClient {
             return processedArgs;
 
         } catch (error) {
-            Logger.error("Failed to parse MUX_MCP_INTERACTIVE_ARGS:", error);
+            Logger.error("Failed to parse MUX_MCP_UPLOAD_ARGS:", error);
             Logger.info("Falling back to default MCP arguments");
             return defaultArgs;
         }
@@ -359,7 +355,6 @@ class MuxMCPClient {
         return true;
     }
 
-
     // Convert MCP tools to proper Mastra tools using createTool
     async getTools(): Promise<Record<string, any>> {
         await this.ensureConnected();
@@ -372,10 +367,12 @@ class MuxMCPClient {
             const result = await this.client.listTools();
             const tools: Record<string, any> = {};
 
+            Logger.debug("Available MCP tools:", result?.tools?.map(t => t.name) || []);
+
             if (result?.tools) {
                 for (const tool of result.tools) {
                     try {
-                        // Create a proper Mastra tool using createTool
+                        // Create a proper Mastra tool using createTool (directly exposed by MCP)
                         tools[tool.name] = createTool({
                             id: tool.name,
                             description: tool.description || `Mux MCP tool: ${tool.name}`,
@@ -399,7 +396,115 @@ class MuxMCPClient {
                 }
             }
 
+            // If MCP only exposes generic invoke_api_endpoint, synthesize concrete tools for video.uploads
+            const hasInvoke = !!tools['invoke_api_endpoint'];
+            Logger.debug(`Has invoke_api_endpoint: ${hasInvoke}`);
+
+            if (hasInvoke) {
+                const addWrapper = (id: string, endpoint: string, description: string) => {
+                    tools[id] = createTool({
+                        id,
+                        description,
+                        inputSchema: z.object({}).passthrough(),
+                        execute: async ({ context }) => {
+                            if (!this.client) throw new Error("Client not connected");
+
+                            // Try direct tool call first (best case - the MCP exposes the endpoint directly)
+                            const directTool = tools[endpoint];
+                            if (directTool && directTool !== tools[id]) {
+                                Logger.debug(`Using direct tool: ${endpoint}`);
+                                return directTool.execute({ context });
+                            }
+
+                            Logger.debug(`Using invoke_api_endpoint wrapper for: ${endpoint}`);
+
+                            // Try to list endpoints and fetch schema (best effort)
+                            const listTool = tools['list_api_endpoints'] ? 'list_api_endpoints' : null;
+                            if (listTool && process.env.DEBUG) {
+                                try {
+                                    Logger.debug(`Listing API endpoints via ${listTool}`);
+                                    const listRes = await this.client.callTool({ name: listTool, arguments: {} });
+                                    Logger.info(`Available endpoints:`, JSON.stringify(listRes?.content ?? listRes));
+                                } catch (e) {
+                                    Logger.warn(`Failed to list endpoints`, e instanceof Error ? e.message : String(e));
+                                }
+                            }
+
+                            const schemaTool = tools['get_api_endpoint_schema'] ? 'get_api_endpoint_schema' : null;
+                            if (schemaTool && process.env.DEBUG) {
+                                const schemaAttempts = [
+                                    { endpoint },
+                                ];
+                                for (const sArgs of schemaAttempts) {
+                                    try {
+                                        Logger.debug(`Fetching schema for ${endpoint} via ${schemaTool}`, sArgs);
+                                        const schemaRes = await this.client.callTool({ name: schemaTool, arguments: sArgs });
+                                        Logger.info(`Schema for ${endpoint}:`, JSON.stringify(schemaRes?.content ?? schemaRes));
+                                        break; // don't loop further once one succeeds
+                                    } catch (e) {
+                                        Logger.warn(`Failed to fetch schema with variant`, e instanceof Error ? e.message : String(e));
+                                    }
+                                }
+                            }
+
+                            const ctx = context || {};
+                            const attemptArgs = [
+                                // Standard format that most MCP servers expect
+                                { endpoint, args: ctx },
+
+                                // Direct endpoint call format
+                                { endpoint_name: endpoint, args: ctx },
+
+                                // Legacy formats (keep as fallback)
+                                { endpoint, ...ctx },
+                                { endpoint, body: ctx },
+                                { endpoint, params: ctx },
+                                { endpoint, data: ctx },
+                                { endpoint, arguments: ctx },
+                                { name: endpoint, arguments: ctx },
+                                { id: endpoint, arguments: ctx },
+                                { tool: endpoint, arguments: ctx },
+                                { endpoint, input: ctx },
+                                { endpoint, payload: ctx },
+                            ];
+
+                            let lastErr: any;
+                            for (const args of attemptArgs) {
+                                try {
+                                    Logger.debug(`Invoking endpoint via wrapper: ${endpoint}`, args);
+                                    const res = await this.client.callTool({ name: 'invoke_api_endpoint', arguments: args });
+                                    return res.content;
+                                } catch (e) {
+                                    lastErr = e;
+                                    const errorMsg = e instanceof Error ? e.message : String(e);
+                                    Logger.warn(`invoke_api_endpoint failed with args variant, trying next: ${errorMsg}`);
+
+                                    // Log the specific argument structure that failed for debugging
+                                    if (process.env.DEBUG) {
+                                        Logger.debug('Failed args structure:', JSON.stringify(args, null, 2));
+                                    }
+                                }
+                            }
+                            throw lastErr || new Error('invoke_api_endpoint failed for all argument variants');
+                        },
+                    });
+                };
+
+                // Primary snake_case IDs per issue description (match MCP endpoint names)
+                addWrapper('create_video_uploads', 'create_video_uploads', 'Creates a new direct upload for video content');
+                addWrapper('retrieve_video_uploads', 'retrieve_video_uploads', 'Fetches information about a single direct upload');
+                addWrapper('list_video_uploads', 'list_video_uploads', 'Lists direct uploads');
+                addWrapper('cancel_video_uploads', 'cancel_video_uploads', 'Cancels a direct upload in waiting state');
+
+                // Dotted aliases for convenience/compatibility (map to snake endpoints under the hood)
+                addWrapper('video.uploads.create', 'create_video_uploads', 'Creates a new direct upload for video content');
+                addWrapper('video.uploads.get', 'retrieve_video_uploads', 'Fetches information about a single direct upload');
+                addWrapper('video.uploads.list', 'list_video_uploads', 'Lists direct uploads');
+                addWrapper('video.uploads.cancel', 'cancel_video_uploads', 'Cancels a direct upload in waiting state');
+            }
+
             Logger.info(`Successfully created ${Object.keys(tools).length} Mastra tools from MCP`);
+            Logger.debug("Final tool names:", Object.keys(tools));
             return tools;
         } catch (error) {
             Logger.error("Failed to get tools:", error);

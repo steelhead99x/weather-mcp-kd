@@ -44,7 +44,7 @@ class Logger {
     }
 }
 
-class MuxMCPClient {
+class MuxMCPAssetsClient {
     // Timeout configuration constants
     private static readonly MIN_CONNECTION_TIMEOUT = 5000;    // 5 seconds minimum
     private static readonly MAX_CONNECTION_TIMEOUT = 300000;  // 5 minutes maximum
@@ -64,7 +64,7 @@ class MuxMCPClient {
 
         // Use default if not specified
         if (!envTimeout) {
-            return MuxMCPClient.DEFAULT_CONNECTION_TIMEOUT;
+            return MuxMCPAssetsClient.DEFAULT_CONNECTION_TIMEOUT;
         }
 
         // Parse and validate the timeout value
@@ -72,26 +72,24 @@ class MuxMCPClient {
 
         // Check for invalid number
         if (isNaN(parsedTimeout)) {
-            Logger.warn(`Invalid MUX_CONNECTION_TIMEOUT value: ${envTimeout}, using default ${MuxMCPClient.DEFAULT_CONNECTION_TIMEOUT}ms`);
-            return MuxMCPClient.DEFAULT_CONNECTION_TIMEOUT;
+            Logger.warn(`Invalid MUX_CONNECTION_TIMEOUT value: ${envTimeout}, using default ${MuxMCPAssetsClient.DEFAULT_CONNECTION_TIMEOUT}ms`);
+            return MuxMCPAssetsClient.DEFAULT_CONNECTION_TIMEOUT;
         }
 
         // Apply bounds validation
-        if (parsedTimeout < MuxMCPClient.MIN_CONNECTION_TIMEOUT) {
-            Logger.warn(`MUX_CONNECTION_TIMEOUT too low (${parsedTimeout}ms), using minimum ${MuxMCPClient.MIN_CONNECTION_TIMEOUT}ms`);
-            return MuxMCPClient.MIN_CONNECTION_TIMEOUT;
+        if (parsedTimeout < MuxMCPAssetsClient.MIN_CONNECTION_TIMEOUT) {
+            Logger.warn(`MUX_CONNECTION_TIMEOUT too low (${parsedTimeout}ms), using minimum ${MuxMCPAssetsClient.MIN_CONNECTION_TIMEOUT}ms`);
+            return MuxMCPAssetsClient.MIN_CONNECTION_TIMEOUT;
         }
 
-        if (parsedTimeout > MuxMCPClient.MAX_CONNECTION_TIMEOUT) {
-            Logger.warn(`MUX_CONNECTION_TIMEOUT too high (${parsedTimeout}ms), using maximum ${MuxMCPClient.MAX_CONNECTION_TIMEOUT}ms`);
-            return MuxMCPClient.MAX_CONNECTION_TIMEOUT;
+        if (parsedTimeout > MuxMCPAssetsClient.MAX_CONNECTION_TIMEOUT) {
+            Logger.warn(`MUX_CONNECTION_TIMEOUT too high (${parsedTimeout}ms), using maximum ${MuxMCPAssetsClient.MAX_CONNECTION_TIMEOUT}ms`);
+            return MuxMCPAssetsClient.MAX_CONNECTION_TIMEOUT;
         }
 
         Logger.debug(`Using connection timeout: ${parsedTimeout}ms`);
         return parsedTimeout;
     }
-
-// ... existing code ...
 
     private async ensureConnected(): Promise<void> {
         // If already connected, return immediately
@@ -118,16 +116,16 @@ class MuxMCPClient {
     private async performConnection(): Promise<void> {
         // Validate environment before attempting connection
         if (!process.env.MUX_TOKEN_ID || !process.env.MUX_TOKEN_SECRET) {
-            const errorMsg = "Missing required environment variables: MUX_TOKEN_ID and MUX_TOKEN_SECRET are required. MUX_MCP_INTERACTIVE_ARGS is optional but may affect connection behavior if misconfigured.";
+            const errorMsg = "Missing required environment variables: MUX_TOKEN_ID and MUX_TOKEN_SECRET are required. MUX_MCP_ASSETS_ARGS is optional but may affect connection behavior if misconfigured.";
             Logger.error("Environment validation failed:", errorMsg);
             throw new Error(errorMsg);
         }
 
         try {
             // Parse and validate MCP args from environment variable
-            const mcpArgs = this.parseMcpArgs(process.env.MUX_MCP_ASSETSf_ARGS);
+            const mcpArgs = this.parseMcpArgs(process.env.MUX_MCP_ASSETS_ARGS);
 
-            Logger.info("Connecting to Mux MCP server...");
+            Logger.info("Connecting to Mux MCP Assets server...");
             Logger.debug("MUX_TOKEN_ID: [CONFIGURED]");
             Logger.debug("MUX_TOKEN_SECRET: [CONFIGURED]");
             Logger.debug(`MCP Args: ${mcpArgs.join(' ')}`);
@@ -144,7 +142,7 @@ class MuxMCPClient {
 
             this.client = new Client(
                 {
-                    name: "mux-mastra-client",
+                    name: "mux-assets-mastra-client",
                     version: "1.0.0",
                 },
                 {
@@ -163,10 +161,10 @@ class MuxMCPClient {
 
             // Atomically update the connected state
             this.connected = true;
-            Logger.info("Connected to Mux MCP server successfully");
+            Logger.info("Connected to Mux MCP Assets server successfully");
 
         } catch (error) {
-            Logger.error("Failed to connect to Mux MCP server:", error);
+            Logger.error("Failed to connect to Mux MCP Assets server:", error);
 
             // Clean up on failure
             this.connected = false;
@@ -184,9 +182,7 @@ class MuxMCPClient {
         }
     }
 
-
     /**
-     /**
      * Parse and validate MCP arguments from environment variable
      * Provides comprehensive security validation and fallback logic
      */
@@ -195,19 +191,19 @@ class MuxMCPClient {
 
         // Use default if environment variable is not set
         if (!envValue) {
-            Logger.debug("Using default MCP args (MUX_MCP_INTERACTIVE_ARGS not set)");
+            Logger.debug("Using default MCP args (MUX_MCP_ASSETS_ARGS not set)");
             return defaultArgs;
         }
 
         const trimmedValue = envValue.trim();
 
         if (!trimmedValue) {
-            Logger.warn("MUX_MCP_INTERACTIVE_ARGS is empty, using defaults");
+            Logger.warn("MUX_MCP_ASSETS_ARGS is empty, using defaults");
             return defaultArgs;
         }
 
         if (trimmedValue.length > 1000) {
-            Logger.warn("MUX_MCP_INTERACTIVE_ARGS too long (>1000 chars), using defaults");
+            Logger.warn("MUX_MCP_ASSETS_ARGS too long (>1000 chars), using defaults");
             return defaultArgs;
         }
 
@@ -245,7 +241,7 @@ class MuxMCPClient {
             return processedArgs;
 
         } catch (error) {
-            Logger.error("Failed to parse MUX_MCP_INTERACTIVE_ARGS:", error);
+            Logger.error("Failed to parse MUX_MCP_ASSETS_ARGS:", error);
             Logger.info("Falling back to default MCP arguments");
             return defaultArgs;
         }
@@ -359,7 +355,6 @@ class MuxMCPClient {
         return true;
     }
 
-
     // Convert MCP tools to proper Mastra tools using createTool
     async getTools(): Promise<Record<string, any>> {
         await this.ensureConnected();
@@ -372,20 +367,22 @@ class MuxMCPClient {
             const result = await this.client.listTools();
             const tools: Record<string, any> = {};
 
+            Logger.debug("Available MCP assets tools:", result?.tools?.map(t => t.name) || []);
+
             if (result?.tools) {
                 for (const tool of result.tools) {
                     try {
-                        // Create a proper Mastra tool using createTool
+                        // Create a proper Mastra tool using createTool (directly exposed by MCP)
                         tools[tool.name] = createTool({
                             id: tool.name,
-                            description: tool.description || `Mux MCP tool: ${tool.name}`,
+                            description: tool.description || `Mux MCP Assets tool: ${tool.name}`,
                             inputSchema: this.convertToZodSchema(tool.inputSchema),
                             execute: async ({ context }) => {
                                 if (!this.client) {
                                     throw new Error("Client not connected");
                                 }
 
-                                Logger.debug(`Calling MCP tool: ${tool.name}`, context);
+                                Logger.debug(`Calling MCP Assets tool: ${tool.name}`, context);
 
                                 return (await this.client.callTool({
                                     name: tool.name,
@@ -394,15 +391,100 @@ class MuxMCPClient {
                             },
                         });
                     } catch (toolError) {
-                        Logger.warn(`Skipping tool ${tool.name} due to error:`, toolError);
+                        Logger.warn(`Skipping assets tool ${tool.name} due to error:`, toolError);
                     }
                 }
             }
 
-            Logger.info(`Successfully created ${Object.keys(tools).length} Mastra tools from MCP`);
+            // If MCP only exposes generic invoke_api_endpoint, synthesize concrete tools for video.assets
+            const hasInvoke = !!tools['invoke_api_endpoint'];
+            Logger.debug(`Has invoke_api_endpoint: ${hasInvoke}`);
+
+            if (hasInvoke) {
+                const addWrapper = (id: string, endpoint: string, description: string) => {
+                    tools[id] = createTool({
+                        id,
+                        description,
+                        inputSchema: z.object({
+                            id: z.string().optional().describe("Asset ID"),
+                        }).passthrough(),
+                        execute: async ({ context }) => {
+                            if (!this.client) throw new Error("Client not connected");
+
+                            // Try direct tool call first (best case - the MCP exposes the endpoint directly)
+                            const directTool = tools[endpoint];
+                            if (directTool && directTool !== tools[id]) {
+                                Logger.debug(`Using direct tool: ${endpoint}`);
+                                return directTool.execute({ context });
+                            }
+
+                            Logger.debug(`Using invoke_api_endpoint wrapper for: ${endpoint}`);
+
+                            const ctx = context || {};
+                            const attemptArgs = [
+                                // Standard format that most MCP servers expect
+                                { endpoint, args: ctx },
+
+                                // Direct endpoint call format
+                                { endpoint_name: endpoint, args: ctx },
+
+                                // Legacy formats (keep as fallback)
+                                { endpoint, ...ctx },
+                                { endpoint, body: ctx },
+                                { endpoint, params: ctx },
+                                { endpoint, data: ctx },
+                                { endpoint, arguments: ctx },
+                                { name: endpoint, arguments: ctx },
+                                { id: endpoint, arguments: ctx },
+                                { tool: endpoint, arguments: ctx },
+                                { endpoint, input: ctx },
+                                { endpoint, payload: ctx },
+                            ];
+
+                            let lastErr: any;
+                            for (const args of attemptArgs) {
+                                try {
+                                    Logger.debug(`Invoking assets endpoint via wrapper: ${endpoint}`, args);
+                                    const res = await this.client.callTool({ name: 'invoke_api_endpoint', arguments: args });
+                                    return res.content;
+                                } catch (e) {
+                                    lastErr = e;
+                                    const errorMsg = e instanceof Error ? e.message : String(e);
+                                    Logger.warn(`invoke_api_endpoint failed with args variant, trying next: ${errorMsg}`);
+
+                                    // Log the specific argument structure that failed for debugging
+                                    if (process.env.DEBUG) {
+                                        Logger.debug('Failed args structure:', JSON.stringify(args, null, 2));
+                                    }
+                                }
+                            }
+                            throw lastErr || new Error('invoke_api_endpoint failed for all argument variants');
+                        },
+                    });
+                };
+
+                // Primary snake_case IDs for assets endpoints
+                addWrapper('get_video_assets', 'get_video_assets', 'Fetches information about a single video asset');
+                addWrapper('retrieve_video_assets', 'retrieve_video_assets', 'Fetches information about a single video asset');
+                addWrapper('list_video_assets', 'list_video_assets', 'Lists video assets');
+                addWrapper('create_video_assets', 'create_video_assets', 'Creates a new video asset');
+                addWrapper('update_video_assets', 'update_video_assets', 'Updates a video asset');
+                addWrapper('delete_video_assets', 'delete_video_assets', 'Deletes a video asset');
+
+                // Dotted aliases for convenience/compatibility
+                addWrapper('video.assets.get', 'get_video_assets', 'Fetches information about a single video asset');
+                addWrapper('video.assets.retrieve', 'retrieve_video_assets', 'Fetches information about a single video asset');
+                addWrapper('video.assets.list', 'list_video_assets', 'Lists video assets');
+                addWrapper('video.assets.create', 'create_video_assets', 'Creates a new video asset');
+                addWrapper('video.assets.update', 'update_video_assets', 'Updates a video asset');
+                addWrapper('video.assets.delete', 'delete_video_assets', 'Deletes a video asset');
+            }
+
+            Logger.info(`Successfully created ${Object.keys(tools).length} Mastra assets tools from MCP`);
+            Logger.debug("Final assets tool names:", Object.keys(tools));
             return tools;
         } catch (error) {
-            Logger.error("Failed to get tools:", error);
+            Logger.error("Failed to get assets tools:", error);
             throw error;
         }
     }
@@ -466,7 +548,7 @@ class MuxMCPClient {
 
         // Fallback schema
         return z.object({
-            id: z.string().optional().describe("Resource ID"),
+            id: z.string().optional().describe("Asset ID"),
             limit: z.number().optional().describe("Number of items to return"),
             offset: z.number().optional().describe("Number of items to skip"),
         });
@@ -485,7 +567,7 @@ class MuxMCPClient {
         }
 
         this.client = null;
-        Logger.info("Disconnected from Mux MCP server");
+        Logger.info("Disconnected from Mux MCP Assets server");
     }
 
     isConnected(): boolean {
@@ -499,7 +581,7 @@ class MuxMCPClient {
 }
 
 // Create and export a singleton instance
-export const muxMcpClient = new MuxMCPClient();
+export const muxMcpClient = new MuxMCPAssetsClient();
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
