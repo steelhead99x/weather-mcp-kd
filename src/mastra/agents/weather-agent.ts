@@ -122,7 +122,7 @@ function createSilenceWAV(durationSeconds: number): Buffer {
 // TTS functionality for weather reports
 const ttsWeatherTool = createTool({
     id: "tts-weather-upload",
-    description: "Convert weather report to speech and upload to Mux for streaming",
+    description: "Convert weather report and upload to Mux for streaming",
     inputSchema: z.object({
         zipCode: z.string().describe("5-digit ZIP code for weather lookup"),
         text: z.string().optional().describe("Custom text to convert to speech (optional)"),
@@ -136,7 +136,7 @@ const ttsWeatherTool = createTool({
             // Use provided text or generate a default weather report
             const weatherText = text || `Today's weather for ZIP code ${zipCode}: sunny with a high of 72 degrees. Light winds from the southwest at 8 miles per hour. Have a great day!`;
             
-            console.log(`[tts-weather-upload] Converting text to speech: "${weatherText.slice(0, 100)}..."`);
+            console.log(`[tts-weather-upload] Uploading your weather forecast to Mux: "${weatherText.slice(0, 100)}..."`);
 
             // Generate actual TTS audio using available services
             let audioBuffer: Buffer;
