@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import { Agent } from "@mastra/core";
 import { anthropic } from "@ai-sdk/anthropic";
-import { generateText } from "ai";
 import { weatherTool } from "../tools/weather";
 import { promises as fs } from 'fs';
 import { resolve } from 'path';
@@ -10,6 +9,7 @@ import { z } from "zod";
 import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
 import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
 import { Memory } from "@mastra/memory";
+import { InMemoryStore } from "@mastra/core/storage";
 
 // TTS synthesis functions
 async function synthesizeWithCartesiaTTS(text: string): Promise<{ audio: ArrayBuffer; extension: string }> {
@@ -110,7 +110,7 @@ function createSilenceWAV(durationSeconds: number): Buffer {
 
     // data chunk
     buffer.write('data', offset); offset += 4;
-    buffer.writeUInt32LE(dataSize, offset); offset += 4;
+    buffer.writeUInt32LE(dataSize, offset);
 
     // Silence data is already zeros (buffer is initialized with zeros)
     return buffer;
@@ -137,7 +137,7 @@ const ttsWeatherTool = createTool({
 
             // Generate actual TTS audio using available services
             let audioBuffer: Buffer;
-            let audioExtension = '.wav';
+            let audioExtension: string;
 
             // Try Cartesia first, then Deepgram as fallback
             try {
@@ -152,7 +152,10 @@ const ttsWeatherTool = createTool({
                     audioBuffer = Buffer.from(audioResult.audio);
                     audioExtension = audioResult.extension;
                 } else {
-                    throw new Error('No TTS service configured. Set CARTESIA_API_KEY+CARTESIA_VOICE or DEEPGRAM_API_KEY');
+                    console.warn('[tts-weather-upload] No TTS service configured. Falling back to placeholder audio.');
+                    // Create a longer placeholder audio file as fallback (1 second of silence)
+                    audioBuffer = createSilenceWAV(1.0); // 1 second
+                    audioExtension = '.wav';
                 }
             } catch (ttsError) {
                 console.warn('[tts-weather-upload] TTS generation failed:', ttsError);
@@ -388,6 +391,7 @@ export const weatherAgent = new Agent({
     model: anthropic("claude-3-5-haiku-20241022"), // Updated model
     tools: [weatherTool, ttsWeatherTool],
     memory: new Memory({
+        storage: new InMemoryStore(),
         options: {
             lastMessages: 10,
             workingMemory: {
@@ -434,7 +438,6 @@ export const weatherAgentTestWrapper = {
         ];
 
         function adjustToTarget(text: string): string {
-            if (typeof text !== 'string') return '';
             let out = text.trim();
             // If short, append filler blocks until near target
             let i = 0;
