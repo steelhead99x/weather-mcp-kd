@@ -7,57 +7,43 @@ import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
 import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
 
 /**
- * Upload file to TUS endpoint following TUS protocol
+ * Upload file to Mux direct upload endpoint
+ * Mux uses a simplified upload protocol, not full TUS
  */
-async function uploadFileToTus(uploadUrl: string, filePath: string): Promise<void> {
-    console.log('[mux-upload-verify-real] Uploading file to TUS endpoint...');
-
+async function uploadFileToMux(uploadUrl: string, filePath: string): Promise<void> {
+    console.log('[mux-upload-verify-real] Uploading file to Mux endpoint...');
+    
     try {
         // Read file
         const fileBuffer = await fs.readFile(filePath);
         const fileSize = fileBuffer.length;
-
+        
         console.log(`[mux-upload-verify-real] File size: ${fileSize} bytes`);
-
-        // First, get upload info with HEAD request
-        console.log('[mux-upload-verify-real] Getting upload info with HEAD request...');
-        const headResponse = await fetch(uploadUrl, {
-            method: 'HEAD',
-        });
-
-        if (!headResponse.ok) {
-            throw new Error(`TUS HEAD request failed: ${headResponse.status} ${headResponse.statusText}`);
-        }
-
-        // Get current offset (should be 0 for new upload)
-        const uploadOffset = headResponse.headers.get('Upload-Offset') || '0';
-        const uploadLength = headResponse.headers.get('Upload-Length');
-
-        console.log(`[mux-upload-verify-real] Upload offset: ${uploadOffset}, Upload length: ${uploadLength}`);
-
-        // Upload the file using PATCH (TUS protocol)
+        
+        // Mux direct upload uses PUT method with the file as body
         console.log('[mux-upload-verify-real] Uploading file content...');
         const uploadResponse = await fetch(uploadUrl, {
-            method: 'PATCH',
+            method: 'PUT',
             headers: {
-                'Content-Type': 'application/offset+octet-stream',
-                'Upload-Offset': uploadOffset,
+                'Content-Type': 'application/octet-stream',
                 'Content-Length': fileSize.toString(),
             },
             body: fileBuffer,
         });
-
+        
         if (!uploadResponse.ok) {
             const errorText = await uploadResponse.text().catch(() => 'Unknown error');
             throw new Error(`File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}. Response: ${errorText}`);
         }
-
+        
         console.log('[mux-upload-verify-real] File uploaded successfully');
-
-        // Check final upload offset
-        const finalOffset = uploadResponse.headers.get('Upload-Offset');
-        console.log(`[mux-upload-verify-real] Final upload offset: ${finalOffset}`);
-
+        
+        // Log response details for debugging
+        const responseText = await uploadResponse.text().catch(() => '');
+        if (responseText) {
+            console.log(`[mux-upload-verify-real] Upload response: ${responseText}`);
+        }
+        
     } catch (error) {
         console.error('[mux-upload-verify-real] File upload failed:', error);
         throw error;
@@ -67,7 +53,7 @@ async function uploadFileToTus(uploadUrl: string, filePath: string): Promise<voi
 /**
  * Real Mux upload + verify script (no mocks):
  * - Uploads files/uploads/samples/mux-sample.mp4 (or .wav) by default via mux-upload-client
- * - Uploads the actual file to the TUS endpoint
+ * - Uploads the actual file to the Mux endpoint
  * - Then verifies the uploaded asset exists and becomes ready via mux-assets-client
  * - Requires MUX_TOKEN_ID and MUX_TOKEN_SECRET
  *
@@ -181,16 +167,16 @@ async function main() {
 
     if (uploadUrl) {
         console.log('[mux-upload-verify-real] upload_url provided by Mux:', uploadUrl);
-        console.log('[mux-upload-verify-real] Starting file upload to TUS endpoint...');
-
-        // Upload the file
+        console.log('[mux-upload-verify-real] Starting file upload to Mux endpoint...');
+        
+        // Upload the file using Mux's direct upload protocol
         try {
-            await uploadFileToTus(uploadUrl, absPath);
-
+            await uploadFileToMux(uploadUrl, absPath);
+            
             // Wait a bit for Mux to process the upload
             console.log('[mux-upload-verify-real] Waiting for Mux to process the uploaded file...');
             await delay(10000); // Wait 10 seconds for processing to start
-
+            
             // Now try to get the upload info again to get the asset_id
             const retrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
             if (retrieve && uploadId) {
