@@ -208,7 +208,7 @@ class CartesiaStreamingTTSClient {
             this.fail(err as Error);
         });
 
-        this.ws.on('close', (code: number, reason: Buffer) => {
+        this.ws.on('close', (code: number, _reason: Buffer) => {
             console.log(`    WebSocket closed with code: ${code}`);
             console.log(`    Total chunks received: ${this.chunks.length}`);
 
