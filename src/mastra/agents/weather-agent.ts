@@ -338,7 +338,6 @@ const ttsWeatherTool = createTool({
                 } catch (error) {
                     lastError = error;
                     console.warn(`[DEBUG] Mux format ${i + 1} failed:`, error);
-                    continue;
                 }
             }
 
