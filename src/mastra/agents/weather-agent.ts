@@ -394,6 +394,7 @@ export const weatherAgent = new Agent({
         storage: new InMemoryStore(),
         options: {
             lastMessages: 10,
+            semanticRecall: true,
             workingMemory: {
                 enabled: true
             }
