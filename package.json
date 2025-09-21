@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Weather agent using Mastra with MCP tools",
+  "description": "Weather agent using Mastra with MCP tools to upload tts audio files to mux.",
   "scripts": {
     "dev": "mastra dev",
     "build": "mastra build",

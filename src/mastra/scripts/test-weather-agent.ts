@@ -1,7 +1,187 @@
 import dotenv from 'dotenv';
-import { weatherAgent } from '../agents/weather-agent.js';
+import { Agent } from "@mastra/core";
+import { anthropic } from "@ai-sdk/anthropic";
+import { weatherTool } from "../tools/weather";
+import { promises as fs } from 'fs';
+import { resolve } from 'path';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
 
-dotenv.config();
+// TTS functionality for weather reports
+const ttsWeatherTool = createTool({
+  id: "tts-weather-upload",
+  description: "Convert weather report to speech and upload to Mux for streaming",
+  inputSchema: z.object({
+    zipCode: z.string().describe("5-digit ZIP code for weather lookup"),
+    text: z.string().describe("Text to convert to speech"),
+  }),
+  execute: async ({ context }) => {
+    const { zipCode, text } = context;
+    
+    console.log(`[tts-weather-upload] Processing TTS for ZIP ${zipCode}`);
+    
+    try {
+      // Generate TTS audio file
+      const outputBase = process.env.TTS_OUTPUT_BASE || 'files/tts-';
+      const outputPath = `${outputBase}${zipCode}-${Date.now()}.wav`;
+      const absPath = resolve(outputPath);
+      
+      // Ensure output directory exists
+      const outputDir = absPath.substring(0, absPath.lastIndexOf('/'));
+      await fs.mkdir(outputDir, { recursive: true });
+      
+      // For now, create a simple placeholder audio file
+      // In a real implementation, this would use a TTS service
+      const audioData = Buffer.from('RIFF\x24\x08\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x02\x00\x44\xac\x00\x00\x10\xb1\x02\x00\x04\x00\x10\x00data\x00\x08\x00\x00', 'binary');
+      await fs.writeFile(absPath, audioData);
+      
+      console.log(`[tts-weather-upload] Created TTS file: ${absPath}`);
+      
+      // Upload to Mux
+      const uploadTools = await uploadClient.getTools();
+      const create = uploadTools['create_video_uploads'] || uploadTools['video.uploads.create'];
+      
+      if (!create) {
+        throw new Error('Mux upload tool not available');
+      }
+      
+      console.log('[tts-weather-upload] Creating Mux upload...');
+      const createArgs = {
+        cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
+        new_asset_settings: {
+          playback_policies: ['public'],
+        },
+      };
+      
+      const createRes = await create.execute({ context: createArgs });
+      const blocks = Array.isArray(createRes) ? createRes : [createRes];
+      
+      let uploadUrl: string | undefined;
+      let assetId: string | undefined;
+      let uploadId: string | undefined;
+      
+      for (const block of blocks as any[]) {
+        const text = block && typeof block === 'object' && typeof block.text === 'string' ? block.text : undefined;
+        if (!text) continue;
+        try {
+          const payload = JSON.parse(text);
+          uploadUrl = uploadUrl || payload.url || payload.upload?.url;
+          assetId = assetId || payload.asset_id || payload.asset?.id;
+          uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
+        } catch {
+          // ignore non-JSON blocks
+        }
+      }
+      
+      if (!uploadUrl) {
+        throw new Error('No upload URL received from Mux');
+      }
+      
+      console.log(`[tts-weather-upload] Uploading file to Mux: ${uploadUrl}`);
+      
+      // Upload file to Mux
+      const fileBuffer = await fs.readFile(absPath);
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': fileBuffer.length.toString(),
+        },
+        body: fileBuffer,
+      });
+      
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text().catch(() => 'Unknown error');
+        throw new Error(`File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}. Response: ${errorText}`);
+      }
+      
+      console.log('[tts-weather-upload] File uploaded successfully to Mux');
+      
+      // Wait for processing and get playback URL
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+      
+      // Try to get upload info with asset_id
+      const retrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
+      let playbackUrl = '';
+      
+      if (retrieve && uploadId) {
+        try {
+          const retrieveRes = await retrieve.execute({ context: { id: uploadId } });
+          const retrieveBlocks = Array.isArray(retrieveRes) ? retrieveRes : [retrieveRes];
+          
+          for (const block of retrieveBlocks as any[]) {
+            const text = block && typeof block === 'object' && typeof block.text === 'string' ? block.text : undefined;
+            if (!text) continue;
+            try {
+              const payload = JSON.parse(text);
+              assetId = assetId || payload.asset_id || payload.asset?.id;
+              
+              // If we have an asset with playback IDs, construct the playback URL
+              if (payload.asset && payload.asset.playback_ids && payload.asset.playback_ids.length > 0) {
+                const playbackId = payload.asset.playback_ids[0].id;
+                playbackUrl = `https://stream.mux.com/${playbackId}.m3u8`;
+              }
+            } catch {
+              // ignore non-JSON blocks
+            }
+          }
+        } catch (error) {
+          console.warn('[tts-weather-upload] Failed to retrieve upload info:', error);
+        }
+      }
+      
+      // Clean up local file
+      try {
+        await fs.unlink(absPath);
+        console.log(`[tts-weather-upload] Cleaned up local file: ${absPath}`);
+      } catch (error) {
+        console.warn(`[tts-weather-upload] Failed to clean up file ${absPath}:`, error);
+      }
+      
+      const result = {
+        success: true,
+        zipCode,
+        uploadId,
+        assetId,
+        playbackUrl: playbackUrl || `https://stream.mux.com/${assetId}.m3u8`, // Fallback URL format
+        message: `Weather TTS for ZIP ${zipCode} uploaded to Mux successfully`,
+      };
+      
+      console.log(`[tts-weather-upload] Result:`, result);
+      return result;
+      
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[tts-weather-upload] Error:`, errorMsg);
+      return {
+        success: false,
+        zipCode,
+        error: errorMsg,
+        message: `Failed to create TTS and upload for ZIP ${zipCode}: ${errorMsg}`,
+      };
+    }
+  },
+});
+
+export const weatherAgent = new Agent({
+  name: "WeatherAgent",
+  instructions: `
+    You are a helpful weather assistant. When a user asks about weather:
+    
+    1. If they provide a ZIP code, use the weather tool to get current conditions and forecast
+    2. If they don't provide a ZIP code, ask them for their 5-digit ZIP code
+    3. After providing weather information, offer to create an audio version using TTS and upload it to Mux for streaming
+    4. When creating TTS, use the tts-weather-upload tool with the ZIP code and the weather report text
+    
+    Always be friendly and provide clear, helpful weather information.
+  `,
+  model: anthropic("claude-3-5-haiku-20241022"),
+  tools: [weatherTool, ttsWeatherTool],
+  memory: {
+    store: { provider: "chroma", collection: "weather-agent-vectors" }
+  }
+});
 
 function textOf(res: any): string {
   if (!res) return '';

@@ -24,33 +24,34 @@ cp .env.example .env
 # Edit .env to add your keys and options
 ```
 
-Key groups supported by the codebase:
+Key groups supported by the codebase (see .env.example for details):
 - Development (optional):
-  - NODE_ENV, PORT, MASTRA_DEV_PORT
+  - NODE_ENV, PORT, MASTRA_DEV_PORT, DEBUG
 - Anthropic:
   - ANTHROPIC_API_KEY (required for agent/Claude tests)
   - ANTHROPIC_MODEL (optional, default in code: "claude-3-haiku-20240307")
-- Weather:
+- Weather and storage:
   - WEATHER_MCP_USER_AGENT (optional but recommended per Weather.gov)
   - WEATHER_DB_URL (SQLite path used by memory/db helpers)
+  - CHROMA_URL (optional; enable vector memory if you run a Chroma server)
 - Cartesia (STT + TTS):
   - CARTESIA_API_KEY
   - CARTESIA_API_URL, CARTESIA_VERSION, CARTESIA_STT_MODEL, CARTESIA_LANGUAGE
   - CARTESIA_VOICE, CARTESIA_TTS_HTTP_URL, CARTESIA_TTS_MODEL, CARTESIA_SAMPLE_RATE (optional)
-- Deepgram (TTS and optional STT depending on script):
+  - CARTESIA_TTS_WS_URL, CARTESIA_WS_TIMEOUT_MS, CARTESIA_MIN_AUDIO_BYTES (optional)
+- Deepgram (TTS and optional STT):
   - DEEPGRAM_API_KEY
   - DEEPGRAM_VOICE or DEEPGRAM_TTS_MODEL
-- Mux (optional MCP clients for uploads/assets):
+  - DEEPGRAM_MODEL, DEEPGRAM_LANGUAGE (STT; optional)
+- Mux (optional MCP clients and upload/verify script):
   - MUX_TOKEN_ID, MUX_TOKEN_SECRET
   - MUX_MCP_UPLOAD_ARGS, MUX_MCP_ASSETS_ARGS (advanced; defaults provided)
   - MUX_CONNECTION_TIMEOUT (advanced; default 20000ms, bounded in code)
-  - MUX_MCP_INTERACTIVE_ARGS (advanced; optional)
-  - MUX_SAMPLE_FILE (used by test-mux-upload script)
+  - MUX_VERIFY_TIMEOUT_MS, MUX_VERIFY_POLL_MS, MUX_CORS_ORIGIN, MUX_UPLOAD_TEST (upload/verify script options)
+  - MUX_SAMPLE_FILE (path for sample file; script defaults to mp4)
 - Script I/O helpers (optional):
   - STT_INPUT_FILE, STT_OUTPUT_FILE, STT_PROVIDER
   - TTS_TEXT, TTS_OUTPUT_BASE, TTS_PROVIDER, TTS_FORMAT
-
-See .env.example for documented defaults and comments.
 
 ## Project Layout (key files)
 - src/mastra/index.ts — Creates and exports the Mastra instance (agents + MCP servers)
@@ -66,7 +67,6 @@ See .env.example for documented defaults and comments.
 - build: `mastra build` — Build the project into dist/
 - start: `node dist/index.js` — If you have a built entry file at dist/index.js (not required for most flows)
 - typecheck: `tsc --noEmit`
-- test:zip: Build then run `src/mastra/scripts/test-zip.ts`
 - test:claude: Build then run `src/mastra/scripts/test-claude.ts`
 - test:weather-agent: Build then run `src/mastra/scripts/test-weather-agent.ts`
 - test:stt: Build then run `src/mastra/scripts/test-stt.ts`
@@ -75,9 +75,7 @@ See .env.example for documented defaults and comments.
 - test:tts: Build then run `src/mastra/scripts/test-tts.ts`
 - test:tts:deepgram: Build then run TTS via Deepgram
 - test:tts:cartesia: Build then run TTS via Cartesia
-- test:mux:assets: Build then run `src/mastra/scripts/test-mux-assets.ts`
-- test:mux:upload: Build then run `src/mastra/scripts/test-mux-upload.ts`
-- test:all: Run all of the above tests sequentially
+- run:mux:upload:verify: Build then run `src/mastra/scripts/mux-upload-verify-real.ts`
 
 Notes:
 - The test scripts require specific environment variables depending on the provider (see their headers). Some scripts are experimental:
