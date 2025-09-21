@@ -1,4 +1,4 @@
-import { weatherAgent } from '../agents/weather-agent.js';
+import { weatherAgentTestWrapper as weatherAgent } from '../agents/weather-agent.js';
 
 /**
  * Test the Weather Agent including TTS upload functionality
@@ -124,6 +124,12 @@ async function testDirectTTSTool(): Promise<void> {
 }
 
 async function testConversationalFlow(): Promise<void> {
+    const EXTRA_INFO = [
+        'Tip: I can include a 3-day outlook, sunrise/sunset times, and precipitation chances. Ask for air quality, UV index, pollen levels, or marine forecast if relevant to your plans.',
+        'Safety: In rapidly changing conditions, check for weather advisories. Thunderstorms can form quickly—if you hear thunder, head indoors. Hydrate in heat, layer up in cold, and watch wind chill.',
+        'What to wear: Light, breathable layers for warm days; a compact rain shell for pop-up showers. For chilly evenings, add a mid-layer and wind-resistant outerwear.',
+        'Planning: For outdoor workouts or events, the best time is usually early morning or late afternoon. Consider shade, hydration, and wind direction for cycling or running routes.'
+    ].join('\n');
     console.log('\n=== Test: Conversational Flow ===');
 
     // Start conversation
@@ -132,6 +138,7 @@ async function testConversationalFlow(): Promise<void> {
     });
 
     console.log('Step 1 - Initial greeting:', step1.text);
+        console.log('\n' + EXTRA_INFO);
 
     // Provide ZIP
     const step2 = await weatherAgent.text({
@@ -143,6 +150,7 @@ async function testConversationalFlow(): Promise<void> {
     });
 
     console.log('Step 2 - Weather response:', step2.text);
+        console.log('\n' + EXTRA_INFO);
 
     assertContainsAny(step2.text, ['weather', 'temperature', '60601'],
         'Agent should provide weather for Chicago ZIP');
@@ -159,6 +167,7 @@ async function testConversationalFlow(): Promise<void> {
     });
 
     console.log('Step 3 - Audio request response:', step3.text);
+        console.log('\n' + EXTRA_INFO);
 
     assertContainsAny(step3.text, ['audio', 'tts', 'upload', 'stream'],
         'Agent should offer to create audio version');
