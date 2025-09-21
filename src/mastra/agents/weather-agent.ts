@@ -160,6 +160,48 @@ function createSilenceWAV(durationSeconds: number): Buffer {
     return buffer;
 }
 
+// Formats a date/time into a natural, speech-friendly phrase with long timezone name
+function formatDateForSpeech(date: Date): string {
+    // Use Intl to get long parts; fall back gracefully if anything is missing
+    const fmt = new Intl.DateTimeFormat('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZoneName: 'long',
+    });
+
+    const parts = fmt.formatToParts(date);
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find(p => p.type === type)?.value || '';
+
+    const weekday = get('weekday');
+    const month = get('month');
+    const dayStr = get('day');
+    const year = get('year');
+    const hour = get('hour');
+    const minute = get('minute');
+    const dayPeriod = get('dayPeriod'); // AM/PM
+    const tzLong = get('timeZoneName');
+
+    const dayNum = parseInt(dayStr || '0', 10);
+    const ordinal = (n: number) => {
+        const rem10 = n % 10, rem100 = n % 100;
+        if (rem10 === 1 && rem100 !== 11) return `${n}st`;
+        if (rem10 === 2 && rem100 !== 12) return `${n}nd`;
+        if (rem10 === 3 && rem100 !== 13) return `${n}rd`;
+        return `${n}th`;
+    };
+
+    const dayWithOrdinal = Number.isFinite(dayNum) && dayNum > 0 ? ordinal(dayNum) : dayStr;
+    const timePart = [hour, minute].filter(Boolean).join(':') + (dayPeriod ? ` ${dayPeriod}` : '');
+    const tzPart = tzLong || 'local time';
+
+    return `${weekday}, ${month} ${dayWithOrdinal}, ${year} at ${timePart} ${tzPart}`;
+}
+
 // TTS functionality for weather reports
 const ttsWeatherTool = createTool({
     id: "tts-weather-upload",
@@ -181,7 +223,14 @@ const ttsWeatherTool = createTool({
             // Use provided text or generate a default weather report
             const weatherText = text || `Today's weather for ZIP code ${zipCode}: sunny with a high of 72 degrees. Light winds from the southwest at 8 miles per hour. Have a great day!`;
 
-            console.log(`[tts-weather-upload] Creating video with weather forecast for Mux: "${weatherText.slice(0, 100)}..."`);
+            // Always include a clear, natural timestamp in the audio so listeners know the forecast is current
+            const now = new Date();
+            const timestamp = formatDateForSpeech(now);
+            const dateHeader = `This forecast was generated on ${timestamp}.`;
+            // Place the timestamp at the end of the audio so the forecast content plays first
+            const ttsText = `${weatherText}\n\n${dateHeader}`;
+
+            console.log(`[tts-weather-upload] Creating video with weather forecast for Mux: "${ttsText.slice(0, 100)}..."`);
 
             // Generate actual TTS audio using available services
             let audioBuffer: Buffer;
@@ -191,12 +240,12 @@ const ttsWeatherTool = createTool({
             try {
                 if (process.env.CARTESIA_API_KEY && process.env.CARTESIA_VOICE) {
                     console.log('[tts-weather-upload] Using Cartesia TTS...');
-                    const audioResult = await synthesizeWithCartesiaTTS(weatherText);
+                    const audioResult = await synthesizeWithCartesiaTTS(ttsText);
                     audioBuffer = Buffer.from(audioResult.audio);
                     audioExtension = audioResult.extension;
                 } else if (process.env.DEEPGRAM_API_KEY) {
                     console.log('[tts-weather-upload] Using Deepgram TTS...');
-                    const audioResult = await synthesizeWithDeepgramTTS(weatherText);
+                    const audioResult = await synthesizeWithDeepgramTTS(ttsText);
                     audioBuffer = Buffer.from(audioResult.audio);
                     audioExtension = audioResult.extension;
                 } else {
