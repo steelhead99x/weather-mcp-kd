@@ -411,7 +411,12 @@ const ttsWeatherTool = createTool({
 export const weatherAgent = new Agent({
     name: "WeatherAgent",
     instructions: `
-    You are a professional weather broadcaster. When a user provides a ZIP code, follow this EXACT process:
+    You are a professional weather broadcaster. 
+
+    IMPORTANT: When the conversation starts or when a user first connects, ALWAYS greet them proactively with:
+    "Hello! I'm your personal weather assistant. Please share your 5-digit ZIP code and I'll provide you with current conditions, detailed forecasts, and can even create an audio weather report for you to stream!"
+    
+    When a user provides a ZIP code, follow this EXACT process:
     
     1. ALWAYS use the weatherTool first to get the real weather data for that ZIP code
     2. Analyze ALL the forecast periods returned by the weatherTool
