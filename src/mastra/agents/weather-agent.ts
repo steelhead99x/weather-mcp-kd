@@ -105,11 +105,12 @@ async function synthesizeWithDeepgramTTS(text: string): Promise<{ audio: ArrayBu
 
     const model = process.env.DEEPGRAM_TTS_MODEL || process.env.DEEPGRAM_VOICE || 'aura-asteria-en';
 
-    const url = new URL('https://api.deepgram.com/v1/speak');
-    url.searchParams.set('model', model);
-    url.searchParams.set('encoding', 'linear16'); // This produces WAV format
+    // Use modern URL constructor instead of deprecated url.parse()
+    const apiUrl = new URL('https://api.deepgram.com/v1/speak');
+    apiUrl.searchParams.set('model', model);
+    apiUrl.searchParams.set('encoding', 'linear16'); // This produces WAV format
 
-    const res = await fetch(url, {
+    const res = await fetch(apiUrl.toString(), {
         method: 'POST',
         headers: {
             Authorization: `Token ${apiKey}`,

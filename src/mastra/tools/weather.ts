@@ -38,8 +38,9 @@ export const weatherTool = createTool({
             throw new Error(`Please provide a valid 5-digit ZIP code. Received: ${zipCode} (type: ${typeof zipCode})`);
         }
 
-        // Get location from ZIP code
-        const geoResponse = await fetch(`https://api.zippopotam.us/us/${zipCode}`, {
+        // Get location from ZIP code using modern URL construction
+        const geoUrl = new URL(`https://api.zippopotam.us/us/${zipCode}`);
+        const geoResponse = await fetch(geoUrl.toString(), {
             signal: abortSignal
         });
         if (!geoResponse.ok) {
@@ -65,14 +66,12 @@ export const weatherTool = createTool({
 
         const displayName = `${firstPlace?.["place name"] ?? "Unknown"}, ${firstPlace?.["state abbreviation"] ?? ""}`.trim();
 
-        // Get weather grid info
-        const pointsResponse = await fetch(
-            `https://api.weather.gov/points/${latitude},${longitude}`,
-            {
-                headers: { "User-Agent": USER_AGENT },
-                signal: abortSignal
-            }
-        );
+        // Get weather grid info using modern URL construction
+        const pointsUrl = new URL(`https://api.weather.gov/points/${latitude},${longitude}`);
+        const pointsResponse = await fetch(pointsUrl.toString(), {
+            headers: { "User-Agent": USER_AGENT },
+            signal: abortSignal
+        });
 
         if (!pointsResponse.ok) {
             throw new Error(`Failed to get weather grid data: ${pointsResponse.statusText}`);
