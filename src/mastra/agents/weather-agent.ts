@@ -8,6 +8,7 @@ import { resolve } from 'path';
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
+import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
 
 // TTS functionality for weather reports
 const ttsWeatherTool = createTool({
@@ -137,8 +138,9 @@ const ttsWeatherTool = createTool({
                             assetId = assetId || payload.asset_id || payload.asset?.id;
 
                             // If we have an asset with playback IDs, construct the playback URL
-                            if (payload.asset && payload.asset.playback_ids && payload.asset.playback_ids.length > 0) {
-                                const playbackId = payload.asset.playback_ids[0].id;
+                            const ids = payload.asset?.playback_ids || payload.playback_ids;
+                            if (Array.isArray(ids) && ids.length > 0 && ids[0]?.id) {
+                                const playbackId = ids[0].id;
                                 playbackUrl = `https://stream.mux.com/${playbackId}.m3u8`;
                             }
                         } catch {
@@ -147,6 +149,45 @@ const ttsWeatherTool = createTool({
                     }
                 } catch (error) {
                     console.warn('[tts-weather-upload] Failed to retrieve upload info:', error);
+                }
+            }
+
+            // If we still don't have a playback URL but have an assetId, retrieve the asset from Mux Assets MCP to get playback_ids
+            if (!playbackUrl && assetId) {
+                try {
+                    const assetsTools = await assetsClient.getTools();
+                    const getAsset = assetsTools['retrieve_video_assets'] || assetsTools['video.assets.retrieve'] || assetsTools['video.assets.get'];
+                    if (getAsset) {
+                        const pollMs = 3000;
+                        const maxWaitMs = 20000; // brief polling window for quick tests
+                        const start = Date.now();
+                        while (!playbackUrl && Date.now() - start < maxWaitMs) {
+                            const res = await getAsset.execute({ context: { ASSET_ID: assetId } });
+                            const txt = Array.isArray(res) ? (res[0] as any)?.text ?? '' : String(res ?? '');
+                            try {
+                                const data = JSON.parse(txt);
+                                const ids = data?.playback_ids;
+                                if (Array.isArray(ids) && ids.length > 0 && ids[0]?.id) {
+                                    const pid = ids[0].id as string;
+                                    playbackUrl = `https://stream.mux.com/${pid}.m3u8`;
+                                    break;
+                                }
+                                const status = data?.status;
+                                if (status && status !== 'ready') {
+                                    await new Promise(r => setTimeout(r, pollMs));
+                                } else {
+                                    await new Promise(r => setTimeout(r, pollMs));
+                                }
+                            } catch {
+                                // Not JSON yet; wait and retry
+                                await new Promise(r => setTimeout(r, pollMs));
+                            }
+                        }
+                    } else {
+                        console.warn('[tts-weather-upload] Assets MCP retrieval tool not available');
+                    }
+                } catch (e) {
+                    console.warn('[tts-weather-upload] Error retrieving asset via Assets MCP:', e);
                 }
             }
 
@@ -163,7 +204,7 @@ const ttsWeatherTool = createTool({
                 zipCode,
                 uploadId,
                 assetId,
-                playbackUrl: playbackUrl || `https://stream.mux.com/${assetId}.m3u8`, // Fallback URL format
+                playbackUrl: playbackUrl || undefined, // Only set if we found a playback ID
                 message: `Weather TTS for ZIP ${zipCode} uploaded to Mux successfully`,
             };
 

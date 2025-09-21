@@ -1,312 +1,200 @@
-import 'dotenv/config';
-import { promises as fs } from 'fs';
-import { resolve } from 'path';
-import { pathToFileURL } from 'url';
-import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
-import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
+// TypeScript: MCP client wrapper for Mux Assets tools
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { z } from "zod";
+import { createTool } from "@mastra/core/tools";
 
-/**
- * Upload file to Mux direct upload endpoint
- * Mux uses a simplified upload protocol, not full TUS
- */
-async function uploadFileToMux(uploadUrl: string, filePath: string): Promise<void> {
-    console.log('[mux-upload-verify-real] Uploading file to Mux endpoint...');
-
-    // Read file
-    const fileBuffer = await fs.readFile(filePath);
-    const fileSize = fileBuffer.length;
-
-    console.log(`[mux-upload-verify-real] File size: ${fileSize} bytes`);
-
-    // Mux direct upload uses PUT method with the file as body
-    console.log('[mux-upload-verify-real] Uploading file content...');
-    const uploadResponse = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/octet-stream',
-            'Content-Length': fileSize.toString(),
-        },
-        body: fileBuffer,
-    });
-
-    if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text().catch(() => 'Unknown error');
-        const err = new Error(`File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}. Response: ${errorText}`);
-        console.error('[mux-upload-verify-real] File upload failed:', err.message);
-        throw err;
+class Logger {
+    private static logLevel: keyof typeof Logger.levels = process.env.NODE_ENV === 'production' ? 'error' : 'debug';
+    private static levels = { debug: 0, info: 1, warn: 2, error: 3 };
+    private static shouldLog(level: keyof typeof Logger.levels): boolean {
+        const levelMap = Logger.levels;
+        const currentLevel = (levelMap as Record<string, number>)[Logger.logLevel] ?? levelMap.error;
+        const requestedLevel = levelMap[level];
+        return requestedLevel >= currentLevel;
     }
-
-    console.log('[mux-upload-verify-real] File uploaded successfully');
-
-    // Log response details for debugging
-    const responseText = await uploadResponse.text().catch(() => '');
-    if (responseText) {
-        console.log(`[mux-upload-verify-real] Upload response: ${responseText}`);
-    }
+    static debug(message: string, ...args: any[]) { if (Logger.shouldLog('debug')) console.log(`[DEBUG] ${message}`, ...args); }
+    static info(message: string, ...args: any[]) { if (Logger.shouldLog('info')) console.log(`[INFO] ${message}`, ...args); }
+    static warn(message: string, ...args: any[]) { if (Logger.shouldLog('warn')) console.warn(`[WARN] ${message}`, ...args); }
+    static error(message: string, ...args: any[]) { if (Logger.shouldLog('error')) console.error(`[ERROR] ${message}`, ...args); }
 }
 
-/**
- * Real Mux upload + verify script (no mocks):
- * - Uploads files/uploads/samples/mux-sample.mp4 (or .wav) by default via mux-upload-client
- * - Uploads the actual file to the Mux endpoint
- * - Then verifies the uploaded asset exists and becomes ready via mux-assets-client
- * - Requires MUX_TOKEN_ID and MUX_TOKEN_SECRET
- *
- * Optional env:
- * - MUX_SAMPLE_FILE: override local file to upload
- * - MUX_CONNECTION_TIMEOUT: override connection timeout (ms)
- * - MUX_VERIFY_TIMEOUT_MS: max time to wait for asset ready (default 300000 ms)
- * - MUX_VERIFY_POLL_MS: poll interval (default 5000 ms)
- * - DEBUG: enable verbose logging
- */
-async function main() {
-    const preferredPath = process.env.MUX_SAMPLE_FILE || 'files/uploads/samples/mux-sample.mp4';
-    let absPath = resolve(preferredPath);
+class MuxAssetsMCPClient {
+    private static readonly MIN_CONNECTION_TIMEOUT = 5000;
+    private static readonly MAX_CONNECTION_TIMEOUT = 300000;
+    private static readonly DEFAULT_CONNECTION_TIMEOUT = 20000;
 
-    // Validate environment
-    const id = process.env.MUX_TOKEN_ID;
-    const secret = process.env.MUX_TOKEN_SECRET;
-    if (!id || !secret) {
-        throw new Error('Missing MUX_TOKEN_ID or MUX_TOKEN_SECRET in environment');
+    private client: Client | null = null;
+    private transport: StdioClientTransport | null = null;
+    private connected = false;
+    private connectionPromise: Promise<void> | null = null;
+
+    private getConnectionTimeout(): number {
+        const envTimeout = process.env.MUX_CONNECTION_TIMEOUT;
+        if (!envTimeout) return MuxAssetsMCPClient.DEFAULT_CONNECTION_TIMEOUT;
+        const parsed = parseInt(envTimeout, 10);
+        if (isNaN(parsed)) return MuxAssetsMCPClient.DEFAULT_CONNECTION_TIMEOUT;
+        return Math.min(MuxAssetsMCPClient.MAX_CONNECTION_TIMEOUT, Math.max(MuxAssetsMCPClient.MIN_CONNECTION_TIMEOUT, parsed));
     }
 
-    // Validate file exists or fallback to WAV if present
-    let exists = true;
-    try {
-        await fs.access(absPath);
-    } catch {
-        exists = false;
+    private async ensureConnected(): Promise<void> {
+        if (this.connected && this.client) return;
+        if (this.connectionPromise) return this.connectionPromise;
+        this.connectionPromise = this.performConnection();
+        try { await this.connectionPromise; } finally { this.connectionPromise = null; }
     }
 
-    if (!exists) {
-        const wavPath = 'files/uploads/samples/mux-sample.wav';
+    private async performConnection(): Promise<void> {
+        if (!process.env.MUX_TOKEN_ID || !process.env.MUX_TOKEN_SECRET) {
+            throw new Error("Missing MUX_TOKEN_ID or MUX_TOKEN_SECRET in environment");
+        }
+        const mcpArgs = this.parseMcpArgs(process.env.MUX_MCP_ASSETS_ARGS);
+        Logger.info("Connecting to Mux MCP (assets)...");
+        Logger.debug(`MCP Args: ${mcpArgs.join(' ')}`);
+
+        this.transport = new StdioClientTransport({
+            command: "npx",
+            args: mcpArgs,
+            env: {
+                ...process.env,
+                MUX_TOKEN_ID: process.env.MUX_TOKEN_ID,
+                MUX_TOKEN_SECRET: process.env.MUX_TOKEN_SECRET,
+            },
+        });
+
+        this.client = new Client({ name: "mux-assets-mastra-client", version: "1.0.0" }, { capabilities: {} });
+
+        const connectionTimeout = this.getConnectionTimeout();
+        const connectionPromise = this.client.connect(this.transport);
+        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Connection timeout after ${connectionTimeout}ms`)), connectionTimeout));
+        await Promise.race([connectionPromise, timeoutPromise]);
+        this.connected = true;
+        Logger.info("Connected to Mux MCP (assets)");
+    }
+
+    private parseMcpArgs(envValue: string | undefined): string[] {
+        // Default to assets resource
+        const defaultArgs = ["@mux/mcp", "client=openai-agents", "--tools=dynamic", "--resource=video.assets"]; 
+        const value = (envValue || '').trim();
+        if (!value) return defaultArgs;
+        if (value.length > 1000) return defaultArgs;
         try {
-            await fs.access(wavPath);
-            console.warn(`[mux-upload-verify-real] WARNING: Preferred file not found: ${absPath}. Falling back to ${wavPath}. Set MUX_SAMPLE_FILE to override.`);
-            absPath = resolve(wavPath);
+            const rawArgs = value.split(',').map(s => s.trim()).filter(Boolean);
+            const safePattern = /^[@a-zA-Z0-9._:=\/\-]+$/;
+            const processed = rawArgs.filter(a => a.length <= 200 && safePattern.test(a));
+            return processed.length ? processed : defaultArgs;
         } catch {
-            throw new Error(`Sample file not found. Tried: ${absPath} and ${resolve(wavPath)}.`);
+            return defaultArgs;
         }
     }
 
-    console.log('[mux-upload-verify-real] Using file:', absPath);
+    async getTools(): Promise<Record<string, any>> {
+        await this.ensureConnected();
+        if (!this.client) throw new Error("Client not connected");
+        const result = await this.client.listTools();
+        const tools: Record<string, any> = {};
 
-    // 1) Create upload via MCP (real)
-    const uploadTools = await uploadClient.getTools();
-
-    // Try to use the direct endpoint first
-    let create = uploadTools['create_video_uploads'];
-    if (!create) {
-        // Fallback to the dotted notation
-        create = uploadTools['video.uploads.create'];
-    }
-
-    if (!create) {
-        throw new Error('Mux MCP did not expose tool create_video_uploads or video.uploads.create.');
-    }
-
-    console.log('[mux-upload-verify-real] Creating upload via MCP...');
-    const createArgs: any = {
-        cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
-        new_asset_settings: {
-            playback_policies: ['public'],
-        },
-    };
-    if (process.env.MUX_UPLOAD_TEST === 'true') createArgs.test = true;
-
-    // Add timeout if specified (align with MUX_CONNECTION_TIMEOUT used by clients)
-    const timeoutEnv = process.env.MUX_CONNECTION_TIMEOUT;
-    if (timeoutEnv && Number(timeoutEnv) > 0) {
-        createArgs.timeout = Number(timeoutEnv);
-    }
-
-    if (process.env.DEBUG) {
-        console.log('[mux-upload-verify-real] Create arguments:', JSON.stringify(createArgs, null, 2));
-    }
-
-    const createRes = await create.execute({ context: createArgs });
-
-    // Print response blocks for visibility
-    const blocks = Array.isArray(createRes) ? createRes : [createRes];
-    console.log('[mux-upload-verify-real] upload.create response blocks:');
-    for (const block of blocks) {
-        try {
-            const text = (block && typeof block === 'object' && 'text' in block) ? (block as any).text : String(block);
-            console.log('  >', text);
-        } catch {
-            console.log('  >', block);
-        }
-    }
-
-    // Extract JSON from any text blocks if possible (collect best-effort ids)
-    let assetId: string | undefined = undefined;
-    let uploadId: string | undefined = undefined;
-    let uploadUrl: string | undefined = undefined;
-
-    for (const block of blocks as any[]) {
-        const text = block && typeof block === 'object' && typeof block.text === 'string' ? block.text as string : undefined;
-        if (!text) continue;
-        try {
-            const payload = JSON.parse(text);
-            assetId = assetId || payload.asset_id || payload.asset?.id;
-            uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
-            uploadUrl = uploadUrl || payload.url || payload.upload?.url;
-        } catch {
-            // ignore non-JSON text blocks
-        }
-    }
-
-    // Always print machine-readable lines for downstream tooling/visibility
-    console.log(`MUX_UPLOAD_ID=${uploadId ?? ''}`);
-    console.log(`MUX_UPLOAD_URL=${uploadUrl ?? ''}`);
-    console.log(`MUX_ASSET_ID=${assetId ?? ''}`);
-
-    if (uploadUrl) {
-        console.log('[mux-upload-verify-real] upload_url provided by Mux:', uploadUrl);
-        console.log('[mux-upload-verify-real] Starting file upload to Mux endpoint...');
-
-        // Upload the file using Mux's direct upload protocol
-        try {
-            await uploadFileToMux(uploadUrl, absPath);
-
-            // Wait a bit for Mux to process the upload
-            console.log('[mux-upload-verify-real] Waiting for Mux to process the uploaded file...');
-            await delay(10000); // Wait 10 seconds for processing to start
-
-            // Now try to get the upload info again to get the asset_id
-            const retrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
-            if (retrieve && uploadId) {
-                console.log('[mux-upload-verify-real] Retrieving upload info to get asset_id...');
+        if (result?.tools) {
+            for (const tool of result.tools) {
                 try {
-                    // Fix: Use UPLOAD_ID instead of id (based on the MCP schema)
-                    const retrieveRes = await retrieve.execute({ context: { UPLOAD_ID: uploadId } });
-                    const retrieveBlocks = Array.isArray(retrieveRes) ? retrieveRes : [retrieveRes];
+                    tools[tool.name] = createTool({
+                        id: tool.name,
+                        description: tool.description || `Mux MCP tool: ${tool.name}`,
+                        inputSchema: this.convertToZodSchema(tool.inputSchema),
+                        execute: async ({ context }) => {
+                            if (!this.client) throw new Error("Client not connected");
+                            return (await this.client.callTool({ name: tool.name, arguments: context || {} })).content;
+                        },
+                    });
+                } catch (e) {
+                    Logger.warn(`Skipping tool ${tool.name}:`, e);
+                }
+            }
+        }
 
-                    for (const block of retrieveBlocks as any[]) {
-                        const text = block && typeof block === 'object' && typeof block.text === 'string' ? block.text : undefined;
-                        if (!text) continue;
-                        try {
-                            const payload = JSON.parse(text);
-                            console.log('[mux-upload-verify-real] Retrieved upload info:', JSON.stringify(payload, null, 2));
-                            assetId = assetId || payload.asset_id || payload.asset?.id;
-
-                            // Also check status
-                            const status = payload.status;
-                            console.log(`[mux-upload-verify-real] Upload status: ${status}`);
-                        } catch {
-                            // ignore non-JSON text blocks
+        // If only generic invoke_api_endpoint is provided, add convenient wrappers for assets endpoints
+        if (tools['invoke_api_endpoint']) {
+            const addWrapper = (id: string, endpoint: string, description: string, schema?: z.ZodSchema) => {
+                tools[id] = createTool({
+                    id,
+                    description,
+                    inputSchema: schema || z.object({ ASSET_ID: z.string().optional() }).passthrough(),
+                    execute: async ({ context }) => {
+                        if (!this.client) throw new Error("Client not connected");
+                        // Prefer direct endpoint if present
+                        const direct = tools[endpoint];
+                        if (direct && direct !== tools[id]) return direct.execute({ context });
+                        const ctx = context || {};
+                        const attemptArgs = [
+                            { endpoint, args: ctx },
+                            { endpoint_name: endpoint, args: ctx },
+                            { endpoint, ...ctx },
+                            { endpoint, body: ctx },
+                            { endpoint, params: ctx },
+                            { endpoint, arguments: ctx },
+                            { name: endpoint, arguments: ctx },
+                        ];
+                        let lastErr: any;
+                        for (const args of attemptArgs) {
+                            try { return (await this.client.callTool({ name: 'invoke_api_endpoint', arguments: args })).content; }
+                            catch (e) { lastErr = e; }
                         }
-                    }
-                } catch (error) {
-                    console.warn('[mux-upload-verify-real] Failed to retrieve upload info after file upload:', error);
-                }
-            }
-        } catch (uploadError) {
-            console.error('[mux-upload-verify-real] File upload failed:', uploadError);
-            return;
+                        throw lastErr || new Error('invoke_api_endpoint failed');
+                    },
+                });
+            };
+
+            // Snake_case canonical endpoints
+            addWrapper('retrieve_video_assets', 'retrieve_video_assets', 'Retrieve a single asset by ID');
+            addWrapper('list_video_assets', 'list_video_assets', 'List assets with pagination', z.object({ limit: z.number().optional(), page: z.number().optional() }).passthrough());
+
+            // Dotted aliases
+            addWrapper('video.assets.retrieve', 'retrieve_video_assets', 'Retrieve a single asset by ID');
+            addWrapper('video.assets.list', 'list_video_assets', 'List assets with pagination', z.object({ limit: z.number().optional(), page: z.number().optional() }).passthrough());
         }
-    } else {
-        console.warn('[mux-upload-verify-real] No upload URL provided - cannot upload file');
+
+        return tools;
     }
 
-    // Update the machine-readable asset ID line
-    console.log(`MUX_ASSET_ID=${assetId ?? ''}`);
-
-    if (!assetId) {
-        console.warn('[mux-upload-verify-real] No asset_id available after upload. This may be normal if asset creation is still in progress.');
-        console.warn('[mux-upload-verify-real] You can run asset verification later using the upload_id or check the Mux dashboard.');
-        return;
-    }
-
-    // 2) Poll asset status via assets client until ready/errored
-    const assetsTools = await assetsClient.getTools();
-
-    // Try multiple possible tool names for getting asset (prioritize correct endpoint name)
-    let getAsset = assetsTools['retrieve_video_assets'] ||
-        assetsTools['video.assets.retrieve'] ||
-        assetsTools['video.assets.get'];
-
-    if (!getAsset) {
-        throw new Error('Mux MCP did not expose any asset retrieval tool (retrieve_video_assets, video.assets.retrieve, or video.assets.get).');
-    }
-
-    const validStatuses = new Set(['preparing', 'processing', 'ready', 'errored']);
-    const pollMs = Math.max(1000, parseInt(process.env.MUX_VERIFY_POLL_MS || '5000', 10) || 5000);
-    const timeoutMs = Math.min(30 * 60 * 1000, Math.max(10_000, parseInt(process.env.MUX_VERIFY_TIMEOUT_MS || '300000', 10) || 300000));
-
-    console.log(`[mux-upload-verify-real] Polling asset ${assetId} until ready (every ${pollMs}ms, timeout ${timeoutMs}ms)...`);
-
-    const start = Date.now();
-    let finalStatus: string | undefined;
-    let lastPayload: any;
-    while (Date.now() - start < timeoutMs) {
+    private convertToZodSchema(inputSchema: any): z.ZodSchema {
+        if (!inputSchema || typeof inputSchema !== 'object') return z.object({});
         try {
-            // Pass the asset ID with the correct parameter name
-            const res = await getAsset.execute({ context: { ASSET_ID: assetId } });
-            const text = Array.isArray(res) ? (res[0] as any)?.text ?? '' : String(res ?? '');
-            try {
-                lastPayload = JSON.parse(text);
-            } catch {
-                lastPayload = { raw: text };
-            }
-            const status = lastPayload?.status as string | undefined;
-
-            if (status) {
-                if (!validStatuses.has(status)) {
-                    console.warn(`[mux-upload-verify-real] Unexpected asset status: ${status}`);
-                } else {
-                    console.log(`[mux-upload-verify-real] asset status: ${status}`);
+            if (inputSchema.type === 'object' && inputSchema.properties) {
+                const schemaObject: Record<string, z.ZodTypeAny> = {};
+                for (const [key, value] of Object.entries(inputSchema.properties)) {
+                    const prop = value as any;
+                    let zodType: z.ZodTypeAny = z.string();
+                    switch (prop.type) {
+                        case 'string': zodType = z.string(); break;
+                        case 'number':
+                        case 'integer': zodType = z.number(); break;
+                        case 'boolean': zodType = z.boolean(); break;
+                        case 'array': zodType = z.array(z.any()); break;
+                        case 'object': zodType = z.object({}); break;
+                        default: zodType = z.any();
+                    }
+                    if (prop.description) zodType = zodType.describe(prop.description);
+                    const required = inputSchema.required || [];
+                    if (!required.includes(key)) zodType = zodType.optional();
+                    schemaObject[key] = zodType;
                 }
-                if (status === 'ready' || status === 'errored') {
-                    finalStatus = status;
-                    break;
-                }
-            } else {
-                console.log('[mux-upload-verify-real] asset status missing in response, continuing to poll...');
-                if (process.env.DEBUG) {
-                    console.log('[mux-upload-verify-real] Raw response:', text.slice(0, 200));
-                }
+                return z.object(schemaObject);
             }
-        } catch (e) {
-            const errorMsg = e instanceof Error ? e.message : String(e);
-            console.warn('[mux-upload-verify-real] Error fetching asset, will retry:', errorMsg);
-            if (process.env.DEBUG) {
-                console.log('[mux-upload-verify-real] Full error:', e);
-            }
-        }
-
-        await delay(pollMs);
+        } catch {}
+        return z.object({ ASSET_ID: z.string().optional(), limit: z.number().optional(), page: z.number().optional() });
     }
 
-    if (!finalStatus) {
-        throw new Error('Verification timed out before reaching a terminal status');
-    }
-    if (finalStatus !== 'ready') {
-        throw new Error(`Asset did not reach ready state (final: ${finalStatus}). Last payload: ${JSON.stringify(lastPayload)}`);
+    async disconnect(): Promise<void> {
+        this.connected = false;
+        if (this.transport) { try { await this.transport.close(); } catch {} this.transport = null; }
+        this.client = null;
     }
 
-    // Output final, machine-readable summary
-    const playbackId = Array.isArray(lastPayload?.playback_ids) && lastPayload.playback_ids.length > 0
-        ? (lastPayload.playback_ids[0]?.id as string | undefined)
-        : undefined;
-
-    console.log(`MUX_ASSET_ID=${assetId}`);
-    if (playbackId) console.log(`MUX_PLAYBACK_ID=${playbackId}`);
-
-    console.log('✅ Mux upload and verification succeeded. Asset is ready.');
-    if (playbackId) {
-        console.log(`🎥 Your video is now available at: https://stream.mux.com/${playbackId}.m3u8`);
-    }
+    isConnected(): boolean { return this.connected; }
+    async reset(): Promise<void> { await this.disconnect(); await this.ensureConnected(); }
 }
 
-function delay(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
+export const muxMcpClient = new MuxAssetsMCPClient();
 
-const isDirectRun = import.meta.url === pathToFileURL(process.argv[1]!).href;
-if (isDirectRun) {
-    main().catch((err) => {
-        console.error('❌ mux-upload-verify-real failed:', err instanceof Error ? err.message : String(err));
-        process.exit(1);
-    });
-}
+process.on('SIGINT', async () => { try { await muxMcpClient.disconnect(); } catch {} process.exit(0); });
+process.on('SIGTERM', async () => { try { await muxMcpClient.disconnect(); } catch {} process.exit(0); });

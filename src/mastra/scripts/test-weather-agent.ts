@@ -15,13 +15,6 @@ import { weatherAgent } from '../agents/weather-agent.js';
  * - MUX_CORS_ORIGIN: CORS origin for Mux uploads (default: http://localhost)
  */
 
-function assertContains(text: string, substring: string, message?: string): void {
-    if (!text.toLowerCase().includes(substring.toLowerCase())) {
-        throw new Error(message || `Expected text to contain "${substring}" but got: ${text.slice(0, 200)}...`);
-    }
-    console.log(`✓ ${message || `Contains "${substring}"`}`);
-}
-
 function assertContainsAny(text: string, substrings: string[], message?: string): void {
     const found = substrings.some(s => text.toLowerCase().includes(s.toLowerCase()));
     if (!found) {
