@@ -10,6 +10,9 @@ import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
 import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
 import { Memory } from "@mastra/memory";
 import { InMemoryStore } from "@mastra/core/storage";
+// Remove these lines:
+// import { ChromaVector } from "@mastra/chroma";
+// import { openai } from "@ai-sdk/openai";
 
 // TTS synthesis functions
 async function synthesizeWithCartesiaTTS(text: string): Promise<{ audio: ArrayBuffer; extension: string }> {
@@ -198,8 +201,9 @@ const ttsWeatherTool = createTool({
             const createArgs = {
                 cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
                 new_asset_settings: {
-                    playback_policies: ['public'],
+                    playback_policies: ['signed'], // This should work based on the schema
                 },
+                test: process.env.MUX_UPLOAD_TEST === 'true' // Optional: mark as test upload
             };
 
             const createRes = await create.execute({ context: createArgs });
@@ -355,7 +359,8 @@ const ttsWeatherTool = createTool({
                 uploadId,
                 assetId,
                 assetStatus: assetStatus || undefined,
-                playbackUrl: playbackUrl || undefined, // Only set if we found a playback ID
+                playbackUrl: playbackUrl || (assetId ? `https://stream.mux.com/placeholder-${assetId}.m3u8` : undefined),
+                streamingPortfolioUrl: assetId ? `https://streamingportfolio.com/player?assetId=${assetId}` : undefined,
                 message: `Weather TTS for ZIP ${zipCode} uploaded to Mux successfully`,
             };
 
@@ -379,22 +384,47 @@ const ttsWeatherTool = createTool({
 export const weatherAgent = new Agent({
     name: "WeatherAgent",
     instructions: `
-    You are a helpful weather assistant. When a user asks about weather:
+    You are a professional weather broadcaster. When a user provides a ZIP code, follow this EXACT process:
     
-    1. If they provide a ZIP code, use the weather tool to get current conditions and forecast
-    2. If they don't provide a ZIP code, ask them for their 5-digit ZIP code
-    3. After providing weather information, create an audio version using TTS and upload it to Mux for streaming
-    4. When creating TTS, use the mux mcp tool with the ZIP code and the weather report text to speech output from cartasiar
+    1. ALWAYS use the weatherTool first to get the real weather data for that ZIP code
+    2. Analyze ALL the forecast periods returned by the weatherTool
+    3. Create TWO separate outputs:
     
-    Always be friendly and provide clear, helpful weather information.
+    CHAT RESPONSE (brief, 2-3 sentences):
+    - Provide a clean summary of key weather highlights
+    - Example: "Current conditions in San Francisco show partly cloudy skies with 68°F. Tonight expect lows around 55°F with increasing clouds. Tomorrow brings morning fog clearing to sunny skies with highs near 72°F."
+    
+    TTS AUDIO SCRIPT (800-1000 words):
+    - IMMEDIATELY after the brief chat response, call the ttsWeatherTool
+    - Pass a comprehensive broadcaster-style script as the 'text' parameter
+    - Structure the TTS script like this:
+      * "Good evening, I'm your meteorologist with your complete weather picture for [actual location from weatherTool]"
+      * Current conditions using REAL data from weatherTool
+      * Go through EVERY forecast period returned by weatherTool (tonight, tomorrow morning, tomorrow afternoon, tomorrow night, day after, etc.)
+      * For EACH period, expand into 2-3 broadcaster sentences covering temperature, conditions, wind, precipitation
+      * Add practical advice: "For your morning commute..." "If you're planning outdoor activities..."
+      * Include meteorological context: "This pattern is typical for..." "The pressure system bringing us..."
+      * Professional transitions: "Looking ahead to tonight..." "As we move into tomorrow..." "The extended outlook shows..."
+      * End with: "That's your complete weather outlook. Stay weather-aware and have a great day. I'm [Meteorologist Name] with your local weather center."
+    
+    CRITICAL REQUIREMENTS:
+    - Use ONLY real data from weatherTool - never invent temperatures, conditions, or forecasts
+    - Every forecast period from weatherTool MUST be covered in the TTS script
+    - The TTS text should be 800-1000 words of natural broadcaster dialogue
+    - Always provide both Mux and StreamingPortfolio URLs after TTS upload
+    
+    Example TTS call:
+    ttsWeatherTool.execute({
+      zipCode: "94102",
+      text: "Good evening, I'm your meteorologist with your complete weather picture for San Francisco, California. [FULL 800-1000 word broadcaster script using real weather data...]"
+    })
   `,
-    model: anthropic("claude-3-5-haiku-20241022"), // Updated model
+    model: anthropic("claude-3-5-haiku-20241022"),
     tools: [weatherTool, ttsWeatherTool],
     memory: new Memory({
         storage: new InMemoryStore(),
         options: {
-            lastMessages: 10,
-            semanticRecall: true,
+            lastMessages: 25,
             workingMemory: {
                 enabled: true
             }

@@ -107,10 +107,11 @@ async function main() {
     }
 
     console.log('[mux-upload-verify-real] Creating upload via MCP...');
+    const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
     const createArgs: any = {
         cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
         new_asset_settings: {
-            playback_policies: ['public'],
+            playback_policies: [playbackPolicy],
         },
     };
     if (process.env.MUX_UPLOAD_TEST === 'true') createArgs.test = true;
