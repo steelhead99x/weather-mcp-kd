@@ -55,6 +55,31 @@ const server = http.createServer(async (req, res) => {
             return json(res, 200, { greeting });
         }
 
+        // New thread initial messages endpoint (for UI expecting Mastra-style path)
+        // GET /api/memory/threads/new/messages?agentId=weatherAgent
+        if (req.method === 'GET' && pathname === '/api/memory/threads/new/messages') {
+            const agentId = (parsed.query?.agentId as string) || '';
+            // Validate agent id: our configured agent key is weatherAgent
+            const validAgentIds = new Set(['weatherAgent', 'weather-agent', process.env.AGENT_NAME || '']);
+            if (agentId && !validAgentIds.has(agentId)) {
+                return json(res, 400, { error: `Unknown agentId: ${agentId}` });
+            }
+
+            const greeting = await initializeWeatherAgent();
+
+            // Return a minimal structure that frontends typically expect: a list of UI messages
+            // Adjust this shape here if your frontend expects a different key
+            const uiMessages = [
+                { id: 'm-0', role: 'assistant', type: 'text', content: greeting, createdAt: new Date().toISOString() }
+            ];
+            return json(res, 200, {
+                threadId: 'new',
+                agentId: agentId || 'weatherAgent',
+                messages: uiMessages,
+                uiMessages
+            });
+        }
+
         // Weather endpoint: GET /weather?zip=XXXXX
         if (req.method === 'GET' && pathname === '/weather') {
             const zip = (parsed.query?.zip as string) || '';

@@ -9,9 +9,9 @@
     "skipLibCheck": true,
     "noEmit": false,
     "outDir": "dist",
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
   },
   "include": [
     "src/**/*"
