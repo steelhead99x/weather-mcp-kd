@@ -12,41 +12,37 @@ import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
  */
 async function uploadFileToMux(uploadUrl: string, filePath: string): Promise<void> {
     console.log('[mux-upload-verify-real] Uploading file to Mux endpoint...');
-    
-    try {
-        // Read file
-        const fileBuffer = await fs.readFile(filePath);
-        const fileSize = fileBuffer.length;
-        
-        console.log(`[mux-upload-verify-real] File size: ${fileSize} bytes`);
-        
-        // Mux direct upload uses PUT method with the file as body
-        console.log('[mux-upload-verify-real] Uploading file content...');
-        const uploadResponse = await fetch(uploadUrl, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/octet-stream',
-                'Content-Length': fileSize.toString(),
-            },
-            body: fileBuffer,
-        });
-        
-        if (!uploadResponse.ok) {
-            const errorText = await uploadResponse.text().catch(() => 'Unknown error');
-            throw new Error(`File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}. Response: ${errorText}`);
-        }
-        
-        console.log('[mux-upload-verify-real] File uploaded successfully');
-        
-        // Log response details for debugging
-        const responseText = await uploadResponse.text().catch(() => '');
-        if (responseText) {
-            console.log(`[mux-upload-verify-real] Upload response: ${responseText}`);
-        }
-        
-    } catch (error) {
-        console.error('[mux-upload-verify-real] File upload failed:', error);
-        throw error;
+
+    // Read file
+    const fileBuffer = await fs.readFile(filePath);
+    const fileSize = fileBuffer.length;
+
+    console.log(`[mux-upload-verify-real] File size: ${fileSize} bytes`);
+
+    // Mux direct upload uses PUT method with the file as body
+    console.log('[mux-upload-verify-real] Uploading file content...');
+    const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': fileSize.toString(),
+        },
+        body: fileBuffer,
+    });
+
+    if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text().catch(() => 'Unknown error');
+        const err = new Error(`File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}. Response: ${errorText}`);
+        console.error('[mux-upload-verify-real] File upload failed:', err.message);
+        throw err;
+    }
+
+    console.log('[mux-upload-verify-real] File uploaded successfully');
+
+    // Log response details for debugging
+    const responseText = await uploadResponse.text().catch(() => '');
+    if (responseText) {
+        console.log(`[mux-upload-verify-real] Upload response: ${responseText}`);
     }
 }
 
