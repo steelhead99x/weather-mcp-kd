@@ -1,173 +1,182 @@
-# Weather Agent KD
+# Weather Agent (Mastra + MCP + Mux)
 
-A TypeScript project that demonstrates a weather-focused agent built with Mastra. It includes:
-- A Mastra Agent that can call a weather tool
-- A weather tool that fetches forecasts from api.weather.gov (via ZIP geocoding from Zippopotam.us)
-- An MCP server exposing the same weather tool
-- Several test scripts (agent, TTS, STT, etc.)
+A simple, copy‑paste friendly project that:
 
-This README is freshly written to reflect the current codebase and package.json scripts as of 2025-09-20.
+- Gets real weather for a US ZIP code (zippopotam.us + api.weather.gov)
+- Creates audio (TTS) with Cartesia or Deepgram
+- Makes a tiny video (image + audio) and uploads to Mux for streaming
 
-## Requirements
-- Node.js 20+ (required by package engines)
-- npm 9+ recommended
+---
 
-## Install
+Quick Start
+
+1) Install
+
+   npm install
+
+2) Set env (create .env in project root)
+
+   # One TTS provider (optional but recommended)
+   CARTESIA_API_KEY=...
+   CARTESIA_VOICE=...
+   # or
+   DEEPGRAM_API_KEY=...
+   DEEPGRAM_TTS_MODEL=aura-asteria-en
+
+   # Mux (only if you want uploads)
+   MUX_TOKEN_ID=...
+   MUX_TOKEN_SECRET=...
+   MUX_CORS_ORIGIN=http://localhost
+
+   # Weather API header (friendly contact recommended)
+   WEATHER_MCP_USER_AGENT=WeatherMCP/1.0 (you@example.com)
+
+3) Build
+
+   npm run build
+
+4) Try things
+
+   # Dev server (Mastra)
+   npm run dev
+
+   # Ask the agent end‑to‑end
+   npm run test:weather-agent
+
+   # Weather tool by ZIP
+   npm run test:zip
+
+   # TTS quick tests
+   npm run test:tts:cartesia
+   npm run test:tts:deepgram
+
+   # STT quick tests (optional)
+   npm run test:stt:cartesia
+   npm run test:stt:deepgram
+
+   # Real Mux upload + verify (needs Mux creds)
+   npm run run:mux:upload:verify
+
+---
+
+## 📦 Project Structure
+
 ```
+src/
+└─ mastra/
+   ├─ index.ts                  # Mastra app wiring (agent + MCP server)
+   ├─ agents/
+   │  └─ weather-agent.ts      # Weather agent + TTS upload tool (Mux)
+   ├─ tools/
+   │  └─ weather.ts            # Weather tool (ZIP -> lat/lon -> forecast from NWS)
+   ├─ mcp/
+   │  ├─ weather-server.ts     # MCP server exposing the agent/tool
+   │  ├─ mux-upload-client.ts  # MCP client wrapper for Mux upload endpoints
+   │  └─ mux-assets-client.ts  # MCP client wrapper for Mux assets endpoints
+   └─ scripts/                 # Dev/test scripts
+```
+
+---
+
+## ⚙️ Prerequisites
+
+- Node.js >= 20
+- ffmpeg (ffmpeg-static is bundled and auto-configured)
+- Optional TTS service credentials (choose one or both):
+  - Cartesia: CARTESIA_API_KEY, CARTESIA_VOICE
+  - Deepgram: DEEPGRAM_API_KEY (DEEPGRAM_TTS_MODEL optional)
+- To upload to Mux: MUX_TOKEN_ID, MUX_TOKEN_SECRET
+
+Example .env:
+
+```dotenv
+# TTS (choose one provider or both)
+CARTESIA_API_KEY=...
+CARTESIA_VOICE=...
+# or
+DEEPGRAM_API_KEY=...
+DEEPGRAM_TTS_MODEL=aura-asteria-en
+
+# Mux
+MUX_TOKEN_ID=...
+MUX_TOKEN_SECRET=...
+MUX_CORS_ORIGIN=http://localhost
+
+# Weather MCP user-agent header
+WEATHER_MCP_USER_AGENT="WeatherMCP/1.0 (mail@streamingportfolio.com)"
+```
+
+---
+
+## 🚀 Install & Build
+
+```sh
 npm install
-```
-
-## Environment Variables
-Create a `.env` file in the project root (do not commit secrets). Start from the example:
-```
-cp .env.example .env
-# Edit .env to add your keys and options
-```
-
-Key groups supported by the codebase (see .env.example for details):
-- Development (optional):
-  - NODE_ENV, PORT, MASTRA_DEV_PORT, DEBUG
-- Anthropic:
-  - ANTHROPIC_API_KEY (required for agent/Claude tests)
-  - ANTHROPIC_MODEL (optional, default in code: "claude-3-haiku-20240307")
-- Weather and storage:
-  - WEATHER_MCP_USER_AGENT (optional but recommended per Weather.gov)
-  - WEATHER_DB_URL (SQLite path used by memory/db helpers)
-  - CHROMA_URL (optional; enable vector memory if you run a Chroma server)
-- Cartesia (STT + TTS):
-  - CARTESIA_API_KEY
-  - CARTESIA_API_URL, CARTESIA_VERSION, CARTESIA_STT_MODEL, CARTESIA_LANGUAGE
-  - CARTESIA_VOICE, CARTESIA_TTS_HTTP_URL, CARTESIA_TTS_MODEL, CARTESIA_SAMPLE_RATE (optional)
-  - CARTESIA_TTS_WS_URL, CARTESIA_WS_TIMEOUT_MS, CARTESIA_MIN_AUDIO_BYTES (optional)
-- Deepgram (TTS and optional STT):
-  - DEEPGRAM_API_KEY
-  - DEEPGRAM_VOICE or DEEPGRAM_TTS_MODEL
-  - DEEPGRAM_MODEL, DEEPGRAM_LANGUAGE (STT; optional)
-- Mux (optional MCP clients and upload/verify script):
-  - MUX_TOKEN_ID, MUX_TOKEN_SECRET
-  - MUX_MCP_UPLOAD_ARGS, MUX_MCP_ASSETS_ARGS (advanced; defaults provided)
-  - MUX_CONNECTION_TIMEOUT (advanced; default 20000ms, bounded in code)
-  - MUX_VERIFY_TIMEOUT_MS, MUX_VERIFY_POLL_MS, MUX_CORS_ORIGIN, MUX_UPLOAD_TEST (upload/verify script options)
-  - MUX_SAMPLE_FILE (path for sample file; script defaults to mp4)
-- Script I/O helpers (optional):
-  - STT_INPUT_FILE, STT_OUTPUT_FILE, STT_PROVIDER
-  - TTS_TEXT, TTS_OUTPUT_BASE, TTS_PROVIDER, TTS_FORMAT
-
-## Project Layout (key files)
-- src/mastra/index.ts — Creates and exports the Mastra instance (agents + MCP servers)
-- src/mastra/agents/weather-agent.ts — Defines the Weather Agent (Anthropic model + weatherTool)
-- src/mastra/tools/weather.ts — Defines and exports weatherTool (id: "get-weather")
-- src/mastra/mcp/weather-server.ts — Exposes weatherTool via an MCPServer
-- src/mastra/mcp/mux-upload-client.ts — MCP client wrapper for Mux Uploads tools
-- src/mastra/mcp/mux-assets-client.ts — MCP client wrapper for Mux Assets tools
-- src/mastra/scripts/ — Test scripts for agent, ZIP tool, STT, TTS, and Mux.
-
-## Scripts (package.json)
-- dev: `mastra dev` — Launch Mastra Dev Playground for this app
-- build: `mastra build` — Build the project into dist/
-- start: `node dist/index.js` — If you have a built entry file at dist/index.js (not required for most flows)
-- typecheck: `tsc --noEmit`
-- test:claude: Build then run `src/mastra/scripts/test-claude.ts`
-- test:weather-agent: Build then run `src/mastra/scripts/test-weather-agent.ts`
-- test:stt: Build then run `src/mastra/scripts/test-stt.ts`
-- test:stt:deepgram: Build then run STT via Deepgram
-- test:stt:cartesia: Build then run STT via Cartesia
-- test:tts: Build then run `src/mastra/scripts/test-tts.ts`
-- test:tts:deepgram: Build then run TTS via Deepgram
-- test:tts:cartesia: Build then run TTS via Cartesia
-- run:mux:upload:verify: Build then run `src/mastra/scripts/mux-upload-verify-real.ts`
-
-Notes:
-- The test scripts require specific environment variables depending on the provider (see their headers). Some scripts are experimental:
-  - test-zip.ts currently imports a symbol name that does not exist in the tool file; see the programmatic usage section below if you call the tool directly.
-  - test-claude.ts references a missing config file for models and may require adjustment.
-
-## Development
-Start the Mastra Dev Playground:
-```
-npm run dev
-```
-- Ensure your `.env` contains the variables you intend to use (e.g., ANTHROPIC_API_KEY for text generation).
-- The Mastra dev server will load the Mastra app exported from src/mastra/index.ts (compiled to dist during dev/build).
-
-Build the project:
-```
 npm run build
 ```
 
-## Using the Weather Agent (programmatic)
-The Weather Agent uses Anthropic and the weatherTool behind the scenes to fulfill user queries. Minimal example:
+---
+
+## ▶️ Run
+
+- Development (Mastra dev):
+
+```sh
+npm run dev
+```
+
+- Production build runner:
+
+```sh
+npm start:production
+```
+
+---
+
+## 🧠 Usage (Agent)
+
+The agent greets users, asks for a ZIP code, calls the weather tool to fetch real data, and can invoke a TTS upload tool to produce a Mux streaming URL.
+
+Programmatic import:
+
 ```ts
-import 'dotenv/config';
-import { weatherAgent } from './dist/mastra/agents/weather-agent.js';
-
-async function main() {
-  const res = await weatherAgent.generateVNext(
-    "Hello! Please get the forecast for ZIP 94102"
-  );
-  console.log(res.text || res);
-}
-
-main();
+import { mastra } from "./src/mastra/index.ts";
+// mastra.agents.weatherAgent ...
 ```
-Requirements:
-- ANTHROPIC_API_KEY set
-- Network access for Zippopotam.us and api.weather.gov
 
-## Using the Weather Tool Directly (programmatic)
-The tool is exported as `weatherTool` and expects a `zipCode` in its context. It returns basic location info and a short forecast array.
-```ts
-import 'dotenv/config';
-import { weatherTool } from './dist/mastra/tools/weather.js';
+---
 
-async function main() {
-  const result = await weatherTool.execute({
-    context: { zipCode: '94102' }
-  });
-  console.log(result);
-}
+## 🛠️ Weather Tool
 
-main();
-```
-Optional:
-- Set `WEATHER_MCP_USER_AGENT` in your environment to include a descriptive User-Agent for Weather.gov requests.
+- Validates a 5-digit US ZIP code
+- Looks up coordinates via https://api.zippopotam.us
+- Retrieves forecast via https://api.weather.gov (NWS)
+- Returns a compact forecast for the next periods
 
-## MCP Server (experimental)
-An MCP server is defined that exposes the weather tool:
-- File: src/mastra/mcp/weather-server.ts
-- Export: `weatherMcpServer`
-You can embed this server in your own MCP-capable host or extend it according to your needs.
+---
 
-## Test Scripts
-After building, you can run:
-```
-# Simple agent smoke test (uses Anthropic)
-npm run test:weather-agent
+## 🔊 TTS + Video + Mux Upload
 
-# STT tests (Deepgram supported; Cartesia placeholder)
-npm run test:stt
-npm run test:stt:deepgram
-npm run test:stt:cartesia
+Inside the weather agent, a tool (tts-weather-upload) can:
 
-# TTS tests (Deepgram and Cartesia)
-npm run test:tts
-npm run test:tts:deepgram
-npm run test:tts:cartesia
-```
-Environment variables commonly used by these scripts include:
-- STT_INPUT_FILE, STT_OUTPUT_FILE, STT_PROVIDER
-- TTS_TEXT, TTS_OUTPUT_BASE, TTS_PROVIDER, TTS_FORMAT
-- DEEPGRAM_API_KEY, CARTESIA_API_KEY
+1) Synthesize speech with Cartesia (preferred) or Deepgram (fallback) or a brief silence placeholder if neither is configured
+2) Generate a simple MP4 from a static image (files/images/baby.jpeg if present; otherwise a generated blue background)
+3) Create an upload URL via Mux MCP and PUT the MP4
+4) Poll for a playback ID and return an HLS URL
 
-Caveats:
-- test-zip.ts currently uses an import name mismatch relative to src/mastra/tools/weather.ts (exports `weatherTool`). If you need a direct ZIP test, prefer the programmatic example above or adjust the script to import `weatherTool`.
-- test-claude.ts references a non-existent `../config/models.js`. You may replace the `getAnthropicModel()` usage with a direct `process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307'` until a config helper is added.
+Outputs also include local file paths for inspection and an optional StreamingPortfolio URL.
 
-## Troubleshooting
-- Weather.gov requests fail or are throttled: Set a descriptive `WEATHER_MCP_USER_AGENT` per their guidelines.
-- Anthropic calls fail: Ensure `ANTHROPIC_API_KEY` is set and valid; confirm your model name if overriding via `ANTHROPIC_MODEL`.
-- STT/TTS failures: Verify the respective provider API keys and that your input/output parameters are valid.
-- Mastra Dev issues: Rebuild (`npm run build`) and ensure dist files exist; check Node version (>= 20).
+---
 
-## License
-MIT
+## ❗ Notes
+
+- Requires Node 20+ (global fetch/Blob and ESM)
+- ffmpeg path is set using ffmpeg-static
+- The Anthropic chat model defaults to `claude-3-5-haiku-latest` via @ai-sdk/anthropic
+- The weather MCP server exposes the agent and tool for MCP-capable clients
+
+---
+
+## 📄 License
+
+MIT © 2025

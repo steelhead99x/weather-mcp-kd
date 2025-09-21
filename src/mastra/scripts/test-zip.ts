@@ -1,3 +1,13 @@
+/**
+ * Weather ZIP tool quick test
+ *
+ * Usage:
+ *   npm run build && tsx src/mastra/scripts/test-zip.ts
+ *   # or after compile: node dist/scripts/test-zip.js
+ *
+ * Env (optional):
+ *   WEATHER_MCP_USER_AGENT  Custom User-Agent for api.weather.gov
+ */
 import dotenv from "dotenv";
 import { weatherTool } from "../tools/weather.js";
 import { pathToFileURL } from "url";

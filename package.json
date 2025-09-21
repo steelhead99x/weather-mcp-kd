@@ -23,6 +23,7 @@
     "test:tts": "npm run build && tsx src/mastra/scripts/test-tts.ts",
     "test:tts:deepgram": "npm run build && tsx src/mastra/scripts/test-tts.ts \"Hello from Deepgram\" deepgram",
     "test:tts:cartesia": "npm run build && tsx src/mastra/scripts/test-tts.ts \"Hello from Cartesia\" cartesia",
+    "test:zip": "npm run build && tsx src/mastra/scripts/test-zip.ts",
     "run:mux:upload:verify": "npm run build && tsx src/mastra/scripts/mux-upload-verify-real.ts"
   },
   "engines": {

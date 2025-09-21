@@ -1,3 +1,19 @@
+/**
+ * Speech-to-Text (STT) quick test for Deepgram and Cartesia
+ *
+ * Usage:
+ *   npm run test:stt             # prompts use defaults
+ *   npm run test:stt:deepgram    # using Deepgram
+ *   npm run test:stt:cartesia    # using Cartesia
+ *   # or: npm run build && tsx src/mastra/scripts/test-stt.ts files/sample.wav deepgram
+ *
+ * Env:
+ *   DEEPGRAM_API_KEY         (for Deepgram)
+ *   CARTESIA_API_KEY         (for Cartesia)
+ *   STT_INPUT_FILE           (optional; default files/samples/mux-sample.wav)
+ *   STT_PROVIDER=deepgram|cartesia|both
+ *   STT_OUTPUT_FILE=path.txt|path.json (optional)
+ */
 import 'dotenv/config';
 import { promises as fs } from 'fs';
 import { basename, resolve } from 'path';

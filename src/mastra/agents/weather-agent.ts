@@ -3,7 +3,7 @@ import { Agent } from "@mastra/core";
 import { anthropic } from "@ai-sdk/anthropic";
 import { weatherTool } from "../tools/weather";
 import { promises as fs } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
@@ -171,6 +171,10 @@ const ttsWeatherTool = createTool({
     execute: async ({ context }) => {
         const { zipCode, text } = context;
 
+        if (!zipCode || typeof zipCode !== 'string' || !/^\d{5}$/.test(zipCode)) {
+            throw new Error(`Please provide a valid 5-digit ZIP code. Received: ${zipCode}`);
+        }
+
         console.log(`[tts-weather-upload] Processing TTS for ZIP ${zipCode}`);
 
         try {
@@ -228,7 +232,7 @@ const ttsWeatherTool = createTool({
             const absVideoPath = resolve(videoPath);
 
             // Ensure output directory exists
-            const outputDir = absAudioPath.substring(0, absAudioPath.lastIndexOf('/'));
+            const outputDir = dirname(absAudioPath);
             await fs.mkdir(outputDir, { recursive: true });
 
             // Write the audio file first
@@ -246,10 +250,10 @@ const ttsWeatherTool = createTool({
                 console.log(`[tts-weather-upload] Using existing image: ${imagePath}`);
             } catch {
                 console.warn(`[tts-weather-upload] Image not found at: ${imagePath}`);
-                console.log(`[tts-weather-upload] Please ensure baby.jpeg exists at files/uploads/images/baby.jpeg`);
+                console.log(`[tts-weather-upload] Please ensure baby.jpeg exists at files/images/baby.jpeg`);
                 
                 // Create the images directory if it doesn't exist
-                const imageDir = resolve('files/uploads/images');
+                const imageDir = resolve('files/images');
                 await fs.mkdir(imageDir, { recursive: true });
                 
                 // Create a simple colored background as fallback
@@ -263,7 +267,7 @@ const ttsWeatherTool = createTool({
                         .outputOptions(['-vframes 1'])
                         .on('end', () => {
                             console.log(`[tts-weather-upload] Created fallback background: ${defaultImagePath}`);
-                            console.log(`[tts-weather-upload] To use your image, place it at: files/uploads/images/baby.jpeg`);
+                            console.log(`[tts-weather-upload] To use your image, place it at: files/images/baby.jpeg`);
                             resolve();
                         })
                         .on('error', reject)
@@ -579,7 +583,7 @@ export const weatherAgent = new Agent({
       text: "Good evening, I'm your meteorologist with your complete weather picture for San Francisco, California. [FULL 800-1000 word broadcaster script using real weather data...]"
     })
   `,
-    model: anthropic("claude-3-5-haiku-20241022"),
+    model: anthropic("claude-3-5-haiku-latest"),
     tools: { weatherTool, ttsWeatherTool },
     memory: new Memory({
         storage: new InMemoryStore(),

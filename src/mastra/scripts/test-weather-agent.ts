@@ -1,3 +1,21 @@
+/**
+ * Weather Agent end-to-end quick test
+ *
+ * What it does:
+ *   - Asks the agent a weather question by ZIP
+ *   - Asks it to create TTS and upload to Mux (if configured)
+ *
+ * Usage:
+ *   npm run test:weather-agent
+ *
+ * Required env:
+ *   ANTHROPIC_API_KEY
+ *   WEATHER_MCP_USER_AGENT (recommended; used for api.weather.gov)
+ *
+ * Optional env for TTS + Mux:
+ *   CARTESIA_API_KEY + CARTESIA_VOICE (or DEEPGRAM_API_KEY)
+ *   MUX_TOKEN_ID + MUX_TOKEN_SECRET
+ */
 import { weatherAgentTestWrapper as weatherAgent } from '../agents/weather-agent.js';
 
 /**

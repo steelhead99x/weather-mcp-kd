@@ -1,4 +1,21 @@
-
+/**
+ * Mux upload (real) quick test
+ *
+ * What it does:
+ *   - Creates a direct upload via Mux MCP
+ *   - PUTs a local sample file to Mux
+ *   - Polls assets API until the video is ready
+ *
+ * Usage:
+ *   npm run run:mux:upload:verify
+ *
+ * Required env:
+ *   MUX_TOKEN_ID, MUX_TOKEN_SECRET
+ *
+ * Optional env:
+ *   MUX_SAMPLE_FILE=files/uploads/samples/mux-sample.mp4
+ *   MUX_VERIFY_TIMEOUT_MS=300000  MUX_VERIFY_POLL_MS=5000
+ */
 import 'dotenv/config';
 import { promises as fs } from 'fs';
 import { resolve } from 'path';
