@@ -6,8 +6,8 @@ import { pathToFileURL } from 'url';
 // Local Tone type (no external config dependency)
 export type Tone = 'professional' | 'groovy' | 'librarian' | 'sports';
 
-// Get model from environment or use default
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307';
+// Use a newer model that's compatible with the current AI SDK
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-20241022';
 
 // Standalone Claude weather prompt generator for testing
 export async function generateWeatherPrompt(
@@ -29,7 +29,7 @@ export async function generateWeatherPrompt(
     const currentWeather = weatherData.forecast[0];
 
     const result = await generateText({
-        model: anthropic(ANTHROPIC_MODEL) as any,
+        model: anthropic(ANTHROPIC_MODEL),
         messages: [{
             role: 'user',
             content: `You are a ${toneDescriptions[tone]}. Create a natural, conversational weather report for text-to-speech.

@@ -179,7 +179,8 @@ async function main() {
             if (retrieve && uploadId) {
                 console.log('[mux-upload-verify-real] Retrieving upload info to get asset_id...');
                 try {
-                    const retrieveRes = await retrieve.execute({ context: { id: uploadId } });
+                    // Fix: Use UPLOAD_ID instead of id (based on the MCP schema)
+                    const retrieveRes = await retrieve.execute({ context: { UPLOAD_ID: uploadId } });
                     const retrieveBlocks = Array.isArray(retrieveRes) ? retrieveRes : [retrieveRes];
                     
                     for (const block of retrieveBlocks as any[]) {
@@ -243,7 +244,7 @@ async function main() {
     while (Date.now() - start < timeoutMs) {
         try {
             // Pass the asset ID directly as the expected parameter
-            const res = await getAsset.execute({ context: { id: assetId } });
+            const res = await getAsset.execute({ context: { ASSET_ID: assetId } });
             const text = Array.isArray(res) ? (res[0] as any)?.text ?? '' : String(res ?? '');
             try {
                 lastPayload = JSON.parse(text);

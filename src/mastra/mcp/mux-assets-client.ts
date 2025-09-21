@@ -1,603 +1,312 @@
-// TypeScript
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { z } from "zod";
-import { createTool } from "@mastra/core/tools";
+import 'dotenv/config';
+import { promises as fs } from 'fs';
+import { resolve } from 'path';
+import { pathToFileURL } from 'url';
+import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
+import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
 
 /**
- * Simple logger with environment-based log levels
+ * Upload file to Mux direct upload endpoint
+ * Mux uses a simplified upload protocol, not full TUS
  */
-class Logger {
-    private static logLevel: keyof typeof Logger.levels = process.env.NODE_ENV === 'production' ? 'error' : 'debug';
-    private static levels = { debug: 0, info: 1, warn: 2, error: 3 };
+async function uploadFileToMux(uploadUrl: string, filePath: string): Promise<void> {
+    console.log('[mux-upload-verify-real] Uploading file to Mux endpoint...');
 
-    private static shouldLog(level: keyof typeof Logger.levels): boolean {
-        const levelMap = Logger.levels;
-        // Fallback to 'error' if logLevel is ever misconfigured at runtime
-        const currentLevel = (levelMap as Record<string, number>)[Logger.logLevel] ?? levelMap.error;
-        const requestedLevel = levelMap[level];
-        return requestedLevel >= currentLevel;
+    // Read file
+    const fileBuffer = await fs.readFile(filePath);
+    const fileSize = fileBuffer.length;
+
+    console.log(`[mux-upload-verify-real] File size: ${fileSize} bytes`);
+
+    // Mux direct upload uses PUT method with the file as body
+    console.log('[mux-upload-verify-real] Uploading file content...');
+    const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': fileSize.toString(),
+        },
+        body: fileBuffer,
+    });
+
+    if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text().catch(() => 'Unknown error');
+        const err = new Error(`File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}. Response: ${errorText}`);
+        console.error('[mux-upload-verify-real] File upload failed:', err.message);
+        throw err;
     }
 
-    static debug(message: string, ...args: any[]) {
-        if (Logger.shouldLog('debug')) {
-            console.log(`[DEBUG] ${message}`, ...args);
-        }
-    }
+    console.log('[mux-upload-verify-real] File uploaded successfully');
 
-    static info(message: string, ...args: any[]) {
-        if (Logger.shouldLog('info')) {
-            console.log(`[INFO] ${message}`, ...args);
-        }
-    }
-
-    static warn(message: string, ...args: any[]) {
-        if (Logger.shouldLog('warn')) {
-            console.warn(`[WARN] ${message}`, ...args);
-        }
-    }
-
-    static error(message: string, ...args: any[]) {
-        if (Logger.shouldLog('error')) {
-            console.error(`[ERROR] ${message}`, ...args);
-        }
+    // Log response details for debugging
+    const responseText = await uploadResponse.text().catch(() => '');
+    if (responseText) {
+        console.log(`[mux-upload-verify-real] Upload response: ${responseText}`);
     }
 }
 
-class MuxMCPAssetsClient {
-    // Timeout configuration constants
-    private static readonly MIN_CONNECTION_TIMEOUT = 5000;    // 5 seconds minimum
-    private static readonly MAX_CONNECTION_TIMEOUT = 300000;  // 5 minutes maximum
-    private static readonly DEFAULT_CONNECTION_TIMEOUT = 20000; // 20 seconds default
+/**
+ * Real Mux upload + verify script (no mocks):
+ * - Uploads files/uploads/samples/mux-sample.mp4 (or .wav) by default via mux-upload-client
+ * - Uploads the actual file to the Mux endpoint
+ * - Then verifies the uploaded asset exists and becomes ready via mux-assets-client
+ * - Requires MUX_TOKEN_ID and MUX_TOKEN_SECRET
+ *
+ * Optional env:
+ * - MUX_SAMPLE_FILE: override local file to upload
+ * - MUX_CONNECTION_TIMEOUT: override connection timeout (ms)
+ * - MUX_VERIFY_TIMEOUT_MS: max time to wait for asset ready (default 300000 ms)
+ * - MUX_VERIFY_POLL_MS: poll interval (default 5000 ms)
+ * - DEBUG: enable verbose logging
+ */
+async function main() {
+    const preferredPath = process.env.MUX_SAMPLE_FILE || 'files/uploads/samples/mux-sample.mp4';
+    let absPath = resolve(preferredPath);
 
-    private client: Client | null = null;
-    private transport: StdioClientTransport | null = null;
-    private connected = false;
-    private connectionPromise: Promise<void> | null = null;
-
-    /**
-     * Get connection timeout with bounds validation
-     * Supports environment variable configuration with safe defaults
-     */
-    private getConnectionTimeout(): number {
-        const envTimeout = process.env.MUX_CONNECTION_TIMEOUT;
-
-        // Use default if not specified
-        if (!envTimeout) {
-            return MuxMCPAssetsClient.DEFAULT_CONNECTION_TIMEOUT;
-        }
-
-        // Parse and validate the timeout value
-        const parsedTimeout = parseInt(envTimeout, 10);
-
-        // Check for invalid number
-        if (isNaN(parsedTimeout)) {
-            Logger.warn(`Invalid MUX_CONNECTION_TIMEOUT value: ${envTimeout}, using default ${MuxMCPAssetsClient.DEFAULT_CONNECTION_TIMEOUT}ms`);
-            return MuxMCPAssetsClient.DEFAULT_CONNECTION_TIMEOUT;
-        }
-
-        // Apply bounds validation
-        if (parsedTimeout < MuxMCPAssetsClient.MIN_CONNECTION_TIMEOUT) {
-            Logger.warn(`MUX_CONNECTION_TIMEOUT too low (${parsedTimeout}ms), using minimum ${MuxMCPAssetsClient.MIN_CONNECTION_TIMEOUT}ms`);
-            return MuxMCPAssetsClient.MIN_CONNECTION_TIMEOUT;
-        }
-
-        if (parsedTimeout > MuxMCPAssetsClient.MAX_CONNECTION_TIMEOUT) {
-            Logger.warn(`MUX_CONNECTION_TIMEOUT too high (${parsedTimeout}ms), using maximum ${MuxMCPAssetsClient.MAX_CONNECTION_TIMEOUT}ms`);
-            return MuxMCPAssetsClient.MAX_CONNECTION_TIMEOUT;
-        }
-
-        Logger.debug(`Using connection timeout: ${parsedTimeout}ms`);
-        return parsedTimeout;
+    // Validate environment
+    const id = process.env.MUX_TOKEN_ID;
+    const secret = process.env.MUX_TOKEN_SECRET;
+    if (!id || !secret) {
+        throw new Error('Missing MUX_TOKEN_ID or MUX_TOKEN_SECRET in environment');
     }
 
-    private async ensureConnected(): Promise<void> {
-        // If already connected, return immediately
-        if (this.connected && this.client) {
+    // Validate file exists or fallback to WAV if present
+    let exists = true;
+    try {
+        await fs.access(absPath);
+    } catch {
+        exists = false;
+    }
+
+    if (!exists) {
+        const wavPath = 'files/uploads/samples/mux-sample.wav';
+        try {
+            await fs.access(wavPath);
+            console.warn(`[mux-upload-verify-real] WARNING: Preferred file not found: ${absPath}. Falling back to ${wavPath}. Set MUX_SAMPLE_FILE to override.`);
+            absPath = resolve(wavPath);
+        } catch {
+            throw new Error(`Sample file not found. Tried: ${absPath} and ${resolve(wavPath)}.`);
+        }
+    }
+
+    console.log('[mux-upload-verify-real] Using file:', absPath);
+
+    // 1) Create upload via MCP (real)
+    const uploadTools = await uploadClient.getTools();
+
+    // Try to use the direct endpoint first
+    let create = uploadTools['create_video_uploads'];
+    if (!create) {
+        // Fallback to the dotted notation
+        create = uploadTools['video.uploads.create'];
+    }
+
+    if (!create) {
+        throw new Error('Mux MCP did not expose tool create_video_uploads or video.uploads.create.');
+    }
+
+    console.log('[mux-upload-verify-real] Creating upload via MCP...');
+    const createArgs: any = {
+        cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
+        new_asset_settings: {
+            playback_policies: ['public'],
+        },
+    };
+    if (process.env.MUX_UPLOAD_TEST === 'true') createArgs.test = true;
+
+    // Add timeout if specified (align with MUX_CONNECTION_TIMEOUT used by clients)
+    const timeoutEnv = process.env.MUX_CONNECTION_TIMEOUT;
+    if (timeoutEnv && Number(timeoutEnv) > 0) {
+        createArgs.timeout = Number(timeoutEnv);
+    }
+
+    if (process.env.DEBUG) {
+        console.log('[mux-upload-verify-real] Create arguments:', JSON.stringify(createArgs, null, 2));
+    }
+
+    const createRes = await create.execute({ context: createArgs });
+
+    // Print response blocks for visibility
+    const blocks = Array.isArray(createRes) ? createRes : [createRes];
+    console.log('[mux-upload-verify-real] upload.create response blocks:');
+    for (const block of blocks) {
+        try {
+            const text = (block && typeof block === 'object' && 'text' in block) ? (block as any).text : String(block);
+            console.log('  >', text);
+        } catch {
+            console.log('  >', block);
+        }
+    }
+
+    // Extract JSON from any text blocks if possible (collect best-effort ids)
+    let assetId: string | undefined = undefined;
+    let uploadId: string | undefined = undefined;
+    let uploadUrl: string | undefined = undefined;
+
+    for (const block of blocks as any[]) {
+        const text = block && typeof block === 'object' && typeof block.text === 'string' ? block.text as string : undefined;
+        if (!text) continue;
+        try {
+            const payload = JSON.parse(text);
+            assetId = assetId || payload.asset_id || payload.asset?.id;
+            uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
+            uploadUrl = uploadUrl || payload.url || payload.upload?.url;
+        } catch {
+            // ignore non-JSON text blocks
+        }
+    }
+
+    // Always print machine-readable lines for downstream tooling/visibility
+    console.log(`MUX_UPLOAD_ID=${uploadId ?? ''}`);
+    console.log(`MUX_UPLOAD_URL=${uploadUrl ?? ''}`);
+    console.log(`MUX_ASSET_ID=${assetId ?? ''}`);
+
+    if (uploadUrl) {
+        console.log('[mux-upload-verify-real] upload_url provided by Mux:', uploadUrl);
+        console.log('[mux-upload-verify-real] Starting file upload to Mux endpoint...');
+
+        // Upload the file using Mux's direct upload protocol
+        try {
+            await uploadFileToMux(uploadUrl, absPath);
+
+            // Wait a bit for Mux to process the upload
+            console.log('[mux-upload-verify-real] Waiting for Mux to process the uploaded file...');
+            await delay(10000); // Wait 10 seconds for processing to start
+
+            // Now try to get the upload info again to get the asset_id
+            const retrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
+            if (retrieve && uploadId) {
+                console.log('[mux-upload-verify-real] Retrieving upload info to get asset_id...');
+                try {
+                    // Fix: Use UPLOAD_ID instead of id (based on the MCP schema)
+                    const retrieveRes = await retrieve.execute({ context: { UPLOAD_ID: uploadId } });
+                    const retrieveBlocks = Array.isArray(retrieveRes) ? retrieveRes : [retrieveRes];
+
+                    for (const block of retrieveBlocks as any[]) {
+                        const text = block && typeof block === 'object' && typeof block.text === 'string' ? block.text : undefined;
+                        if (!text) continue;
+                        try {
+                            const payload = JSON.parse(text);
+                            console.log('[mux-upload-verify-real] Retrieved upload info:', JSON.stringify(payload, null, 2));
+                            assetId = assetId || payload.asset_id || payload.asset?.id;
+
+                            // Also check status
+                            const status = payload.status;
+                            console.log(`[mux-upload-verify-real] Upload status: ${status}`);
+                        } catch {
+                            // ignore non-JSON text blocks
+                        }
+                    }
+                } catch (error) {
+                    console.warn('[mux-upload-verify-real] Failed to retrieve upload info after file upload:', error);
+                }
+            }
+        } catch (uploadError) {
+            console.error('[mux-upload-verify-real] File upload failed:', uploadError);
             return;
         }
+    } else {
+        console.warn('[mux-upload-verify-real] No upload URL provided - cannot upload file');
+    }
 
-        // If a connection attempt is already in progress, wait for it
-        if (this.connectionPromise) {
-            return this.connectionPromise;
-        }
+    // Update the machine-readable asset ID line
+    console.log(`MUX_ASSET_ID=${assetId ?? ''}`);
 
-        // Start a new connection attempt
-        this.connectionPromise = this.performConnection();
+    if (!assetId) {
+        console.warn('[mux-upload-verify-real] No asset_id available after upload. This may be normal if asset creation is still in progress.');
+        console.warn('[mux-upload-verify-real] You can run asset verification later using the upload_id or check the Mux dashboard.');
+        return;
+    }
 
+    // 2) Poll asset status via assets client until ready/errored
+    const assetsTools = await assetsClient.getTools();
+
+    // Try multiple possible tool names for getting asset (prioritize correct endpoint name)
+    let getAsset = assetsTools['retrieve_video_assets'] ||
+        assetsTools['video.assets.retrieve'] ||
+        assetsTools['video.assets.get'];
+
+    if (!getAsset) {
+        throw new Error('Mux MCP did not expose any asset retrieval tool (retrieve_video_assets, video.assets.retrieve, or video.assets.get).');
+    }
+
+    const validStatuses = new Set(['preparing', 'processing', 'ready', 'errored']);
+    const pollMs = Math.max(1000, parseInt(process.env.MUX_VERIFY_POLL_MS || '5000', 10) || 5000);
+    const timeoutMs = Math.min(30 * 60 * 1000, Math.max(10_000, parseInt(process.env.MUX_VERIFY_TIMEOUT_MS || '300000', 10) || 300000));
+
+    console.log(`[mux-upload-verify-real] Polling asset ${assetId} until ready (every ${pollMs}ms, timeout ${timeoutMs}ms)...`);
+
+    const start = Date.now();
+    let finalStatus: string | undefined;
+    let lastPayload: any;
+    while (Date.now() - start < timeoutMs) {
         try {
-            await this.connectionPromise;
-        } finally {
-            // Clear the connection promise after completion (success or failure)
-            this.connectionPromise = null;
-        }
-    }
-
-    private async performConnection(): Promise<void> {
-        // Validate environment before attempting connection
-        if (!process.env.MUX_TOKEN_ID || !process.env.MUX_TOKEN_SECRET) {
-            const errorMsg = "Missing required environment variables: MUX_TOKEN_ID and MUX_TOKEN_SECRET are required. MUX_MCP_ASSETS_ARGS is optional but may affect connection behavior if misconfigured.";
-            Logger.error("Environment validation failed:", errorMsg);
-            throw new Error(errorMsg);
-        }
-
-        try {
-            // Parse and validate MCP args from environment variable
-            const mcpArgs = this.parseMcpArgs(process.env.MUX_MCP_ASSETS_ARGS);
-
-            Logger.info("Connecting to Mux MCP Assets server...");
-            Logger.debug("MUX_TOKEN_ID: [CONFIGURED]");
-            Logger.debug("MUX_TOKEN_SECRET: [CONFIGURED]");
-            Logger.debug(`MCP Args: ${mcpArgs.join(' ')}`);
-
-            this.transport = new StdioClientTransport({
-                command: "npx",
-                args: mcpArgs,
-                env: {
-                    ...process.env,
-                    MUX_TOKEN_ID: process.env.MUX_TOKEN_ID,
-                    MUX_TOKEN_SECRET: process.env.MUX_TOKEN_SECRET,
-                },
-            });
-
-            this.client = new Client(
-                {
-                    name: "mux-assets-mastra-client",
-                    version: "1.0.0",
-                },
-                {
-                    capabilities: {},
-                }
-            );
-
-            // Use validated connection timeout
-            const connectionTimeout = this.getConnectionTimeout();
-            const connectionPromise = this.client.connect(this.transport);
-            const timeoutPromise = new Promise<never>((_, reject) => {
-                setTimeout(() => reject(new Error(`Connection timeout: Failed to connect within ${connectionTimeout}ms`)), connectionTimeout);
-            });
-
-            await Promise.race([connectionPromise, timeoutPromise]);
-
-            // Atomically update the connected state
-            this.connected = true;
-            Logger.info("Connected to Mux MCP Assets server successfully");
-
-        } catch (error) {
-            Logger.error("Failed to connect to Mux MCP Assets server:", error);
-
-            // Clean up on failure
-            this.connected = false;
-            if (this.transport) {
-                try {
-                    await this.transport.close();
-                } catch (closeError) {
-                    Logger.debug("Error during transport cleanup:", closeError);
-                }
-                this.transport = null;
-            }
-            this.client = null;
-
-            throw error;
-        }
-    }
-
-    /**
-     * Parse and validate MCP arguments from environment variable
-     * Provides comprehensive security validation and fallback logic
-     */
-    private parseMcpArgs(envValue: string | undefined): string[] {
-        const defaultArgs = ["@mux/mcp", "client=openai-agents", "--tools=dynamic", "--resource=video.assets"];
-
-        // Use default if environment variable is not set
-        if (!envValue) {
-            Logger.debug("Using default MCP args (MUX_MCP_ASSETS_ARGS not set)");
-            return defaultArgs;
-        }
-
-        const trimmedValue = envValue.trim();
-
-        if (!trimmedValue) {
-            Logger.warn("MUX_MCP_ASSETS_ARGS is empty, using defaults");
-            return defaultArgs;
-        }
-
-        if (trimmedValue.length > 1000) {
-            Logger.warn("MUX_MCP_ASSETS_ARGS too long (>1000 chars), using defaults");
-            return defaultArgs;
-        }
-
-        try {
-            const rawArgs = trimmedValue.split(',');
-            const processedArgs: string[] = [];
-
-            for (const rawArg of rawArgs) {
-                const trimmedArg = rawArg.trim();
-
-                if (!trimmedArg) {
-                    Logger.debug("Skipping empty MCP argument");
-                    continue;
-                }
-
-                if (!this.isValidMcpArgument(trimmedArg)) {
-                    Logger.warn(`Skipping invalid MCP argument: ${trimmedArg}`);
-                    continue;
-                }
-
-                processedArgs.push(trimmedArg);
-            }
-
-            if (processedArgs.length === 0) {
-                Logger.warn("No valid MCP arguments found after parsing, using defaults");
-                return defaultArgs;
-            }
-
-            if (!this.validateMcpCommandStructure(processedArgs)) {
-                Logger.warn("Invalid MCP command structure, using defaults");
-                return defaultArgs;
-            }
-
-            Logger.debug(`Successfully parsed ${processedArgs.length} MCP arguments`);
-            return processedArgs;
-
-        } catch (error) {
-            Logger.error("Failed to parse MUX_MCP_ASSETS_ARGS:", error);
-            Logger.info("Falling back to default MCP arguments");
-            return defaultArgs;
-        }
-    }
-
-    /**
-     * Validate individual MCP argument for security and format compliance
-     */
-    private isValidMcpArgument(arg: string): boolean {
-        // Length validation
-        if (arg.length > 200) {
-            return false;
-        }
-
-        // Shell injection prevention - comprehensive dangerous character list
-        const dangerousChars = [';', '&', '|', '`', '$', '(', ')', '<', '>', '"', "'", '\\', '\n', '\r', '\t'];
-        if (dangerousChars.some(char => arg.includes(char))) {
-            return false;
-        }
-
-        // Path traversal prevention
-        if (arg.includes('..') || arg.includes('//')) {
-            return false;
-        }
-
-        // Null byte injection prevention
-        if (arg.includes('\0')) {
-            return false;
-        }
-
-        // Only allow safe characters: alphanumeric, hyphens, underscores, dots, equals, colons, forward slashes, @
-        const safePattern = /^[@a-zA-Z0-9._:=\/\-]+$/;
-        if (!safePattern.test(arg)) {
-            return false;
-        }
-
-        // Validate specific MCP argument patterns
-        if (arg.startsWith('@')) {
-            // Package name validation: @scope/package-name
-            const packagePattern = /^@[a-zA-Z0-9\-_]+\/[a-zA-Z0-9\-_]+$/;
-            if (!packagePattern.test(arg)) {
-                return false;
-            }
-        } else if (arg.startsWith('--')) {
-            // Long option validation: --option-name or --option-name=value
-            const longOptionPattern = /^--[a-zA-Z0-9\-]+(=[a-zA-Z0-9\-_.,:]+)?$/;
-            if (!longOptionPattern.test(arg)) {
-                return false;
-            }
-        } else if (arg.includes('=')) {
-            // Key-value pair validation: key=value
-            const keyValuePattern = /^[a-zA-Z0-9\-_]+=[a-zA-Z0-9\-_.,:]+$/;
-            if (!keyValuePattern.test(arg)) {
-                return false;
-            }
-        } else {
-            // Simple argument validation: alphanumeric with limited special chars
-            const simpleArgPattern = /^[a-zA-Z0-9\-_.]+$/;
-            if (!simpleArgPattern.test(arg)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Validate the overall MCP command structure
-     */
-    private validateMcpCommandStructure(args: string[]): boolean {
-        if (args.length === 0) {
-            return false;
-        }
-
-        // First argument should be a package name (starting with @) or a command
-        const firstArg = args[0];
-        if (!firstArg.startsWith('@') && !firstArg.match(/^[a-zA-Z0-9\-_.]+$/)) {
-            return false;
-        }
-
-        // Check for required MCP-related terms in the command
-        const mcpIndicators = ['mcp', '@mux/mcp'];
-        const hasMcpIndicator = args.some(arg =>
-            mcpIndicators.some(indicator => arg.toLowerCase().includes(indicator))
-        );
-
-        if (!hasMcpIndicator) {
-            return false;
-        }
-
-        // Validate argument count (reasonable limits)
-        if (args.length > 20) {
-            return false;
-        }
-
-        // Check for balanced options (no orphaned values)
-        let expectingValue = false;
-        for (let i = 1; i < args.length; i++) {
-            const arg = args[i];
-
-            if (arg.startsWith('--')) {
-                expectingValue = !arg.includes('=');
-            } else if (expectingValue) {
-                expectingValue = false;
-            } else if (!arg.includes('=') && !arg.startsWith('@')) {
-                // Unexpected standalone argument
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    // Convert MCP tools to proper Mastra tools using createTool
-    async getTools(): Promise<Record<string, any>> {
-        await this.ensureConnected();
-
-        if (!this.client) {
-            throw new Error("Client not connected");
-        }
-
-        try {
-            const result = await this.client.listTools();
-            const tools: Record<string, any> = {};
-
-            Logger.debug("Available MCP assets tools:", result?.tools?.map(t => t.name) || []);
-
-            if (result?.tools) {
-                for (const tool of result.tools) {
-                    try {
-                        // Create a proper Mastra tool using createTool (directly exposed by MCP)
-                        tools[tool.name] = createTool({
-                            id: tool.name,
-                            description: tool.description || `Mux MCP Assets tool: ${tool.name}`,
-                            inputSchema: this.convertToZodSchema(tool.inputSchema),
-                            execute: async ({ context }) => {
-                                if (!this.client) {
-                                    throw new Error("Client not connected");
-                                }
-
-                                Logger.debug(`Calling MCP Assets tool: ${tool.name}`, context);
-
-                                return (await this.client.callTool({
-                                    name: tool.name,
-                                    arguments: context || {},
-                                })).content;
-                            },
-                        });
-                    } catch (toolError) {
-                        Logger.warn(`Skipping assets tool ${tool.name} due to error:`, toolError);
-                    }
-                }
-            }
-
-            // If MCP only exposes generic invoke_api_endpoint, synthesize concrete tools for video.assets
-            const hasInvoke = !!tools['invoke_api_endpoint'];
-            Logger.debug(`Has invoke_api_endpoint: ${hasInvoke}`);
-
-            if (hasInvoke) {
-                const addWrapper = (id: string, endpoint: string, description: string) => {
-                    tools[id] = createTool({
-                        id,
-                        description,
-                        inputSchema: z.object({
-                            id: z.string().optional().describe("Asset ID"),
-                        }).passthrough(),
-                        execute: async ({ context }) => {
-                            if (!this.client) throw new Error("Client not connected");
-
-                            // Try direct tool call first (best case - the MCP exposes the endpoint directly)
-                            const directTool = tools[endpoint];
-                            if (directTool && directTool !== tools[id]) {
-                                Logger.debug(`Using direct tool: ${endpoint}`);
-                                return directTool.execute({ context });
-                            }
-
-                            Logger.debug(`Using invoke_api_endpoint wrapper for: ${endpoint}`);
-
-                            const ctx = context || {};
-                            const attemptArgs = [
-                                // Standard format that most MCP servers expect
-                                { endpoint, args: ctx },
-
-                                // Direct endpoint call format
-                                { endpoint_name: endpoint, args: ctx },
-
-                                // Legacy formats (keep as fallback)
-                                { endpoint, ...ctx },
-                                { endpoint, body: ctx },
-                                { endpoint, params: ctx },
-                                { endpoint, data: ctx },
-                                { endpoint, arguments: ctx },
-                                { name: endpoint, arguments: ctx },
-                                { id: endpoint, arguments: ctx },
-                                { tool: endpoint, arguments: ctx },
-                                { endpoint, input: ctx },
-                                { endpoint, payload: ctx },
-                            ];
-
-                            let lastErr: any;
-                            for (const args of attemptArgs) {
-                                try {
-                                    Logger.debug(`Invoking assets endpoint via wrapper: ${endpoint}`, args);
-                                    const res = await this.client.callTool({ name: 'invoke_api_endpoint', arguments: args });
-                                    return res.content;
-                                } catch (e) {
-                                    lastErr = e;
-                                    const errorMsg = e instanceof Error ? e.message : String(e);
-                                    Logger.warn(`invoke_api_endpoint failed with args variant, trying next: ${errorMsg}`);
-
-                                    // Log the specific argument structure that failed for debugging
-                                    if (process.env.DEBUG) {
-                                        Logger.debug('Failed args structure:', JSON.stringify(args, null, 2));
-                                    }
-                                }
-                            }
-                            throw lastErr || new Error('invoke_api_endpoint failed for all argument variants');
-                        },
-                    });
-                };
-
-                // Primary snake_case IDs for assets endpoints
-                addWrapper('get_video_assets', 'get_video_assets', 'Fetches information about a single video asset');
-                addWrapper('retrieve_video_assets', 'retrieve_video_assets', 'Fetches information about a single video asset');
-                addWrapper('list_video_assets', 'list_video_assets', 'Lists video assets');
-                addWrapper('create_video_assets', 'create_video_assets', 'Creates a new video asset');
-                addWrapper('update_video_assets', 'update_video_assets', 'Updates a video asset');
-                addWrapper('delete_video_assets', 'delete_video_assets', 'Deletes a video asset');
-
-                // Dotted aliases for convenience/compatibility
-                addWrapper('video.assets.get', 'get_video_assets', 'Fetches information about a single video asset');
-                addWrapper('video.assets.retrieve', 'retrieve_video_assets', 'Fetches information about a single video asset');
-                addWrapper('video.assets.list', 'list_video_assets', 'Lists video assets');
-                addWrapper('video.assets.create', 'create_video_assets', 'Creates a new video asset');
-                addWrapper('video.assets.update', 'update_video_assets', 'Updates a video asset');
-                addWrapper('video.assets.delete', 'delete_video_assets', 'Deletes a video asset');
-            }
-
-            Logger.info(`Successfully created ${Object.keys(tools).length} Mastra assets tools from MCP`);
-            Logger.debug("Final assets tool names:", Object.keys(tools));
-            return tools;
-        } catch (error) {
-            Logger.error("Failed to get assets tools:", error);
-            throw error;
-        }
-    }
-
-    // Convert MCP input schema to Zod schema
-    private convertToZodSchema(inputSchema: any): z.ZodSchema {
-        if (!inputSchema || typeof inputSchema !== 'object') {
-            return z.object({});
-        }
-
-        try {
-            // Handle JSON Schema to Zod conversion
-            if (inputSchema.type === 'object' && inputSchema.properties) {
-                const schemaObject: Record<string, z.ZodTypeAny> = {};
-
-                for (const [key, value] of Object.entries(inputSchema.properties)) {
-                    const prop = value as any;
-                    let zodType: z.ZodTypeAny = z.string();
-
-                    // Convert based on JSON Schema type
-                    switch (prop.type) {
-                        case 'string':
-                            zodType = z.string();
-                            break;
-                        case 'number':
-                        case 'integer':
-                            zodType = z.number();
-                            break;
-                        case 'boolean':
-                            zodType = z.boolean();
-                            break;
-                        case 'array':
-                            zodType = z.array(z.any());
-                            break;
-                        case 'object':
-                            zodType = z.object({});
-                            break;
-                        default:
-                            zodType = z.any();
-                    }
-
-                    // Add description if available
-                    if (prop.description) {
-                        zodType = zodType.describe(prop.description);
-                    }
-
-                    // Make optional if not required
-                    const required = inputSchema.required || [];
-                    if (!required.includes(key)) {
-                        zodType = zodType.optional();
-                    }
-
-                    schemaObject[key] = zodType;
-                }
-
-                return z.object(schemaObject);
-            }
-        } catch (error) {
-            console.warn("Failed to convert schema, using fallback:", error);
-        }
-
-        // Fallback schema
-        return z.object({
-            id: z.string().optional().describe("Asset ID"),
-            limit: z.number().optional().describe("Number of items to return"),
-            offset: z.number().optional().describe("Number of items to skip"),
-        });
-    }
-
-    async disconnect(): Promise<void> {
-        this.connected = false;
-
-        if (this.transport) {
+            // Pass the asset ID with the correct parameter name
+            const res = await getAsset.execute({ context: { ASSET_ID: assetId } });
+            const text = Array.isArray(res) ? (res[0] as any)?.text ?? '' : String(res ?? '');
             try {
-                await this.transport.close();
-            } catch (error) {
-                Logger.debug("Warning during transport close:", error);
+                lastPayload = JSON.parse(text);
+            } catch {
+                lastPayload = { raw: text };
             }
-            this.transport = null;
+            const status = lastPayload?.status as string | undefined;
+
+            if (status) {
+                if (!validStatuses.has(status)) {
+                    console.warn(`[mux-upload-verify-real] Unexpected asset status: ${status}`);
+                } else {
+                    console.log(`[mux-upload-verify-real] asset status: ${status}`);
+                }
+                if (status === 'ready' || status === 'errored') {
+                    finalStatus = status;
+                    break;
+                }
+            } else {
+                console.log('[mux-upload-verify-real] asset status missing in response, continuing to poll...');
+                if (process.env.DEBUG) {
+                    console.log('[mux-upload-verify-real] Raw response:', text.slice(0, 200));
+                }
+            }
+        } catch (e) {
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            console.warn('[mux-upload-verify-real] Error fetching asset, will retry:', errorMsg);
+            if (process.env.DEBUG) {
+                console.log('[mux-upload-verify-real] Full error:', e);
+            }
         }
 
-        this.client = null;
-        Logger.info("Disconnected from Mux MCP Assets server");
+        await delay(pollMs);
     }
 
-    isConnected(): boolean {
-        return this.connected;
+    if (!finalStatus) {
+        throw new Error('Verification timed out before reaching a terminal status');
+    }
+    if (finalStatus !== 'ready') {
+        throw new Error(`Asset did not reach ready state (final: ${finalStatus}). Last payload: ${JSON.stringify(lastPayload)}`);
     }
 
-    async reset(): Promise<void> {
-        await this.disconnect();
-        await this.ensureConnected();
+    // Output final, machine-readable summary
+    const playbackId = Array.isArray(lastPayload?.playback_ids) && lastPayload.playback_ids.length > 0
+        ? (lastPayload.playback_ids[0]?.id as string | undefined)
+        : undefined;
+
+    console.log(`MUX_ASSET_ID=${assetId}`);
+    if (playbackId) console.log(`MUX_PLAYBACK_ID=${playbackId}`);
+
+    console.log('✅ Mux upload and verification succeeded. Asset is ready.');
+    if (playbackId) {
+        console.log(`🎥 Your video is now available at: https://stream.mux.com/${playbackId}.m3u8`);
     }
 }
 
-// Create and export a singleton instance
-export const muxMcpClient = new MuxMCPAssetsClient();
+function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-// Handle graceful shutdown
-process.on('SIGINT', async () => {
-    try {
-        await muxMcpClient.disconnect();
-    } catch (error) {
-        // Ignore errors during shutdown
-    }
-    process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-    try {
-        await muxMcpClient.disconnect();
-    } catch (error) {
-        // Ignore errors during shutdown
-    }
-    process.exit(0);
-});
+const isDirectRun = import.meta.url === pathToFileURL(process.argv[1]!).href;
+if (isDirectRun) {
+    main().catch((err) => {
+        console.error('❌ mux-upload-verify-real failed:', err instanceof Error ? err.message : String(err));
+        process.exit(1);
+    });
+}

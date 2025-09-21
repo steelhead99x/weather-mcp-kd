@@ -405,7 +405,9 @@ class MuxMCPClient {
                     tools[id] = createTool({
                         id,
                         description,
-                        inputSchema: z.object({}).passthrough(),
+                        inputSchema: z.object({
+                            UPLOAD_ID: z.string().optional().describe("Upload ID"),
+                        }).passthrough(),
                         execute: async ({ context }) => {
                             if (!this.client) throw new Error("Client not connected");
 
@@ -417,35 +419,6 @@ class MuxMCPClient {
                             }
 
                             Logger.debug(`Using invoke_api_endpoint wrapper for: ${endpoint}`);
-
-                            // Try to list endpoints and fetch schema (best effort)
-                            const listTool = tools['list_api_endpoints'] ? 'list_api_endpoints' : null;
-                            if (listTool && process.env.DEBUG) {
-                                try {
-                                    Logger.debug(`Listing API endpoints via ${listTool}`);
-                                    const listRes = await this.client.callTool({ name: listTool, arguments: {} });
-                                    Logger.info(`Available endpoints:`, JSON.stringify(listRes?.content ?? listRes));
-                                } catch (e) {
-                                    Logger.warn(`Failed to list endpoints`, e instanceof Error ? e.message : String(e));
-                                }
-                            }
-
-                            const schemaTool = tools['get_api_endpoint_schema'] ? 'get_api_endpoint_schema' : null;
-                            if (schemaTool && process.env.DEBUG) {
-                                const schemaAttempts = [
-                                    { endpoint },
-                                ];
-                                for (const sArgs of schemaAttempts) {
-                                    try {
-                                        Logger.debug(`Fetching schema for ${endpoint} via ${schemaTool}`, sArgs);
-                                        const schemaRes = await this.client.callTool({ name: schemaTool, arguments: sArgs });
-                                        Logger.info(`Schema for ${endpoint}:`, JSON.stringify(schemaRes?.content ?? schemaRes));
-                                        break; // don't loop further once one succeeds
-                                    } catch (e) {
-                                        Logger.warn(`Failed to fetch schema with variant`, e instanceof Error ? e.message : String(e));
-                                    }
-                                }
-                            }
 
                             const ctx = context || {};
                             const attemptArgs = [
@@ -490,7 +463,7 @@ class MuxMCPClient {
                     });
                 };
 
-                // Primary snake_case IDs per issue description (match MCP endpoint names)
+                // Primary snake_case IDs (match MCP endpoint names exactly)
                 addWrapper('create_video_uploads', 'create_video_uploads', 'Creates a new direct upload for video content');
                 addWrapper('retrieve_video_uploads', 'retrieve_video_uploads', 'Fetches information about a single direct upload');
                 addWrapper('list_video_uploads', 'list_video_uploads', 'Lists direct uploads');
@@ -569,9 +542,9 @@ class MuxMCPClient {
             console.warn("Failed to convert schema, using fallback:", error);
         }
 
-        // Fallback schema
+        // Fallback schema with correct parameter names
         return z.object({
-            id: z.string().optional().describe("Resource ID"),
+            UPLOAD_ID: z.string().optional().describe("Upload ID"),
             limit: z.number().optional().describe("Number of items to return"),
             offset: z.number().optional().describe("Number of items to skip"),
         });
