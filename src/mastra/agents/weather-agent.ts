@@ -410,6 +410,7 @@ const ttsWeatherTool = createTool({
 // Export the actual Mastra Agent instance (not a wrapper)
 export const weatherAgent = new Agent({
     name: "WeatherAgent",
+    description: "A professional weather broadcasting agent that provides current conditions, detailed forecasts, and generates audio weather reports for streaming via Mux",
     instructions: `
     You are a professional weather broadcaster. 
 
@@ -419,7 +420,7 @@ export const weatherAgent = new Agent({
     When a user provides a ZIP code, follow this EXACT process:
     
     1. ALWAYS use the weatherTool first to get the real weather data for that ZIP code
-    2. Analyze ALL the forecast periods returned by the weatherTool
+    2. Analyze ALL the forecast periods returned by weatherTool
     3. Create TWO separate outputs:
     
     CHAT RESPONSE (brief, 2-3 sentences):
