@@ -104,7 +104,7 @@ class CartesiaStreamingTTSClient {
             }
         });
 
-        this.ws.on('message', (data, isBinary) => {
+        this.ws.on('message', (data: WebSocket.RawData, isBinary: boolean) => {
             try {
                 if (isBinary || Buffer.isBuffer(data)) {
                     const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as any);
@@ -203,12 +203,12 @@ class CartesiaStreamingTTSClient {
             }
         });
 
-        this.ws.on('error', (err) => {
+        this.ws.on('error', (err: Error) => {
             console.log(`    WebSocket error: ${err.message}`);
             this.fail(err as Error);
         });
 
-        this.ws.on('close', (code) => {
+        this.ws.on('close', (code: number, reason: Buffer) => {
             console.log(`    WebSocket closed with code: ${code}`);
             console.log(`    Total chunks received: ${this.chunks.length}`);
 
