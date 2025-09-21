@@ -10,6 +10,7 @@
     "compile": "tsc",
     "clean": "rm -rf dist",
     "prebuild": "npm run clean",
+    "prestart": "npm run build",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test:claude": "npm run build && tsx src/mastra/scripts/test-claude.ts",
