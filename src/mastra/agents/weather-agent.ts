@@ -168,9 +168,20 @@ const ttsWeatherTool = createTool({
                 console.log('[tts-weather-upload] Using silence placeholder as fallback');
             }
 
-            // Generate TTS audio file
-            const outputBase = process.env.TTS_OUTPUT_BASE || 'files/tts-';
-            const outputPath = `${outputBase}${zipCode}-${Date.now()}${audioExtension}`;
+            // Generate TTS audio file with datetime-based filename
+            const dt = new Date();
+            const pad = (n: number) => n.toString().padStart(2, '0');
+            const yyyy = dt.getFullYear();
+            const mm = pad(dt.getMonth() + 1);
+            const dd = pad(dt.getDate());
+            const HH = pad(dt.getHours());
+            const MM = pad(dt.getMinutes());
+            const SS = pad(dt.getSeconds());
+            const datePart = `${yyyy}${mm}${dd}`;
+            const timePart = `${HH}${MM}${SS}`;
+            const baseDir = process.env.TTS_OUTPUT_DIR || 'files/uploads/tts';
+            const baseName = `tts-${datePart}-${timePart}-zip-${zipCode}`;
+            const outputPath = `${baseDir}/${baseName}${audioExtension}`;
             const absPath = resolve(outputPath);
 
             // Ensure output directory exists
@@ -198,12 +209,22 @@ const ttsWeatherTool = createTool({
             }
 
             console.log('[tts-weather-upload] Creating Mux upload...');
+            const imagePath = resolve('files/uploads/images/baby.jpeg');
+            const passthroughMeta = {
+                type: 'tts-audio',
+                zipCode,
+                imagePath,
+                filename: `${baseName}${audioExtension}`,
+                createdAt: new Date().toISOString(),
+            };
             const createArgs = {
                 cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
                 new_asset_settings: {
-                    playback_policies: ['signed'], // This should work based on the schema
+                    playback_policies: ['signed'],
+                    mp4_support: 'standard',
+                    passthrough: JSON.stringify(passthroughMeta),
                 },
-                test: process.env.MUX_UPLOAD_TEST === 'true' // Optional: mark as test upload
+                test: process.env.MUX_UPLOAD_TEST === 'true'
             };
 
             const createRes = await create.execute({ context: createArgs });
@@ -364,6 +385,9 @@ const ttsWeatherTool = createTool({
                 assetStatus: assetStatus || undefined,
                 playbackUrl: playbackUrl || (assetId ? `https://stream.mux.com/placeholder-${assetId}.m3u8` : undefined),
                 streamingPortfolioUrl: assetId ? `https://streamingportfolio.com/player?assetId=${assetId}` : undefined,
+                localAudioFile: absPath,
+                localImageFile: imagePath,
+                filename: `${baseName}${audioExtension}`,
                 message: `Weather TTS for ZIP ${zipCode} uploaded to Mux successfully`,
             };
 
