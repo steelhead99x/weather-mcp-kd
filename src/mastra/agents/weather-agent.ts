@@ -10,9 +10,51 @@ import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
 import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
 import { Memory } from "@mastra/memory";
 import { InMemoryStore } from "@mastra/core/storage";
-// Remove these lines:
-// import { ChromaVector } from "@mastra/chroma";
-// import { openai } from "@ai-sdk/openai";
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegStatic from 'ffmpeg-static';
+
+// Set the path to the ffmpeg binary
+if (ffmpegStatic) {
+    ffmpeg.setFfmpegPath(ffmpegStatic);
+}
+
+// Add this function after the existing TTS functions
+async function createVideoFromAudioAndImage(
+    audioPath: string, 
+    imagePath: string, 
+    outputPath: string
+): Promise<void> {
+    return new Promise((resolve, reject) => {
+        ffmpeg()
+            .input(imagePath)
+            .inputOptions(['-loop 1']) // Loop the image
+            .input(audioPath)
+            .outputOptions([
+                '-c:v libx264',
+                '-tune stillimage',
+                '-c:a aac',
+                '-b:a 192k',
+                '-pix_fmt yuv420p',
+                '-shortest' // Stop when the shortest stream ends (audio)
+            ])
+            .output(outputPath)
+            .on('start', (commandLine: string) => {
+                console.log(`[createVideo] FFmpeg command: ${commandLine}`);
+            })
+            .on('progress', (progress: { percent?: number }) => {
+                console.log(`[createVideo] Processing: ${Math.round((progress.percent ?? 0))}% done`);
+            })
+            .on('end', () => {
+                console.log(`[createVideo] Video created successfully: ${outputPath}`);
+                resolve();
+            })
+            .on('error', (err: Error) => {
+                console.error(`[createVideo] FFmpeg error: ${err.message}`);
+                reject(err);
+            })
+            .run();
+    });
+}
 
 // TTS synthesis functions
 async function synthesizeWithCartesiaTTS(text: string): Promise<{ audio: ArrayBuffer; extension: string }> {
@@ -136,7 +178,7 @@ const ttsWeatherTool = createTool({
             // Use provided text or generate a default weather report
             const weatherText = text || `Today's weather for ZIP code ${zipCode}: sunny with a high of 72 degrees. Light winds from the southwest at 8 miles per hour. Have a great day!`;
             
-            console.log(`[tts-weather-upload] Uploading your weather forecast to Mux: "${weatherText.slice(0, 100)}..."`);
+            console.log(`[tts-weather-upload] Creating video with weather forecast for Mux: "${weatherText.slice(0, 100)}..."`);
 
             // Generate actual TTS audio using available services
             let audioBuffer: Buffer;
@@ -181,20 +223,62 @@ const ttsWeatherTool = createTool({
             const timePart = `${HH}${MM}${SS}`;
             const baseDir = process.env.TTS_OUTPUT_DIR || 'files/uploads/tts';
             const baseName = `tts-${datePart}-${timePart}-zip-${zipCode}`;
-            const outputPath = `${baseDir}/${baseName}${audioExtension}`;
-            const absPath = resolve(outputPath);
+            
+            // Create paths for audio, image, and final video
+            const audioPath = `${baseDir}/${baseName}${audioExtension}`;
+            const videoPath = `${baseDir}/${baseName}.mp4`;
+            const absAudioPath = resolve(audioPath);
+            const absVideoPath = resolve(videoPath);
 
             // Ensure output directory exists
-            const outputDir = absPath.substring(0, absPath.lastIndexOf('/'));
+            const outputDir = absAudioPath.substring(0, absAudioPath.lastIndexOf('/'));
             await fs.mkdir(outputDir, { recursive: true });
 
-            await fs.writeFile(absPath, audioBuffer);
+            // Write the audio file first
+            await fs.writeFile(absAudioPath, audioBuffer);
             
-            // Verify file exists and log size
-            const stat = await fs.stat(absPath);
-            console.log(`[tts-weather-upload] Created TTS file: ${absPath} (${stat.size} bytes)`);
+            // Verify audio file exists and log size
+            const audioStat = await fs.stat(absAudioPath);
+            console.log(`[tts-weather-upload] Created TTS audio file: ${absAudioPath} (${audioStat.size} bytes)`);
 
-            // Upload to Mux
+            // Check if image exists, create a default one if not
+            const imagePath = resolve('files/uploads/images/baby.jpeg');
+            let finalImagePath = imagePath;
+
+            try {
+                await fs.access(imagePath);
+                console.log(`[tts-weather-upload] Using existing image: ${imagePath}`);
+            } catch {
+                // Create a simple colored background if image doesn't exist
+                const defaultImagePath = resolve(`${baseDir}/weather-bg.png`);
+                
+                // Create a simple 1280x720 colored background using FFmpeg
+                await new Promise<void>((resolve, reject) => {
+                    ffmpeg()
+                        .input('color=darkblue:size=1280x720:duration=1')
+                        .inputFormat('lavfi')
+                        .output(defaultImagePath)
+                        .outputOptions(['-vframes 1'])
+                        .on('end', () => {
+                            console.log(`[tts-weather-upload] Created default background: ${defaultImagePath}`);
+                            resolve();
+                        })
+                        .on('error', reject)
+                        .run();
+                });
+                
+                finalImagePath = defaultImagePath;
+            }
+
+            // Create video from audio and image using FFmpeg
+            console.log(`[tts-weather-upload] Creating video from audio and image...`);
+            await createVideoFromAudioAndImage(absAudioPath, finalImagePath, absVideoPath);
+
+            // Verify video file was created
+            const videoStat = await fs.stat(absVideoPath);
+            console.log(`[tts-weather-upload] Created video file: ${absVideoPath} (${videoStat.size} bytes)`);
+
+            // Upload the video file to Mux instead of just audio
             const uploadTools = await uploadClient.getTools();
             const create = uploadTools['create_video_uploads'] || uploadTools['video.uploads.create'];
 
@@ -204,19 +288,20 @@ const ttsWeatherTool = createTool({
                     success: false,
                     zipCode,
                     error: 'Mux upload tool not available',
-                    message: `Failed to create TTS and upload for ZIP ${zipCode}: Mux upload tool not available`,
+                    message: `Failed to create TTS video and upload for ZIP ${zipCode}: Mux upload tool not available`,
                 };
             }
 
-            console.log('[tts-weather-upload] Creating Mux upload...');
-            const imagePath = resolve('files/uploads/images/baby.jpeg');
+            console.log('[tts-weather-upload] Creating Mux upload for video...');
             const passthroughMeta = {
-                type: 'tts-audio',
+                type: 'tts-video', // Changed from 'tts-audio'
                 zipCode,
-                imagePath,
-                filename: `${baseName}${audioExtension}`,
+                imagePath: finalImagePath,
+                audioPath: absAudioPath,
+                filename: `${baseName}.mp4`, // Changed to .mp4
                 createdAt: new Date().toISOString(),
             };
+
             const createArgs = {
                 cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
                 new_asset_settings: {
@@ -254,24 +339,23 @@ const ttsWeatherTool = createTool({
                     success: false,
                     zipCode,
                     error: 'No upload URL received from Mux',
-                    message: `Failed to create TTS and upload for ZIP ${zipCode}: No upload URL received from Mux`,
+                    message: `Failed to create TTS video and upload for ZIP ${zipCode}: No upload URL received from Mux`,
                 };
             }
 
             console.log(`[tts-weather-upload] Uploading file to Mux: ${uploadUrl}`);
 
-            // Upload file to Mux
-            const fileBuffer = await fs.readFile(absPath);
-            // Ensure Blob gets a proper ArrayBuffer (not ArrayBufferLike)
-            const copy = new Uint8Array(fileBuffer);
-            const fileAB = copy.buffer;
+            // Upload video file to Mux
+            const videoBuffer = await fs.readFile(absVideoPath);
+            const videoCopy = new Uint8Array(videoBuffer);
+            const videoAB = videoCopy.buffer;
             const uploadResponse = await fetch(uploadUrl, {
                 method: 'PUT',
                 headers: {
-                    'Content-Type': 'application/octet-stream',
-                    'Content-Length': fileBuffer.length.toString(),
+                    'Content-Type': 'video/mp4', // Changed content type
+                    'Content-Length': videoBuffer.length.toString(),
                 },
-                body: new Blob([fileAB], { type: 'application/octet-stream' }),
+                body: new Blob([videoAB], { type: 'video/mp4' }),
             });
 
             if (!uploadResponse.ok) {
@@ -281,7 +365,7 @@ const ttsWeatherTool = createTool({
                     success: false,
                     zipCode,
                     error: `File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}. Response: ${errorText}`,
-                    message: `Failed to create TTS and upload for ZIP ${zipCode}: ${uploadResponse.status} ${uploadResponse.statusText}`,
+                    message: `Failed to create TTS video and upload for ZIP ${zipCode}: ${uploadResponse.status} ${uploadResponse.statusText}`,
                 };
             }
 
@@ -364,17 +448,20 @@ const ttsWeatherTool = createTool({
                 }
             }
 
-            // Clean up local file (optional)
+            // Clean up temporary files (optional)
             const shouldCleanup = process.env.TTS_CLEANUP === 'true';
             if (shouldCleanup) {
                 try {
-                    await fs.unlink(absPath);
-                    console.log(`[tts-weather-upload] Cleaned up local file: ${absPath}`);
+                    await fs.unlink(absAudioPath);
+                    await fs.unlink(absVideoPath);
+                    console.log(`[tts-weather-upload] Cleaned up temporary files`);
                 } catch (error) {
-                    console.warn(`[tts-weather-upload] Failed to clean up file ${absPath}:`, error);
+                    console.warn(`[tts-weather-upload] Failed to clean up files:`, error);
                 }
             } else {
-                console.log(`[tts-weather-upload] Keeping local TTS file (set TTS_CLEANUP=true to remove): ${absPath}`);
+                console.log(`[tts-weather-upload] Keeping local files (set TTS_CLEANUP=true to remove):`);
+                console.log(`  Audio: ${absAudioPath}`);
+                console.log(`  Video: ${absVideoPath}`);
             }
 
             const result = {
@@ -385,10 +472,11 @@ const ttsWeatherTool = createTool({
                 assetStatus: assetStatus || undefined,
                 playbackUrl: playbackUrl || (assetId ? `https://stream.mux.com/placeholder-${assetId}.m3u8` : undefined),
                 streamingPortfolioUrl: assetId ? `https://streamingportfolio.com/player?assetId=${assetId}` : undefined,
-                localAudioFile: absPath,
-                localImageFile: imagePath,
-                filename: `${baseName}${audioExtension}`,
-                message: `Weather TTS for ZIP ${zipCode} uploaded to Mux successfully`,
+                localAudioFile: absAudioPath,
+                localVideoFile: absVideoPath, // Added video file path
+                localImageFile: finalImagePath,
+                filename: `${baseName}.mp4`, // Changed to .mp4
+                message: `Weather TTS video for ZIP ${zipCode} uploaded to Mux successfully`,
             };
 
             console.log(`[tts-weather-upload] Result:`, result);
@@ -401,7 +489,7 @@ const ttsWeatherTool = createTool({
                 success: false,
                 zipCode,
                 error: errorMsg,
-                message: `Failed to create TTS and upload for ZIP ${zipCode}: ${errorMsg}`,
+                message: `Failed to create TTS video and upload for ZIP ${zipCode}: ${errorMsg}`,
             };
         }
     },
