@@ -26,3 +26,4 @@ dist/
 .mastra/
 files/
 weather-agent-memory.db
+/package-lock.json
