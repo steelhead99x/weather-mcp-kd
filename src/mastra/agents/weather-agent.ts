@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { Agent } from "@mastra/core";
 import { anthropic } from "@ai-sdk/anthropic";
-import { weatherTool } from "../tools/weather";
+import { weatherTool } from "../tools/weather.js";
 import { promises as fs } from 'fs';
 import { resolve, dirname } from 'path';
 import { createTool } from "@mastra/core/tools";
@@ -15,7 +15,7 @@ import ffmpegStatic from 'ffmpeg-static';
 import { existsSync } from 'fs';
 
 // Set and verify the path to the ffmpeg binary with robust fallbacks
-(() => {
+(async () => {
     try {
         const envOverride = process.env.FFMPEG_PATH || process.env.MASTRA_FFMPEG_PATH || process.env.FFMPEG;
         let candidate: string | undefined;
@@ -26,8 +26,8 @@ import { existsSync } from 'fs';
         } else {
             // Try @ffmpeg-installer/ffmpeg as an additional fallback
             try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+                const mod: any = await import('@ffmpeg-installer/ffmpeg');
+                const ffmpegInstaller = mod?.default || mod;
                 if (ffmpegInstaller && ffmpegInstaller.path) {
                     candidate = ffmpegInstaller.path;
                 }
@@ -470,7 +470,8 @@ const ttsWeatherTool = createTool({
             console.log(`[tts-weather-upload] Created TTS audio file: ${absAudioPath} (${audioStat.size} bytes)`);
 
             // Choose a random image from files/images; fall back to a generated background if none
-            const imageDir = resolve('files/images');
+            // Select a random image from the public images directory
+            const imageDir = resolve('src/mastra/public/files/images');
             let finalImagePath: string | undefined;
 
             try {
@@ -666,15 +667,14 @@ const ttsWeatherTool = createTool({
 
             // Upload video file to Mux
             const videoBuffer = await fs.readFile(absVideoPath);
-            const videoCopy = new Uint8Array(videoBuffer);
-            const videoAB = videoCopy.buffer;
+            const view = new Uint8Array(videoBuffer);
+            const ab = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
             const uploadResponse = await fetch(uploadUrl, {
                 method: 'PUT',
                 headers: {
-                    'Content-Type': 'video/mp4',
-                    'Content-Length': videoBuffer.length.toString(),
+                    'Content-Type': 'video/mp4'
                 },
-                body: new Blob([videoAB], { type: 'video/mp4' }),
+                body: new Blob([ab], { type: 'video/mp4' }),
             });
 
             if (!uploadResponse.ok) {

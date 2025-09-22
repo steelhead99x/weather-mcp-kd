@@ -132,7 +132,7 @@ class MuxMCPClient {
 
             this.transport = new StdioClientTransport({
                 command: "npx",
-                args: mcpArgs,
+                args: ["--no-install", ...mcpArgs],
                 env: {
                     ...process.env,
                     MUX_TOKEN_ID: process.env.MUX_TOKEN_ID,

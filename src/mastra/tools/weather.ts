@@ -78,7 +78,10 @@ export const weatherTool = createTool({
         }
 
         const pointsData = await pointsResponse.json();
-        const forecastUrl = pointsData.properties.forecast;
+        const forecastUrl = pointsData?.properties?.forecast || pointsData?.properties?.forecastHourly;
+        if (!forecastUrl || typeof forecastUrl !== 'string') {
+            throw new Error('Weather service did not provide a forecast URL for this location');
+        }
 
         // Get forecast
         const forecastResponse = await fetch(forecastUrl, {

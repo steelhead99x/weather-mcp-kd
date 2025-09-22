@@ -23,7 +23,6 @@ import { weatherAgentTestWrapper as weatherAgent } from '../agents/weather-agent
  *
  * Required environment variables:
  * - ANTHROPIC_API_KEY: For the Claude model
- * - WEATHER_MCP_ENDPOINT: Weather API endpoint
  * - WEATHER_MCP_USER_AGENT: User agent for weather requests
  * - MUX_TOKEN_ID: Mux API token ID
  * - MUX_TOKEN_SECRET: Mux API token secret
