@@ -606,6 +606,7 @@ export const weatherAgent = new Agent({
     CHAT RESPONSE (brief, 2-3 sentences):
     - Provide a clean summary of key weather highlights
     - Example: "Current conditions in San Francisco show partly cloudy skies with 68°F. Tonight expect lows around 55°F with increasing clouds. Tomorrow brings morning fog clearing to sunny skies with highs near 72°F."
+    - End with this short status line: "Generating your audio report now — please stand by for up to a few minutes while I generate the audio and Mux asset."
     
     TTS AUDIO SCRIPT (800-1000 words):
     - IMMEDIATELY after the brief chat response, call the ttsWeatherTool
@@ -725,7 +726,7 @@ export const weatherAgentTestWrapper = {
                         const details: string[] = [];
                         if (res.uploadId) details.push(`upload_id=${res.uploadId}`);
                         if (res.assetId) details.push(`asset_id=${res.assetId}`);
-                        const header = `I'll use the TTS tool to create an audio version of the weather report for ${where} (${zip}) and upload it to Mux for streaming.`;
+                        const header = `I'll use the TTS tool to create an audio version of the weather report for ${where} (${zip}) and upload it to Mux for streaming. Please stand by for up to a few minutes while I generate the audio and Mux asset.`;
                         const statusLine = details.length ? `Mux verification: ${details.join(', ')}` : 'Mux upload initiated.';
                         const streamLine = res.playbackUrl ? `Streaming URL: ${res.playbackUrl}` : 'Playback not ready yet; processing in Mux. I will provide the stream URL once ready.';
                         const text = [
@@ -749,7 +750,7 @@ export const weatherAgentTestWrapper = {
             } else {
                 const muxUrl = `https://stream.mux.com/${Math.random().toString(36).slice(2, 10)}.m3u8`;
                 const text = [
-                    `I'll use the TTS tool to create an audio version of the weather report for ${where} (${zip}) and upload it to Mux for streaming.`,
+                    `I'll use the TTS tool to create an audio version of the weather report for ${where} (${zip}) and upload it to Mux for streaming. Please stand by for up to a few minutes while I generate the audio and Mux asset.`,
                     '',
                     '[Using tts-weather-upload tool]',
                     '',
