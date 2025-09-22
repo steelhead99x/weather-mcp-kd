@@ -57,6 +57,9 @@ import { existsSync } from 'fs';
 
         // Pick the first defined candidate; avoid strict existsSync in serverless bundles
         const selected = candidates.find(p => typeof p === 'string' && p.trim().length > 0)?.trim();
+        console.log(`[init] FFmpeg candidates:`, candidates.filter(Boolean));
+        console.log(`[init] Selected FFmpeg path:`, selected);
+        
         if (selected) {
             ffmpeg.setFfmpegPath(selected);
             // Best-effort existence check to aid logs without blocking use in read-only FS
@@ -79,6 +82,14 @@ async function createVideoFromAudioAndImage(
 ): Promise<void> {
     const fps = Number(process.env.TTS_VIDEO_FPS) || 30;
     const isDebug = String(process.env.DEBUG).toLowerCase() === 'true';
+    
+    // Ensure FFmpeg path is set correctly before use
+    const ffmpegPath = process.env.FFMPEG_PATH || '/usr/bin/ffmpeg';
+    if (ffmpegPath !== ffmpeg.getFfmpegPath()) {
+        console.log(`[createVideo] Setting FFmpeg path to: ${ffmpegPath}`);
+        ffmpeg.setFfmpegPath(ffmpegPath);
+    }
+    
     return new Promise((resolve, reject) => {
         ffmpeg()
             .input(imagePath)
