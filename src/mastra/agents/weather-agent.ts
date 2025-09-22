@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { Agent } from "@mastra/core";
 import { anthropic } from "@ai-sdk/anthropic";
 import { weatherTool } from "../tools/weather.js";
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
