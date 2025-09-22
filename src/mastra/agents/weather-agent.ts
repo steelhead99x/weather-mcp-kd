@@ -621,7 +621,7 @@ export const weatherAgent = new Agent({
       * End with: "That's your complete weather outlook. Stay weather-aware and have a great day. I'm [Meteorologist Name] with your local weather center."
     
     CRITICAL REQUIREMENTS:
-    - Use ONLY real data from weatherTool - never invent temperatures, conditions, or forecasts
+    - Use ONLY real data from weatherTool - never invent temperatures, conditions, or forecast
     - Every forecast period from weatherTool MUST be covered in the TTS script
     - The TTS text should be 800-1000 words of natural broadcaster dialogue
     - Always provide both Mux and StreamingPortfolio URLs after TTS upload
