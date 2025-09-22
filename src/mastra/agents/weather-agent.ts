@@ -23,6 +23,17 @@ import { existsSync } from 'fs';
             candidate = envOverride.trim();
         } else if (typeof ffmpegStatic === 'string' && ffmpegStatic) {
             candidate = ffmpegStatic;
+        } else {
+            // Try @ffmpeg-installer/ffmpeg as an additional fallback
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+                if (ffmpegInstaller && ffmpegInstaller.path) {
+                    candidate = ffmpegInstaller.path;
+                }
+            } catch (_) {
+                // package not installed; ignore
+            }
         }
 
         if (candidate && existsSync(candidate)) {
