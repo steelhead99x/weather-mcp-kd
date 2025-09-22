@@ -85,10 +85,8 @@ async function createVideoFromAudioAndImage(
     
     // Ensure FFmpeg path is set correctly before use
     const ffmpegPath = process.env.FFMPEG_PATH || '/usr/bin/ffmpeg';
-    if (ffmpegPath !== ffmpeg.getFfmpegPath()) {
-        console.log(`[createVideo] Setting FFmpeg path to: ${ffmpegPath}`);
-        ffmpeg.setFfmpegPath(ffmpegPath);
-    }
+    console.log(`[createVideo] Setting FFmpeg path to: ${ffmpegPath}`);
+    ffmpeg.setFfmpegPath(ffmpegPath);
     
     return new Promise((resolve, reject) => {
         ffmpeg()
