@@ -69,7 +69,7 @@ class CartesiaStreamingTTSClient {
         console.log(`    WebSocket URL: ${wsUrl}`);
         console.log(`    Version: ${version}`);
 
-        this.ws = new WebSocket(wsUrl, {
+        this.ws = new WebSocket(wsUrl, undefined, {
             headers: {
                 Authorization: `Bearer ${apiKey}`,
                 'Cartesia-Version': version,
@@ -104,7 +104,7 @@ class CartesiaStreamingTTSClient {
             }
         });
 
-        this.ws.on('message', (data: WebSocket.RawData, isBinary: boolean) => {
+        this.ws.on('message', (data: any, isBinary: boolean) => {
             try {
                 if (isBinary || Buffer.isBuffer(data)) {
                     const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as any);

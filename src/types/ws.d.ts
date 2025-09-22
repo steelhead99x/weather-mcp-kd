@@ -25,6 +25,9 @@ declare module 'ws' {
 
     readyState: number;
 
+    // Overload: address + options (without protocols)
+    constructor(address: string, options?: WebSocketOptions);
+    // Overload: address + protocols + options
     constructor(address: string, protocols?: string | string[], options?: WebSocketOptions);
 
     on(event: 'open', listener: () => void): this;
