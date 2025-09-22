@@ -890,10 +890,6 @@ export async function streamWeatherAgentVNext(messages: Array<{ role: 'user' | '
     if (typeof agentAny.stream === 'function') {
         return agentAny.stream(messages, options);
     }
-    // As a last resort, try legacy if present (kept only for safety)
-    if (typeof agentAny.streamLegacy === 'function') {
-        return agentAny.streamLegacy(messages, options);
-    }
     throw new Error('Streaming is not supported by this Agent instance');
 }
 
