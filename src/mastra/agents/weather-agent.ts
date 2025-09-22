@@ -880,19 +880,19 @@ export const weatherAgent = new Agent({
     })
 });
 
-// Legacy streaming wrapper for backward compatibility
-export async function streamWeatherAgentLegacy(messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>, options?: any) {
+// vNext streaming helper (preferred)
+export async function streamWeatherAgentVNext(messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>, options?: any) {
     const agentAny: any = weatherAgent as any;
-    if (typeof agentAny.streamLegacy === 'function') {
-        return agentAny.streamLegacy(messages, options);
-    }
-    // Fallback to vNext to be forward-compatible
     if (typeof agentAny.streamVNext === 'function') {
         return agentAny.streamVNext(messages, options);
     }
-    // Last resort: call default stream if available
+    // Fallback to default stream if vNext is not present
     if (typeof agentAny.stream === 'function') {
         return agentAny.stream(messages, options);
+    }
+    // As a last resort, try legacy if present (kept only for safety)
+    if (typeof agentAny.streamLegacy === 'function') {
+        return agentAny.streamLegacy(messages, options);
     }
     throw new Error('Streaming is not supported by this Agent instance');
 }
