@@ -5,11 +5,11 @@ RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files explicitly to ensure lockfile is present
+COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies (omit dev deps for production)
+RUN npm ci --omit=dev
 
 # Copy source code
 COPY . .
