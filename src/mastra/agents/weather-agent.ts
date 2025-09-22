@@ -32,6 +32,12 @@ import { existsSync } from 'fs';
             '/opt/ffmpeg/ffmpeg'
         );
 
+        // 2.5) Common Docker/Alpine locations
+        candidates.push(
+            '/usr/bin/ffmpeg',
+            '/usr/local/bin/ffmpeg'
+        );
+
         // 3) Bundled static binary paths
         if (typeof ffmpegStatic === 'string' && ffmpegStatic) {
             candidates.push(ffmpegStatic);

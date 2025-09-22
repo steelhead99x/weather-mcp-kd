@@ -29,6 +29,7 @@ EXPOSE 8080
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV HOST=0.0.0.0
+ENV FFMPEG_PATH=/usr/bin/ffmpeg
 
 # Start the application with telemetry
 CMD ["npm", "run", "start:telemetry"]
