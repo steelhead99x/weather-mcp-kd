@@ -57,6 +57,8 @@ async function createVideoFromAudioAndImage(
     imagePath: string,
     outputPath: string
 ): Promise<void> {
+    const fps = Number(process.env.TTS_VIDEO_FPS) || 30;
+    const isDebug = String(process.env.DEBUG).toLowerCase() === 'true';
     return new Promise((resolve, reject) => {
         ffmpeg()
             .input(imagePath)
@@ -65,6 +67,7 @@ async function createVideoFromAudioAndImage(
             .outputOptions([
                 '-c:v libx264',
                 '-tune stillimage',
+                `-r ${fps}`,
                 '-c:a aac',
                 '-b:a 192k',
                 '-pix_fmt yuv420p',
@@ -72,10 +75,10 @@ async function createVideoFromAudioAndImage(
             ])
             .output(outputPath)
             .on('start', (commandLine: string) => {
-                console.log(`[createVideo] FFmpeg command: ${commandLine}`);
+                if (isDebug) console.log(`[createVideo] FFmpeg command: ${commandLine}`);
             })
             .on('progress', (progress: { percent?: number }) => {
-                console.log(`[createVideo] Processing: ${Math.round((progress.percent ?? 0))}% done`);
+                if (isDebug) console.log(`[createVideo] Processing: ${Math.round((progress.percent ?? 0))}% done`);
             })
             .on('end', () => {
                 console.log(`[createVideo] Video created successfully: ${outputPath}`);
@@ -233,6 +236,24 @@ function formatDateForSpeech(date: Date): string {
     const tzPart = tzLong || 'local time';
 
     return `${weekday}, ${month} ${dayWithOrdinal}, ${year} at ${timePart} ${tzPart}`;
+}
+
+// Helper: retry wrapper for MCP getTools to tolerate slow cold starts
+async function getToolsWithRetry(client: { getTools: () => Promise<any> }, label: string, tries = 3, delayMs = 4000) {
+    let lastErr: any;
+    for (let i = 0; i < tries; i++) {
+        try {
+            if (i > 0) console.log(`[mux-mcp] Retrying ${label} tools connection (attempt ${i + 1}/${tries})...`);
+            return await client.getTools();
+        } catch (e) {
+            lastErr = e;
+            console.warn(`[mux-mcp] ${label} tools connection failed:`, e instanceof Error ? e.message : String(e));
+            if (i < tries - 1) {
+                await new Promise(r => setTimeout(r, delayMs));
+            }
+        }
+    }
+    throw lastErr;
 }
 
 // TTS functionality for weather reports
@@ -481,23 +502,31 @@ const ttsWeatherTool = createTool({
             }
 
             if (!finalImagePath) {
-                // Create a simple colored background as fallback
-                const defaultImagePath = resolve(`${baseDir}/weather-bg.png`);
+                // Create or reuse a simple colored background as fallback under files/images
+                const imagesDir = resolve('files/images');
+                const defaultImagePath = resolve(imagesDir, 'weather-bg.png');
+                try {
+                    await fs.mkdir(imagesDir, { recursive: true });
+                } catch {}
 
-                await new Promise<void>((resolve, reject) => {
-                    ffmpeg()
-                        .input('color=darkblue:size=1280x720:duration=1')
-                        .inputFormat('lavfi')
-                        .output(defaultImagePath)
-                        .outputOptions(['-vframes 1'])
-                        .on('end', () => {
-                            console.log(`[tts-weather-upload] Created fallback background: ${defaultImagePath}`);
-                            console.log(`[tts-weather-upload] To use your own images, place .jpg/.jpeg/.png/.gif files in: files/images`);
-                            resolve();
-                        })
-                        .on('error', reject)
-                        .run();
-                });
+                if (!existsSync(defaultImagePath)) {
+                    await new Promise<void>((resolve, reject) => {
+                        ffmpeg()
+                            .input('color=darkblue:size=1280x720:duration=1')
+                            .inputFormat('lavfi')
+                            .output(defaultImagePath)
+                            .outputOptions(['-vframes 1'])
+                            .on('end', () => {
+                                console.log(`[tts-weather-upload] Created fallback background: ${defaultImagePath}`);
+                                console.log(`[tts-weather-upload] To use your own images, place .jpg/.jpeg/.png/.gif files in: files/images`);
+                                resolve();
+                            })
+                            .on('error', reject)
+                            .run();
+                    });
+                } else {
+                    console.log(`[tts-weather-upload] Reusing fallback background: ${defaultImagePath}`);
+                }
 
                 finalImagePath = defaultImagePath;
             }
@@ -511,7 +540,7 @@ const ttsWeatherTool = createTool({
             console.log(`[tts-weather-upload] Created video file: ${absVideoPath} (${videoStat.size} bytes)`);
 
             // Upload to Mux
-            const uploadTools = await uploadClient.getTools();
+            const uploadTools = await getToolsWithRetry(uploadClient, 'Upload');
             const create = uploadTools['create_video_uploads'] || uploadTools['video.uploads.create'];
 
             if (!create) {
@@ -684,7 +713,7 @@ const ttsWeatherTool = createTool({
             // If we still don't have a playback URL but have an assetId, try assets client
             if (!playbackUrl && assetId) {
                 try {
-                    const assetsTools = await assetsClient.getTools();
+                    const assetsTools = await getToolsWithRetry(assetsClient, 'Assets');
                     const getAsset = assetsTools['retrieve_video_assets'] || assetsTools['video.assets.retrieve'] || assetsTools['video.assets.get'];
                     if (getAsset) {
                         const pollMs = 3000;
@@ -768,41 +797,42 @@ export const weatherAgent = new Agent({
     name: "WeatherAgent",
     description: "An agricultural weather advisor for local farmers: clear forecasts, crop-aware guidance, and short audio reports uploaded to Mux for easy listening",
     instructions: `
-    You are a professional agricultural weather advisor. Your default tone is practical crop and field advice for the current time of year. Keep language plain and easy for local farmers to act on.
+    You are a professional agricultural weather advisor. Default to clear, practical guidance for local farmers with seasonal crop advice. Keep sentences short and easy to act on.
 
-    PERSONAS (style/flavor only—content stays agriculture-focused):
+    PERSONAS (style/flavor only—content remains agriculture-focused):
     1) Northern California rancher — plainspoken, friendly, practical.
     2) Classic weather forecaster — neutral, professional broadcaster tone.
     3) South Florida gator farmer — colorful, folksy, coastal-savvy.
 
-    On the FIRST user interaction, briefly offer these three personas. If the user doesn’t choose, you may pick one, but ALWAYS keep the advisory focused on farming tasks and crop decisions by season.
+    On the FIRST user interaction, briefly offer these three personas. If none is chosen, pick one at random. Regardless of style, focus on farming tasks and crop decisions.
 
     LOCATION INPUT:
     - Accept either a 5-digit ZIP or a city (preferably "City, ST").
-    - If the user gives a city or ambiguous input, ALWAYS call resolve-zip first to get a canonical ZIP before calling other tools.
+    - If a city or ambiguous input is given, ALWAYS call resolve-zip first to get a canonical ZIP before calling other tools.
 
     PROCESS:
-    1. Use resolve-zip when needed to obtain a valid ZIP and the normalized City, State.
+    1. Use resolve-zip when needed to obtain a valid ZIP and normalized City, State.
     2. Use weatherTool with that ZIP to fetch real forecast data.
     3. Produce TWO outputs:
 
-    CHAT RESPONSE (brief, 2–3 sentences, farmer-friendly):
-    - Summarize key weather impacts for fields/livestock in the normalized City, State.
-    - Give one actionable farm tip (e.g., irrigation window, spraying wind limits, frost/heat stress, harvest timing).
-    - End with: "Generating your audio report now — please stand by while I generate the audio and Mux asset."
+    CHAT RESPONSE FORMAT (use Markdown; 2–3 short sentences total):
+    - Start with a bold header: **Ag Weather — {City, ST}**
+    - Next line: one-sentence summary of key impacts on fields/livestock.
+    - Next line: one actionable farm tip (e.g., irrigation window, spray wind limits, frost/heat stress, harvest timing).
+    - Finish with a line: Generating your audio report now — please stand by while I generate the audio and Mux asset.
 
     TTS AUDIO SCRIPT (STRICT <= 500 characters total, agriculture-focused):
-    - Immediately call ttsWeatherTool and pass a concise script (<= 500 characters), in the chosen persona’s voice.
+    - Immediately call ttsWeatherTool and pass a concise script (<= 500 chars) in the chosen persona’s voice.
     - Include: city/state, temp and wind, precip/thunder risk if relevant, and ONE seasonal farm tip (irrigate/spray/cover/harvest/graze timing).
     - Keep it natural and clear; do NOT exceed 500 characters.
 
     SEASONAL AWARENESS:
-    - Use the current date to tailor tips (e.g., spring frost risk, summer heat stress and irrigation, fall harvest windows, winter freeze protection).
+    - Use today’s date to tailor tips (spring frost, summer irrigation/heat stress, fall harvest windows, winter freeze protection).
 
     CRITICAL REQUIREMENTS:
     - Use ONLY real data from weatherTool; never invent values.
-    - Stay within 500 characters for the TTS text (the tool will truncate if necessary).
-    - Provide Mux and StreamingPortfolio URLs after upload if available.
+    - Stay within 500 characters for the TTS text (tool will truncate if necessary).
+    - After upload, provide any Mux/StreamingPortfolio URLs — always place them at the very END of your message for better UI layout.
 
     Example TTS call:
     ttsWeatherTool.execute({
