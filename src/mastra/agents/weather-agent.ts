@@ -556,28 +556,41 @@ const ttsWeatherTool = createTool({
             console.log('[tts-weather-upload] Creating Mux upload for video...');
 
             // Try multiple argument formats for the MCP tool
+            const playbackPolicyEnv = (process.env.MUX_SIGNED_PLAYBACK === 'true' || (process.env.MUX_PLAYBACK_POLICY || '').toLowerCase() === 'signed') ? 'signed' : 'public';
+            const corsOrigin = process.env.MUX_CORS_ORIGIN || 'http://localhost';
+            const testFlag = process.env.MUX_UPLOAD_TEST === 'true';
+
             const createArgsVariants = [
-                // Format 1: Based on API schema (playback_policies as array)
+                // Format 1: Mux API canonical (array field is "playback_policy")
                 {
-                    cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
+                    cors_origin: corsOrigin,
                     new_asset_settings: {
-                        playback_policies: ['signed'],
-                        mp4_support: 'standard'
-                    }
-                },
-                // Format 2: Alternative format
-                {
-                    cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
-                    new_asset_settings: {
-                        playbook_policy: 'signed',
+                        playback_policy: [playbackPolicyEnv],
                         mp4_support: 'standard'
                     },
-                    ...(process.env.MUX_UPLOAD_TEST === 'true' ? { test: true } : {})
+                    ...(testFlag ? { test: true } : {})
                 },
-                // Format 3: Minimal format
+                // Format 2: Allow singular playback_policy value as string (some MCPs coerce)
                 {
-                    cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
-                    ...(process.env.MUX_UPLOAD_TEST === 'true' ? { test: true } : {})
+                    cors_origin: corsOrigin,
+                    new_asset_settings: {
+                        playback_policy: playbackPolicyEnv,
+                        mp4_support: 'standard'
+                    },
+                    ...(testFlag ? { test: true } : {})
+                },
+                // Format 3: Minimal (only cors_origin)
+                {
+                    cors_origin: corsOrigin,
+                    ...(testFlag ? { test: true } : {})
+                },
+                // Format 4: Provide new_asset_settings without mp4_support (server default)
+                {
+                    cors_origin: corsOrigin,
+                    new_asset_settings: {
+                        playback_policy: [playbackPolicyEnv]
+                    },
+                    ...(testFlag ? { test: true } : {})
                 }
             ];
 
