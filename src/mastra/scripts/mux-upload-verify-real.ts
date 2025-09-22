@@ -135,10 +135,17 @@ async function main() {
     };
     if (process.env.MUX_UPLOAD_TEST === 'true') createArgs.test = true;
 
-    // Add timeout if specified (align with MUX_CONNECTION_TIMEOUT used by clients)
+    // Add timeout if specified (Mux expects SECONDS, not ms)
     const timeoutEnv = process.env.MUX_CONNECTION_TIMEOUT;
-    if (timeoutEnv && Number(timeoutEnv) > 0) {
-        createArgs.timeout = Number(timeoutEnv);
+    if (timeoutEnv) {
+        const raw = Number(timeoutEnv);
+        if (!Number.isNaN(raw) && raw > 0) {
+            // If value looks like ms (> 600), convert to seconds
+            let seconds = raw > 600 ? Math.ceil(raw / 1000) : raw;
+            // Clamp to a safe range: 1s - 3600s
+            seconds = Math.max(1, Math.min(3600, seconds));
+            createArgs.timeout = seconds;
+        }
     }
 
     if (process.env.DEBUG) {

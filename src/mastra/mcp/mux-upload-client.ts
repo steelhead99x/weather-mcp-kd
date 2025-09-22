@@ -48,7 +48,7 @@ class MuxMCPClient {
     // Timeout configuration constants
     private static readonly MIN_CONNECTION_TIMEOUT = 5000;    // 5 seconds minimum
     private static readonly MAX_CONNECTION_TIMEOUT = 300000;  // 5 minutes maximum
-    private static readonly DEFAULT_CONNECTION_TIMEOUT = 45000; // 45 seconds default
+    private static readonly DEFAULT_CONNECTION_TIMEOUT = 20000; // 20 seconds default
 
     private client: Client | null = null;
     private transport: StdioClientTransport | null = null;
@@ -132,7 +132,7 @@ class MuxMCPClient {
 
             this.transport = new StdioClientTransport({
                 command: "npx",
-                args: ["--no-install", ...mcpArgs],
+                args: mcpArgs,
                 env: {
                     ...process.env,
                     MUX_TOKEN_ID: process.env.MUX_TOKEN_ID,
@@ -402,6 +402,11 @@ class MuxMCPClient {
 
             if (hasInvoke) {
                 const addWrapper = (id: string, endpoint: string, description: string) => {
+                    // Do not override a direct MCP tool if it already exists
+                    if (tools[id]) {
+                        Logger.debug(`Direct tool already exists for ${id}, skipping wrapper`);
+                        return;
+                    }
                     tools[id] = createTool({
                         id,
                         description,
@@ -421,24 +426,44 @@ class MuxMCPClient {
                             Logger.debug(`Using invoke_api_endpoint wrapper for: ${endpoint}`);
 
                             const ctx = context || {};
+                            const endpointSnake = endpoint.replace(/\./g, '_');
                             const attemptArgs = [
-                                // Standard format that most MCP servers expect
-                                { endpoint, args: ctx },
+                                // Preferred format used by Mux MCP invoke tool
+                                { endpoint_name: endpoint, arguments: ctx },
+                                // Flattened variant (some MCP servers expect flat params)
+                                { endpoint_name: endpoint, ...ctx },
 
-                                // Direct endpoint call format
-                                { endpoint_name: endpoint, args: ctx },
-
-                                // Legacy formats (keep as fallback)
+                                // Alternate specifying endpoint under `endpoint`
+                                { endpoint, arguments: ctx },
                                 { endpoint, ...ctx },
+
+                                // Other common container keys
+                                { endpoint_name: endpoint, parameters: ctx },
+                                { endpoint, parameters: ctx },
+                                { endpoint_name: endpoint, body: ctx },
+                                { endpoint_name: endpoint, data: ctx },
                                 { endpoint, body: ctx },
                                 { endpoint, params: ctx },
                                 { endpoint, data: ctx },
-                                { endpoint, arguments: ctx },
+
+                                // Name-style keys
                                 { name: endpoint, arguments: ctx },
+                                { name: endpoint, ...ctx },
                                 { id: endpoint, arguments: ctx },
                                 { tool: endpoint, arguments: ctx },
+
+                                // Generic fallbacks
                                 { endpoint, input: ctx },
                                 { endpoint, payload: ctx },
+                                { endpoint_name: endpoint, body: JSON.stringify(ctx) },
+
+                                // Also try using the tool name as the endpoint (e.g., create_video_uploads)
+                                { endpoint_name: id, arguments: ctx },
+                                { endpoint: id, arguments: ctx },
+
+                                // Try snake_case variant for dotted endpoints (e.g., video.uploads.create -> create_video_uploads)
+                                { endpoint_name: endpointSnake, arguments: ctx },
+                                { endpoint: endpointSnake, arguments: ctx },
                             ];
 
                             let lastErr: any;
@@ -463,17 +488,17 @@ class MuxMCPClient {
                     });
                 };
 
-                // Primary snake_case IDs (match MCP endpoint names exactly)
-                addWrapper('create_video_uploads', 'create_video_uploads', 'Creates a new direct upload for video content');
-                addWrapper('retrieve_video_uploads', 'retrieve_video_uploads', 'Fetches information about a single direct upload');
-                addWrapper('list_video_uploads', 'list_video_uploads', 'Lists direct uploads');
-                addWrapper('cancel_video_uploads', 'cancel_video_uploads', 'Cancels a direct upload in waiting state');
+                // Primary snake_case IDs (internally invoke dotted endpoints expected by invoke_api_endpoint)
+                addWrapper('create_video_uploads', 'video.uploads.create', 'Creates a new direct upload for video content');
+                addWrapper('retrieve_video_uploads', 'video.uploads.get', 'Fetches information about a single direct upload');
+                addWrapper('list_video_uploads', 'video.uploads.list', 'Lists direct uploads');
+                addWrapper('cancel_video_uploads', 'video.uploads.cancel', 'Cancels a direct upload in waiting state');
 
-                // Dotted aliases for convenience/compatibility (map to snake endpoints under the hood)
-                addWrapper('video.uploads.create', 'create_video_uploads', 'Creates a new direct upload for video content');
-                addWrapper('video.uploads.get', 'retrieve_video_uploads', 'Fetches information about a single direct upload');
-                addWrapper('video.uploads.list', 'list_video_uploads', 'Lists direct uploads');
-                addWrapper('video.uploads.cancel', 'cancel_video_uploads', 'Cancels a direct upload in waiting state');
+                // Dotted aliases for convenience/compatibility
+                addWrapper('video.uploads.create', 'video.uploads.create', 'Creates a new direct upload for video content');
+                addWrapper('video.uploads.get', 'video.uploads.get', 'Fetches information about a single direct upload');
+                addWrapper('video.uploads.list', 'video.uploads.list', 'Lists direct uploads');
+                addWrapper('video.uploads.cancel', 'video.uploads.cancel', 'Cancels a direct upload in waiting state');
             }
 
             Logger.info(`Successfully created ${Object.keys(tools).length} Mastra tools from MCP`);

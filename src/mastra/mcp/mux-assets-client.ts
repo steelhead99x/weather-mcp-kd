@@ -126,13 +126,20 @@ class MuxAssetsMCPClient {
                         if (direct && direct !== tools[id]) return direct.execute({ context });
                         const ctx = context || {};
                         const attemptArgs = [
-                            { endpoint, args: ctx },
-                            { endpoint_name: endpoint, args: ctx },
+                            { endpoint_name: endpoint, arguments: ctx },
+                            { endpoint_name: endpoint, ...ctx },
+                            { endpoint, arguments: ctx },
                             { endpoint, ...ctx },
+                            { endpoint_name: endpoint, parameters: ctx },
+                            { endpoint, parameters: ctx },
+                            { endpoint_name: endpoint, body: ctx },
+                            { endpoint_name: endpoint, data: ctx },
                             { endpoint, body: ctx },
                             { endpoint, params: ctx },
-                            { endpoint, arguments: ctx },
+                            { endpoint, data: ctx },
                             { name: endpoint, arguments: ctx },
+                            { name: endpoint, ...ctx },
+                            { endpoint_name: endpoint, body: JSON.stringify(ctx) },
                         ];
                         let lastErr: any;
                         for (const args of attemptArgs) {
@@ -144,13 +151,13 @@ class MuxAssetsMCPClient {
                 });
             };
 
-            // Snake_case canonical endpoints
-            addWrapper('retrieve_video_assets', 'retrieve_video_assets', 'Retrieve a single asset by ID');
-            addWrapper('list_video_assets', 'list_video_assets', 'List assets with pagination', z.object({ limit: z.number().optional(), page: z.number().optional() }).passthrough());
+            // Snake_case canonical wrapper IDs (invoke dotted endpoints internally)
+            addWrapper('retrieve_video_assets', 'video.assets.retrieve', 'Retrieve a single asset by ID');
+            addWrapper('list_video_assets', 'video.assets.list', 'List assets with pagination', z.object({ limit: z.number().optional(), page: z.number().optional() }).passthrough());
 
             // Dotted aliases
-            addWrapper('video.assets.retrieve', 'retrieve_video_assets', 'Retrieve a single asset by ID');
-            addWrapper('video.assets.list', 'list_video_assets', 'List assets with pagination', z.object({ limit: z.number().optional(), page: z.number().optional() }).passthrough());
+            addWrapper('video.assets.retrieve', 'video.assets.retrieve', 'Retrieve a single asset by ID');
+            addWrapper('video.assets.list', 'video.assets.list', 'List assets with pagination', z.object({ limit: z.number().optional(), page: z.number().optional() }).passthrough());
         }
 
         return tools;
