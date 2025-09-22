@@ -415,24 +415,42 @@ const ttsWeatherTool = createTool({
             const audioStat = await fs.stat(absAudioPath);
             console.log(`[tts-weather-upload] Created TTS audio file: ${absAudioPath} (${audioStat.size} bytes)`);
 
-            // Check if image exists, create a default one if not
-            const imagePath = resolve('files/images/baby.jpeg');
-            let finalImagePath = imagePath;
+            // Choose a random image from files/images; fall back to a generated background if none
+            const imageDir = resolve('files/images');
+            let finalImagePath: string | undefined;
 
             try {
-                await fs.access(imagePath);
-                console.log(`[tts-weather-upload] Using existing image: ${imagePath}`);
-            } catch {
-                console.warn(`[tts-weather-upload] Image not found at: ${imagePath}`);
-                console.log(`[tts-weather-upload] Please ensure baby.jpeg exists at files/images/baby.jpeg`);
-                
-                // Create the images directory if it doesn't exist
-                const imageDir = resolve('files/images');
+                // Ensure images directory exists
                 await fs.mkdir(imageDir, { recursive: true });
-                
+
+                // Read directory and filter by common image extensions
+                const entries = await fs.readdir(imageDir, { withFileTypes: true } as any);
+                const allowed = new Set(['.jpg', '.jpeg', '.png', '.gif']);
+                const files = (entries as any[])
+                    .filter((d: any) => d && typeof d.name === 'string' && (d.isFile?.() || d.isSymbolicLink?.()))
+                    .map((d: any) => d.name)
+                    .filter((name: string) => {
+                        const lower = name.toLowerCase();
+                        const dot = lower.lastIndexOf('.');
+                        const ext = dot >= 0 ? lower.slice(dot) : '';
+                        return !name.startsWith('.') && allowed.has(ext);
+                    });
+
+                if (files.length > 0) {
+                    const picked = files[Math.floor(Math.random() * files.length)];
+                    finalImagePath = resolve(imageDir, picked);
+                    console.log(`[tts-weather-upload] Using random image: ${finalImagePath}`);
+                } else {
+                    console.warn(`[tts-weather-upload] No images found in ${imageDir}. Will create a fallback background.`);
+                }
+            } catch (e) {
+                console.warn(`[tts-weather-upload] Failed to list images in ${imageDir}:`, e);
+            }
+
+            if (!finalImagePath) {
                 // Create a simple colored background as fallback
                 const defaultImagePath = resolve(`${baseDir}/weather-bg.png`);
-                
+
                 await new Promise<void>((resolve, reject) => {
                     ffmpeg()
                         .input('color=darkblue:size=1280x720:duration=1')
@@ -441,13 +459,13 @@ const ttsWeatherTool = createTool({
                         .outputOptions(['-vframes 1'])
                         .on('end', () => {
                             console.log(`[tts-weather-upload] Created fallback background: ${defaultImagePath}`);
-                            console.log(`[tts-weather-upload] To use your image, place it at: files/images/baby.jpeg`);
+                            console.log(`[tts-weather-upload] To use your own images, place .jpg/.jpeg/.png/.gif files in: files/images`);
                             resolve();
                         })
                         .on('error', reject)
                         .run();
                 });
-                
+
                 finalImagePath = defaultImagePath;
             }
 
