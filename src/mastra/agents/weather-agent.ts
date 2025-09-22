@@ -12,11 +12,33 @@ import { Memory } from "@mastra/memory";
 import { InMemoryStore } from "@mastra/core/storage";
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
+import { existsSync } from 'fs';
 
-// Set the path to the ffmpeg binary
-if (ffmpegStatic) {
-    ffmpeg.setFfmpegPath(ffmpegStatic);
-}
+// Set and verify the path to the ffmpeg binary with robust fallbacks
+(() => {
+    try {
+        const envOverride = process.env.FFMPEG_PATH || process.env.MASTRA_FFMPEG_PATH || process.env.FFMPEG;
+        let candidate: string | undefined;
+        if (envOverride && envOverride.trim()) {
+            candidate = envOverride.trim();
+        } else if (typeof ffmpegStatic === 'string' && ffmpegStatic) {
+            candidate = ffmpegStatic;
+        }
+
+        if (candidate && existsSync(candidate)) {
+            ffmpeg.setFfmpegPath(candidate);
+            console.log(`[init] Using FFmpeg binary at: ${candidate}`);
+        } else {
+            // Fall back to system ffmpeg on PATH
+            const fallback = process.env.FFMPEG || 'ffmpeg';
+            ffmpeg.setFfmpegPath(fallback);
+            console.log(`[init] FFmpeg binary not found at ${candidate || '(none)'}; falling back to: ${fallback}`);
+        }
+    } catch (e) {
+        // As a last resort, rely on default discovery
+        console.warn('[init] Failed to resolve FFmpeg path robustly; relying on default lookup. Error:', e);
+    }
+})();
 
 // Video creation utility
 async function createVideoFromAudioAndImage(
