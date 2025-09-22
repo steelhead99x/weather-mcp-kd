@@ -22,7 +22,7 @@ class Logger {
 class MuxAssetsMCPClient {
     private static readonly MIN_CONNECTION_TIMEOUT = 5000;
     private static readonly MAX_CONNECTION_TIMEOUT = 300000;
-    private static readonly DEFAULT_CONNECTION_TIMEOUT = 20000;
+    private static readonly DEFAULT_CONNECTION_TIMEOUT = 45000;
 
     private client: Client | null = null;
     private transport: StdioClientTransport | null = null;
@@ -54,7 +54,7 @@ class MuxAssetsMCPClient {
 
         this.transport = new StdioClientTransport({
             command: "npx",
-            args: mcpArgs,
+            args: ["--no-install", ...mcpArgs],
             env: {
                 ...process.env,
                 MUX_TOKEN_ID: process.env.MUX_TOKEN_ID,

@@ -48,7 +48,7 @@ class MuxMCPClient {
     // Timeout configuration constants
     private static readonly MIN_CONNECTION_TIMEOUT = 5000;    // 5 seconds minimum
     private static readonly MAX_CONNECTION_TIMEOUT = 300000;  // 5 minutes maximum
-    private static readonly DEFAULT_CONNECTION_TIMEOUT = 20000; // 20 seconds default
+    private static readonly DEFAULT_CONNECTION_TIMEOUT = 45000; // 45 seconds default
 
     private client: Client | null = null;
     private transport: StdioClientTransport | null = null;
@@ -132,7 +132,7 @@ class MuxMCPClient {
 
             this.transport = new StdioClientTransport({
                 command: "npx",
-                args: mcpArgs,
+                args: ["--no-install", ...mcpArgs],
                 env: {
                     ...process.env,
                     MUX_TOKEN_ID: process.env.MUX_TOKEN_ID,
