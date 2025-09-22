@@ -1,7 +1,9 @@
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 
-# Install ffmpeg for video processing
-RUN apk add --no-cache ffmpeg
+# Install ffmpeg for video processing (Debian provides H.264/AAC support)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
