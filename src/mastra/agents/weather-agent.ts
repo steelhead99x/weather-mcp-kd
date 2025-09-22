@@ -203,6 +203,123 @@ function formatDateForSpeech(date: Date): string {
 }
 
 // TTS functionality for weather reports
+// Utility: Clamp text to a maximum number of characters without breaking mid-word when possible
+function clampText(input: string, maxChars: number): string {
+    if (input.length <= maxChars) return input;
+    const slice = input.slice(0, maxChars);
+    const lastSpace = slice.lastIndexOf(' ');
+    const trimmed = lastSpace > maxChars - 50 ? slice.slice(0, lastSpace) : slice;
+    return trimmed.trimEnd() + '…';
+}
+
+// Utility: Resolve a city/state or ZIP into a canonical 5-digit ZIP using public APIs
+const resolveZipTool = createTool({
+    id: "resolve-zip",
+    description: "Resolve a city and state or ZIP into a canonical 5-digit US ZIP code",
+    inputSchema: z.object({
+        location: z.string().describe("Either a 5-digit ZIP code or a location like 'City, ST' or 'City ST'. State can be full name or 2-letter code."),
+    }),
+    outputSchema: z.object({
+        zipCode: z.string(),
+        city: z.string(),
+        state: z.string(),
+    }),
+    execute: async ({ context }) => {
+        const raw = String(context.location || '').trim();
+        if (!raw) throw new Error('location is required');
+
+        const norm = raw.replace(/\s+/g, ' ').trim();
+        const zipMatch = norm.match(/^\d{5}$/);
+        const USER_AGENT = process.env.WEATHER_MCP_USER_AGENT || "WeatherMCP/0.1 (mail@streamingportfolio.com)";
+
+        async function verifyZip(zip: string) {
+            const res = await fetch(`https://api.zippopotam.us/us/${zip}`);
+            if (!res.ok) throw new Error(`Invalid ZIP code: ${zip}`);
+            const data = await res.json();
+            const place = Array.isArray(data?.places) && data.places[0];
+            const city = place?.["place name"] || place?.place || 'Unknown';
+            const state = place?.["state abbreviation"] || place?.state || '';
+            return { zipCode: zip, city, state };
+        }
+
+        function parseCityState(str: string): { city?: string; state?: string } {
+            if (str.includes(',')) {
+                const [cityPart, statePart] = str.split(',').map(s => s.trim());
+                return { city: cityPart, state: statePart };
+            }
+            const parts = str.split(' ');
+            if (parts.length >= 2) {
+                const statePart = parts.pop() as string;
+                const cityPart = parts.join(' ');
+                return { city: cityPart, state: statePart };
+            }
+            return { city: str };
+        }
+
+        async function viaZippopotam(city: string, state?: string) {
+            if (!city) return null;
+            let st = state || '';
+            if (st && st.length > 2) {
+                // Try to convert full state name to 2-letter code using a minimal map
+                const map: Record<string, string> = {
+                    'alabama':'AL','alaska':'AK','arizona':'AZ','arkansas':'AR','california':'CA','colorado':'CO','connecticut':'CT','delaware':'DE','florida':'FL','georgia':'GA','hawaii':'HI','idaho':'ID','illinois':'IL','indiana':'IN','iowa':'IA','kansas':'KS','kentucky':'KY','louisiana':'LA','maine':'ME','maryland':'MD','massachusetts':'MA','michigan':'MI','minnesota':'MN','mississippi':'MS','missouri':'MO','montana':'MT','nebraska':'NE','nevada':'NV','new hampshire':'NH','new jersey':'NJ','new mexico':'NM','new york':'NY','north carolina':'NC','north dakota':'ND','ohio':'OH','oklahoma':'OK','oregon':'OR','pennsylvania':'PA','rhode island':'RI','south carolina':'SC','south dakota':'SD','tennessee':'TN','texas':'TX','utah':'UT','vermont':'VT','virginia':'VA','washington':'WA','west virginia':'WV','wisconsin':'WI','wyoming':'WY','district of columbia':'DC','dc':'DC'
+                };
+                const normState = st.toLowerCase();
+                st = map[normState] || st.toUpperCase();
+            }
+            if (!st) return null;
+            const url = `https://api.zippopotam.us/us/${encodeURIComponent(st)}/${encodeURIComponent(city)}`;
+            const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+            if (!res.ok) return null;
+            const data = await res.json();
+            const place = Array.isArray(data?.places) && data.places[0];
+            const zip = place?.["post code"] || place?.['post_code'] || place?.postcode;
+            const stateAbr = place?.["state abbreviation"] || st;
+            const cityName = place?.["place name"] || city;
+            if (zip) return { zipCode: String(zip).slice(0,5), city: cityName, state: stateAbr };
+            return null;
+        }
+
+        async function viaNominatim(str: string) {
+            const url = new URL('https://nominatim.openstreetmap.org/search');
+            url.searchParams.set('q', `${str}, USA`);
+            url.searchParams.set('format', 'json');
+            url.searchParams.set('addressdetails', '1');
+            url.searchParams.set('limit', '1');
+            const res = await fetch(url.toString(), { headers: { 'User-Agent': USER_AGENT } });
+            if (!res.ok) return null;
+            const arr = await res.json();
+            const item = Array.isArray(arr) && arr[0];
+            const addr = item?.address || {};
+            let postcode: string = addr.postcode || '';
+            if (!postcode && typeof item?.display_name === 'string') {
+                const m = item.display_name.match(/\b\d{5}(?:-\d{4})?\b/);
+                if (m) postcode = m[0];
+            }
+            if (!postcode) return null;
+            const zip5 = postcode.slice(0,5);
+            const city = addr.city || addr.town || addr.village || addr.hamlet || '';
+            const state = addr.state_code || addr.state || '';
+            if (/^\d{5}$/.test(zip5)) return { zipCode: zip5, city, state };
+            return null;
+        }
+
+        if (zipMatch) {
+            return await verifyZip(zipMatch[0]);
+        }
+        const { city: parsedCity, state: parsedState } = parseCityState(norm);
+        let resolved = await viaZippopotam(parsedCity || '', parsedState);
+        if (!resolved) {
+            resolved = await viaNominatim(norm);
+        }
+        if (!resolved) {
+            throw new Error(`Could not resolve location to a ZIP: "${raw}". Please provide either a 5-digit ZIP or a "City, State".`);
+        }
+        // Final verify to ensure it is a valid zip and to normalize city/state
+        return await verifyZip(resolved.zipCode);
+    },
+});
+
 const ttsWeatherTool = createTool({
     id: "tts-weather-upload",
     description: "Convert weather report and upload to Mux for streaming",
@@ -228,7 +345,15 @@ const ttsWeatherTool = createTool({
             const timestamp = formatDateForSpeech(now);
             const dateHeader = `This forecast was generated on ${timestamp}.`;
             // Place the timestamp at the end of the audio so the forecast content plays first
-            const ttsText = `${weatherText}\n\n${dateHeader}`;
+            let ttsText = `${weatherText}\n\n${dateHeader}`;
+
+            // Enforce strict 500-character limit to fit provider constraints and user requirement
+            const MAX_TTS_CHARS = 500;
+            if (ttsText.length > MAX_TTS_CHARS) {
+                const before = ttsText.length;
+                ttsText = clampText(ttsText, MAX_TTS_CHARS);
+                console.log(`[tts-weather-upload] TTS text truncated from ${before} to ${ttsText.length} characters to meet limit`);
+            }
 
             console.log(`[tts-weather-upload] Creating video with weather forecast for Mux: "${ttsText.slice(0, 100)}..."`);
 
@@ -592,49 +717,46 @@ export const weatherAgent = new Agent({
     name: "WeatherAgent",
     description: "A professional weather broadcasting agent that provides current conditions, detailed forecasts, and generates audio weather reports for streaming via Mux",
     instructions: `
-    You are a professional weather broadcaster. 
+    You are a professional weather broadcaster with selectable personas.
 
-    IMPORTANT: When the conversation starts or when a user first connects, ALWAYS greet them proactively with:
-    "Hello! I'm your personal weather assistant. Please share your 5-digit ZIP code and I'll provide you with current conditions, detailed forecasts, and can even create an audio weather report for you to stream!"
-    
-    When a user provides a ZIP code, follow this EXACT process:
-    
-    1. ALWAYS use the weatherTool first to get the real weather data for that ZIP code
-    2. Analyze ALL the forecast periods returned by weatherTool
-    3. Create TWO separate outputs:
-    
+    PERSONAS (pick one unless the user specifies):
+    1) Northern California rancher — plainspoken, friendly, practical.
+    2) Classic weather forecaster — neutral, professional broadcaster tone.
+    3) South Florida gator farmer — colorful, folksy, coastal-savvy.
+
+    On the FIRST user interaction, if no persona is specified, briefly offer these three choices. If the user does not choose, pick one at random and proceed.
+
+    LOCATION INPUT:
+    - Accept either a 5-digit ZIP or a city (preferably "City, ST").
+    - If the user gives a city or ambiguous input, ALWAYS call resolve-zip first to get a canonical ZIP before calling other tools.
+
+    PROCESS:
+    1. Use resolve-zip when needed to obtain a valid ZIP and the normalized City, State.
+    2. Use weatherTool with that ZIP to fetch real forecast data.
+    3. Produce TWO outputs:
+
     CHAT RESPONSE (brief, 2-3 sentences):
-    - Provide a clean summary of key weather highlights
-    - Example: "Current conditions in San Francisco show partly cloudy skies with 68°F. Tonight expect lows around 55°F with increasing clouds. Tomorrow brings morning fog clearing to sunny skies with highs near 72°F."
-    - End with this short status line: "Generating your audio report now — please stand by for up to a few minutes while I generate the audio and Mux asset."
-    
-    TTS AUDIO SCRIPT (800-1000 words):
-    - IMMEDIATELY after the brief chat response, call the ttsWeatherTool
-    - Pass a comprehensive broadcaster-style script as the 'text' parameter
-    - Structure the TTS script like this:
-      * "Good morning, I'm your meteorologist with your complete weather picture for [actual location from weatherTool]"
-      * Current conditions using REAL data from weatherTool
-      * Go through EVERY forecast period returned by weatherTool (tonight, tomorrow morning, tomorrow afternoon, tomorrow night, day after, etc.)
-      * For EACH period, expand into 2-3 broadcaster sentences covering temperature, conditions, wind, precipitation
-      * Add practical advice: "For your morning commute..." "If you're planning outdoor activities..."
-      * Include meteorological context: "This pattern is typical for..." "The pressure system bringing us..."
-      * Professional transitions: "Looking ahead to tonight..." "As we move into tomorrow..." "The extended outlook shows..."
-      * End with: "That's your complete weather outlook. Stay weather-aware and have a great day. I'm [Meteorologist Name] with your local weather center."
-    
+    - Summarize key highlights for the normalized City, State.
+    - End with: "Generating your audio report now — please stand by while I generate the audio and Mux asset."
+
+    TTS AUDIO SCRIPT (STRICT <= 500 characters total):
+    - Immediately call ttsWeatherTool and pass a concise script (<= 500 characters), written in the selected persona’s voice.
+    - Include: city/state name, current or next period highlight, temp and wind, and a short tip.
+    - Keep it natural and coherent; do NOT exceed 500 characters.
+
     CRITICAL REQUIREMENTS:
-    - Use ONLY real data from weatherTool - never invent temperatures, conditions, or forecast
-    - Every forecast period from weatherTool MUST be covered in the TTS script
-    - The TTS text should be 800-1000 words of natural broadcaster dialogue
-    - Always provide both Mux and StreamingPortfolio URLs after TTS upload
-    
+    - Use ONLY real data from weatherTool; never invent values.
+    - Stay within 500 characters for the TTS text (the tool will truncate if necessary).
+    - Provide Mux and StreamingPortfolio URLs after upload if available.
+
     Example TTS call:
     ttsWeatherTool.execute({
       zipCode: "94102",
-      text: "Good evening, I'm your meteorologist with your complete weather picture for San Francisco, California. [FULL 800-1000 word broadcaster script using real weather data...]"
+      text: "Good evening from San Francisco, CA — patchy fog then sun, highs near 68°, light onshore breeze. Great afternoon for a stroll by the bay."
     })
   `,
     model: anthropic("claude-3-5-haiku-latest"),
-    tools: { weatherTool, ttsWeatherTool },
+    tools: { resolveZipTool, weatherTool, ttsWeatherTool },
     memory: new Memory({
         storage: new InMemoryStore(),
         options: {
