@@ -12,84 +12,26 @@ import { Memory } from "@mastra/memory";
 import { InMemoryStore } from "@mastra/core/storage";
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
-import { existsSync } from 'fs';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 
-// Set and verify the path to the ffmpeg binary with serverless-friendly fallbacks
-const execFileAsync = promisify(execFile);
-
-async function verifyFfmpeg(bin: string, timeoutMs = 5000): Promise<boolean> {
+// Minimal FFmpeg path setup: prefer env override, then packaged binary, else rely on PATH.
+(() => {
     try {
-        await execFileAsync(bin, ['-version'], { timeout: timeoutMs, windowsHide: true });
-        return true;
-    } catch {
-        return false;
-    }
-}
+        const envPath = (process.env.FFMPEG_PATH || process.env.MASTRA_FFMPEG_PATH || process.env.FFMPEG || '').trim();
+        if (envPath) {
+            ffmpeg.setFfmpegPath(envPath);
+            console.log(`[init] Using FFmpeg from env: ${envPath}`);
+            return;
+        }
 
-(async () => {
-    try {
-        const rawCandidates: Array<string | undefined> = [
-            // 1) Explicit env overrides (strongest)
-            process.env.FFMPEG_PATH,
-            process.env.MASTRA_FFMPEG_PATH,
-            process.env.FFMPEG,
-
-            // 2) Common serverless locations (e.g., AWS Lambda layer)
-            '/opt/bin/ffmpeg',
-            '/opt/ffmpeg/ffmpeg',
-
-            // 2.5) Common Docker/Debian/Alpine locations
-            '/usr/bin/ffmpeg',
-            '/usr/local/bin/ffmpeg',
-        ];
-
-        // 3) Bundled static binary paths
         if (typeof ffmpegStatic === 'string' && ffmpegStatic) {
-            rawCandidates.push(ffmpegStatic);
-        }
-        try {
-            const mod: any = await import('@ffmpeg-installer/ffmpeg');
-            const ffmpegInstaller = mod?.default || mod;
-            if (ffmpegInstaller && ffmpegInstaller.path) {
-                rawCandidates.push(ffmpegInstaller.path);
-            }
-        } catch {
-            // ignore if not installed
+            ffmpeg.setFfmpegPath(ffmpegStatic);
+            console.log('[init] Using FFmpeg from ffmpeg-static package.');
+            return;
         }
 
-        // 4) System fallback via PATH
-        rawCandidates.push('ffmpeg');
-
-        // Deduplicate, trim, and keep only strings
-        const candidates = Array.from(new Set(
-            rawCandidates.filter((p): p is string => typeof p === 'string')
-                         .map(p => p.trim())
-                         .filter(p => p.length > 0)
-        ));
-
-        console.log('[init] FFmpeg candidates:', candidates);
-
-        // Prefer the first env-provided value if it verifies, otherwise probe all
-        let selected: string | undefined;
-
-        // If the very first candidate verifies, use it; otherwise iterate
-        for (const c of candidates) {
-            const ok = await verifyFfmpeg(c);
-            if (ok) { selected = c; break; }
-        }
-
-        if (selected) {
-            ffmpeg.setFfmpegPath(selected);
-            const note = (existsSync(selected)) ? 'found' : 'set (existence not guaranteed)';
-            console.log(`[init] Using FFmpeg: ${selected} (${note})`);
-        } else {
-            // As a last resort, leave fluent-ffmpeg to locate via PATH at runtime
-            console.warn('[init] No working FFmpeg binary found during init. Will rely on PATH at runtime.');
-        }
+        console.log('[init] No explicit FFmpeg path set; relying on system PATH.');
     } catch (e) {
-        console.warn('[init] Failed to resolve/verify FFmpeg; relying on default lookup. Error:', e instanceof Error ? e.message : String(e));
+        console.warn('[init] FFmpeg init skipped; relying on PATH. Error:', e instanceof Error ? e.message : String(e));
     }
 })();
 
@@ -105,18 +47,12 @@ async function createVideoFromAudioAndImage(
     // Ensure FFmpeg path is set correctly before use
     const ffmpegPath = process.env.FFMPEG_PATH || process.env.MASTRA_FFMPEG_PATH || process.env.FFMPEG;
     if (ffmpegPath) {
-        console.log(`[createVideo] Setting FFmpeg path to: ${ffmpegPath}`);
+        console.log(`[createVideo] Using FFmpeg from env: ${ffmpegPath}`);
         ffmpeg.setFfmpegPath(ffmpegPath);
     } else {
-        console.log('[createVideo] No explicit FFmpeg path set; using PATH resolution.');
+        console.log('[createVideo] Using FFmpeg resolved at init or system PATH.');
     }
 
-    // Preflight check so we fail fast with a clear message
-    const ok = await verifyFfmpeg(ffmpegPath || 'ffmpeg');
-    if (!ok) {
-        throw new Error('FFmpeg binary is not available or not executable. Set FFMPEG_PATH or include ffmpeg in PATH.');
-    }
-    
     return new Promise((resolve, reject) => {
         ffmpeg()
             .input(imagePath)
