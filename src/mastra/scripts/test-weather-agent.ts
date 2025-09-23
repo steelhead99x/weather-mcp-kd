@@ -17,6 +17,56 @@
  *   MUX_TOKEN_ID + MUX_TOKEN_SECRET
  */
 import { weatherAgentTestWrapper as weatherAgent } from '../agents/weather-agent.js';
+import { promises as fs } from 'fs';
+import { resolve } from 'path';
+
+async function findLatestWav(dir: string): Promise<string | null> {
+    try {
+        const abs = resolve(dir);
+        const entries = await fs.readdir(abs, { withFileTypes: true });
+        const files = entries.filter(e => e.isFile() && e.name.endsWith('.wav')).map(e => e.name);
+        if (files.length === 0) return null;
+        const stats = await Promise.all(files.map(async name => {
+            const p = resolve(abs, name);
+            const st = await fs.stat(p);
+            return { p, mtimeMs: st.mtimeMs };
+        }));
+        stats.sort((a, b) => b.mtimeMs - a.mtimeMs);
+        return stats[0].p;
+    } catch {
+        return null;
+    }
+}
+
+function computeWavRMS(buf: Buffer): number {
+    // minimal WAV parser for PCM s16le
+    if (buf.length < 44) return 0;
+    // find 'data' chunk
+    let offset = 12; // after RIFF header (12 bytes)
+    let dataOffset = -1;
+    let dataSize = 0;
+    while (offset + 8 <= buf.length) {
+        const id = buf.toString('ascii', offset, offset + 4);
+        const size = buf.readUInt32LE(offset + 4);
+        if (id === 'data') {
+            dataOffset = offset + 8;
+            dataSize = size;
+            break;
+        }
+        offset += 8 + size;
+    }
+    if (dataOffset < 0 || dataOffset + dataSize > buf.length) return 0;
+    let sumSquares = 0;
+    let count = 0;
+    for (let i = dataOffset; i + 1 < dataOffset + dataSize; i += 2) {
+        const sample = buf.readInt16LE(i);
+        sumSquares += sample * sample;
+        count++;
+    }
+    if (count === 0) return 0;
+    const rms = Math.sqrt(sumSquares / count) / 32768;
+    return rms;
+}
 
 /**
  * Test the Weather Agent including TTS upload functionality
@@ -137,6 +187,24 @@ async function testDirectTTSTool(): Promise<void> {
             console.log('⚠️  TTS tool result unclear - checking if Mux upload was attempted...');
             assertContainsAny(result.text, ['mux', 'upload', 'streaming'],
                 'Agent should at least attempt Mux upload');
+        }
+
+        // Attempt to verify non-silent audio file was generated locally
+        try {
+            const latest = await findLatestWav('files/uploads/tts');
+            if (latest) {
+                const buf = await fs.readFile(latest);
+                const rms = computeWavRMS(buf);
+                console.log(`ℹ️  Latest WAV: ${latest} | RMS=${rms.toFixed(4)}`);
+                if (rms <= 0.0005) {
+                    throw new Error(`Audio appears silent (RMS=${rms}).`);
+                }
+                console.log('✓ Audio verification: non-silent waveform detected');
+            } else {
+                console.log('ℹ️  No local WAV found to verify (maybe cleanup enabled)');
+            }
+        } catch (e) {
+            console.warn('⚠️  Audio verification warning:', e instanceof Error ? e.message : String(e));
         }
 
         if (hasSuccess) {

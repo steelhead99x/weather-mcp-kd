@@ -16,10 +16,13 @@ import ffmpegStatic from 'ffmpeg-static';
 
 // Set the path to the ffmpeg binary
 if (ffmpegStatic) {
+    console.log(`[weather-agent] ffmpeg-static path: ${ffmpegStatic}`);
     ffmpeg.setFfmpegPath(ffmpegStatic);
+    console.log(`[weather-agent] Using ffmpeg-static: ${ffmpegStatic}`);
 } else {
     // Fallback to system ffmpeg
-    console.log('[weather-agent] Using system ffmpeg (ffmpeg-static not available)');
+    console.log('[weather-agent] ffmpeg-static not available, using system ffmpeg');
+    ffmpeg.setFfmpegPath('ffmpeg');
 }
 
 // Video creation utility
@@ -59,7 +62,13 @@ async function createVideoFromAudioAndImage(
             })
             .on('error', (err: Error) => {
                 console.error(`[createVideo] FFmpeg error: ${err.message}`);
-                console.error(`[createVideo] Make sure FFmpeg is installed and accessible`);
+                if (err.message.includes('ENOENT')) {
+                    console.error(`[createVideo] FFmpeg binary not found. Please ensure FFmpeg is properly installed.`);
+                    console.error(`[createVideo] Current ffmpeg path: ${ffmpegStatic || 'system ffmpeg'}`);
+                    console.error(`[createVideo] Try: apt-get install ffmpeg (Ubuntu/Debian) or apk add ffmpeg (Alpine)`);
+                } else {
+                    console.error(`[createVideo] Make sure FFmpeg is installed and accessible`);
+                }
                 reject(new Error(`FFmpeg failed: ${err.message}. Please ensure FFmpeg is properly installed.`));
             })
             .run();
@@ -117,7 +126,8 @@ async function synthesizeWithDeepgramTTS(text: string): Promise<{ audio: ArrayBu
 
     const apiUrl = new URL('https://api.deepgram.com/v1/speak');
     apiUrl.searchParams.set('model', model);
-    apiUrl.searchParams.set('encoding', 'linear16'); // This produces WAV format
+    // Ensure Deepgram returns a proper WAV container rather than raw PCM/MP3
+    apiUrl.searchParams.set('format', 'wav');
 
     const res = await fetch(apiUrl.toString(), {
         method: 'POST',
@@ -134,6 +144,12 @@ async function synthesizeWithDeepgramTTS(text: string): Promise<{ audio: ArrayBu
     }
 
     const arrayBuf = await res.arrayBuffer();
+
+    // Basic sanity check: ensure buffer is not trivially small
+    if ((arrayBuf.byteLength || 0) < 800) {
+        throw new Error(`Deepgram TTS returned unusually small audio (${arrayBuf.byteLength} bytes)`);
+    }
+
     return { audio: arrayBuf, extension: '.wav' };
 }
 
@@ -166,6 +182,50 @@ function createSilenceWAV(durationSeconds: number): Buffer {
     // data chunk
     buffer.write('data', offset); offset += 4;
     buffer.writeUInt32LE(dataSize, offset);
+
+    return buffer;
+}
+
+// Create a simple audible tone WAV (non-silent) for fallback/testing
+function createToneWAV(durationSeconds: number, frequency = 440): Buffer {
+    const sampleRate = 44100;
+    const channels = 2;
+    const bitsPerSample = 16;
+    const numSamples = Math.floor(sampleRate * durationSeconds);
+    const dataSize = numSamples * channels * (bitsPerSample / 8);
+    const fileSize = 44 + dataSize;
+
+    const buffer = Buffer.alloc(fileSize);
+    let offset = 0;
+
+    // RIFF header
+    buffer.write('RIFF', offset); offset += 4;
+    buffer.writeUInt32LE(fileSize - 8, offset); offset += 4;
+    buffer.write('WAVE', offset); offset += 4;
+
+    // fmt chunk
+    buffer.write('fmt ', offset); offset += 4;
+    buffer.writeUInt32LE(16, offset); offset += 4;
+    buffer.writeUInt16LE(1, offset); offset += 2; // PCM
+    buffer.writeUInt16LE(channels, offset); offset += 2;
+    buffer.writeUInt32LE(sampleRate, offset); offset += 4;
+    buffer.writeUInt32LE(sampleRate * channels * (bitsPerSample / 8), offset); offset += 4;
+    buffer.writeUInt16LE(channels * (bitsPerSample / 8), offset); offset += 2;
+    buffer.writeUInt16LE(bitsPerSample, offset); offset += 2;
+
+    // data chunk header
+    buffer.write('data', offset); offset += 4;
+    buffer.writeUInt32LE(dataSize, offset); offset += 4;
+
+    // Sine wave data (stereo)
+    const amplitude = Math.floor(0.25 * 32767); // 25% amplitude
+    for (let i = 0; i < numSamples; i++) {
+        const t = i / sampleRate;
+        const sample = Math.floor(amplitude * Math.sin(2 * Math.PI * frequency * t));
+        // write same sample to L and R channels
+        buffer.writeInt16LE(sample, offset); offset += 2;
+        buffer.writeInt16LE(sample, offset); offset += 2;
+    }
 
     return buffer;
 }
@@ -357,6 +417,54 @@ const ttsWeatherTool = createTool({
             // Place the timestamp at the end of the audio so the forecast content plays first
             let ttsText = `${weatherText}\n\n${dateHeader}`;
 
+            // Optionally slow down and naturalize the script for clearer speech
+            function naturalizeForTTS(input: string): string {
+                let out = input
+                    // Expand abbreviations for clearer speech
+                    .replace(/\bmph\b/gi, 'miles per hour')
+                    .replace(/\bUV\b/g, 'U V')
+                    .replace(/\bNWS\b/g, 'National Weather Service')
+                    .replace(/\bN\b(?=\W|$)/g, 'north')
+                    .replace(/\bS\b(?=\W|$)/g, 'south')
+                    .replace(/\bE\b(?=\W|$)/g, 'east')
+                    .replace(/\bW\b(?=\W|$)/g, 'west')
+                    .replace(/\bNW\b/gi, 'northwest')
+                    .replace(/\bNE\b/gi, 'northeast')
+                    .replace(/\bSW\b/gi, 'southwest')
+                    .replace(/\bSE\b/gi, 'southeast')
+                    // Speak temperatures more naturally
+                    .replace(/(\d{1,3})\s*°\s*F/gi, '$1 degrees')
+                    .replace(/(\d{1,3})\s*F\b/gi, '$1 degrees')
+                    // Normalize percent
+                    .replace(/(\d{1,3})%/g, '$1 percent');
+
+                // Encourage short phrases and micro-pauses using commas and dashes
+                // Replace long runs of text with shorter sentences
+                out = out
+                    .replace(/\s*\n\s*/g, '. ') // collapse newlines to sentences
+                    .replace(/\s{2,}/g, ' ')
+                    .replace(/\.\s*(?=[A-Za-z])/g, '. ') // ensure single space after periods
+                ;
+
+                // If pacing env is set, add gentle pauses
+                const slow = String(process.env.WEATHER_TTS_SLOW || 'true').toLowerCase() !== 'false';
+                if (slow) {
+                    out = out
+                        .replace(/,\s*/g, ', ')
+                        .replace(/:\s*/g, ': ')
+                        // add a slight pause after city/state opener
+                        .replace(/^(Good (morning|afternoon|evening)[^\.]*)\./i, '$1 —')
+                        // turn semicolons into dashes to cue pause
+                        .replace(/;/g, ' — ')
+                        // add small pauses before key connectors
+                        .replace(/\b(Today|Tonight|Tomorrow|This (morning|afternoon|evening)|Later)\b/gi, '... $1');
+                }
+
+                return out.trim();
+            }
+
+            ttsText = naturalizeForTTS(ttsText);
+
             // Enforce strict 500-character limit to fit provider constraints and user requirement
             const MAX_TTS_CHARS = 500;
             if (ttsText.length > MAX_TTS_CHARS) {
@@ -384,15 +492,15 @@ const ttsWeatherTool = createTool({
                     audioBuffer = Buffer.from(audioResult.audio);
                     audioExtension = audioResult.extension;
                 } else {
-                    console.warn('[tts-weather-upload] No TTS service configured. Using placeholder audio.');
-                    audioBuffer = createSilenceWAV(1.0); // 1 second
+                    console.warn('[tts-weather-upload] No TTS service configured. Using placeholder audio tone.');
+                    audioBuffer = createToneWAV(2.0); // 2 seconds of 440 Hz tone
                     audioExtension = '.wav';
                 }
             } catch (ttsError) {
                 console.warn('[tts-weather-upload] TTS generation failed:', ttsError);
-                audioBuffer = createSilenceWAV(1.0); // 1 second
+                audioBuffer = createToneWAV(2.0); // 2 seconds tone fallback
                 audioExtension = '.wav';
-                console.log('[tts-weather-upload] Using silence placeholder as fallback');
+                console.log('[tts-weather-upload] Using tone placeholder as fallback');
             }
 
             // Generate TTS audio file with datetime-based filename
@@ -714,6 +822,13 @@ export const weatherAgent = new Agent({
     instructions: `
     You are a professional weather broadcaster with selectable personas.
 
+    VOICE AND CLARITY:
+    - Speak slowly and clearly with short, simple sentences.
+    - Prefer natural, everyday terms over jargon (say "degrees" not "F", "miles per hour" not "mph").
+    - Expand abbreviations; avoid acronyms unless you spell them out.
+    - Use gentle pauses with commas or dashes. Keep it easy to follow for all listeners.
+    - Maintain the chosen persona, but clarity always comes first.
+
     PERSONAS (pick one unless the user specifies):
     1) Northern California rancher — plainspoken, friendly, practical.
     2) Classic weather forecaster — neutral, professional broadcaster tone.
@@ -749,7 +864,9 @@ export const weatherAgent = new Agent({
 
     TTS AUDIO SCRIPT (STRICT <= 500 characters total):
     - Immediately call ttsWeatherTool and pass a concise script (<= 500 characters), written in the selected persona's voice.
-    - Include: city/state name, TODAY's highlight (current/tonight), tomorrow's outlook, key temperature range, and brief safety tip.
+    - Speak slowly and clearly: short sentences, plain words, and gentle pauses using commas or dashes.
+    - Avoid abbreviations (use "degrees", "miles per hour"). Spell acronyms if needed.
+    - Include: city/state name, TODAY's highlight (current/tonight), tomorrow's outlook, key temperature range, and a brief safety tip.
     - Keep it natural and coherent; do NOT exceed 500 characters.
 
     STREAMING URLS OUTPUT:
@@ -883,8 +1000,17 @@ export const weatherAgentTestWrapper = {
         }
 
         const lastMsg = messages[messages.length - 1]?.content || '';
-        const zipMatch = lastMsg.match(/\b(\d{5})\b/);
+        let zipMatch = lastMsg.match(/\b(\d{5})\b/);
         const wantsAudio = /\b(audio|tts|stream|upload|mux)\b/i.test(lastMsg);
+
+        // If user requests audio but didn't repeat ZIP, try to find it in earlier messages
+        if (wantsAudio && !zipMatch) {
+            for (let i = messages.length - 2; i >= 0; i--) {
+                const m = messages[i]?.content || '';
+                const mZip = m.match(/\b(\d{5})\b/);
+                if (mZip) { zipMatch = mZip; break; }
+            }
+        }
 
         const zipToCity: Record<string, { city: string; state: string }> = {
             '60601': { city: 'Chicago', state: 'IL' },
