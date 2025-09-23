@@ -15,6 +15,8 @@ import ffmpeg from 'fluent-ffmpeg';
 import { existsSync } from 'fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+// Add: streamVNext MCP client
+import { muxMcpClient as streamClient } from '../mcp/mux-upload-client';
 
 const execFileAsync = promisify(execFile);
 
@@ -292,7 +294,8 @@ export const weatherAgent = new Agent({
     name: 'weatherAgent',
     description: 'A helpful weather assistant that provides weather information for ZIP codes and can generate audio/video summaries using TTS and Mux upload capabilities.',
     instructions: buildSystemPrompt(),
-    model: anthropic('claude-3-5-sonnet-latest'),
+    // Avoid hard-failing on unavailable model name by selecting from env or a stable default
+    model: anthropic(process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307'),
     tools: {
         weatherTool,
         ttsWeatherTool,
@@ -332,6 +335,10 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
     const lastContent = lastUser?.content || '';
     const { zipCode, quotedText } = extractZipAndQuotedText(messages);
 
+    console.log('[textShim] Processing messages:', messages.length);
+    console.log('[textShim] Last user content:', lastContent);
+    console.log('[textShim] Extracted ZIP:', zipCode);
+
     // If no ZIP anywhere, ask for it
     if (!zipCode) {
         return {
@@ -342,12 +349,15 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
     // If the user is asking for TTS/audio, trigger the TTS tool
     if (/\b(audio|tts|voice|speak|stream)\b/i.test(lastContent)) {
         try {
+            console.log('[textShim] TTS request detected, calling ttsWeatherTool');
             if (!ttsWeatherTool.execute) {
                 return {
                     text: `TTS functionality is not available. The ttsWeatherTool.execute method is not defined.`
                 };
             }
             const res = await ttsWeatherTool.execute({ context: { zipCode, text: quotedText } } as any);
+            console.log('[textShim] TTS tool result:', res);
+            
             if ((res as any)?.success) {
                 const r: any = res;
                 const muxNote = r?.mux ? ' Mux upload tooling is available; you can create a direct upload to stream the audio/video.' : '';
@@ -359,6 +369,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
                 text: `Attempted TTS for ZIP ${zipCode}, but it was not successful: ${(res as any)?.message || (res as any)?.error || 'unknown error'}. You may need to configure credentials or try again.`
             };
         } catch (e) {
+            console.error('[textShim] TTS error:', e);
             return {
                 text: `TTS request for ZIP ${zipCode} failed: ${e instanceof Error ? e.message : String(e)}. Check credentials/configuration and try again.`
             };
@@ -367,7 +378,10 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
 
     // Otherwise, fetch and summarize the weather
     try {
+        console.log('[textShim] Fetching weather for ZIP:', zipCode);
         const data: any = await weatherTool.execute({ context: { zipCode } } as any);
+        console.log('[textShim] Weather data received:', data);
+        
         const loc = data?.location?.displayName || 'your area';
         const fc = Array.isArray(data?.forecast) ? data.forecast : [];
         const p0 = fc[0];
@@ -375,11 +389,15 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
         const p2 = fc[2];
         const parts: string[] = [];
         parts.push(`Weather for ${loc} (${zipCode}).`);
-        if (p0) parts.push(`${p0.name}: ${p0.shortForecast}, ${p0.temperature}\u00B0${p0.temperatureUnit}.`);
-        if (p1) parts.push(`${p1.name}: ${p1.shortForecast}, ${p1.temperature}\u00B0${p1.temperatureUnit}.`);
-        if (p2) parts.push(`Then ${p2.name.toLowerCase()}: ${p2.shortForecast.toLowerCase()}, around ${p2.temperature}\u00B0${p2.temperatureUnit}.`);
-        return { text: parts.join(' ') };
+        if (p0) parts.push(`${p0.name}: ${p0.shortForecast}, ${p0.temperature}°${p0.temperatureUnit}.`);
+        if (p1) parts.push(`${p1.name}: ${p1.shortForecast}, ${p0.temperature}°${p1.temperatureUnit}.`);
+        if (p2) parts.push(`Then ${p2.name.toLowerCase()}: ${p2.shortForecast.toLowerCase()}, around ${p2.temperature}°${p2.temperatureUnit}.`);
+        
+        const result = parts.join(' ');
+        console.log('[textShim] Weather response:', result);
+        return { text: result };
     } catch (e) {
+        console.error('[textShim] Weather fetch error:', e);
         return { text: `Sorry, I couldn't fetch the weather for ZIP ${zipCode}: ${e instanceof Error ? e.message : String(e)}.` };
     }
 }
