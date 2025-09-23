@@ -146,9 +146,21 @@ async function getFallbackBackgroundPng(): Promise<string> {
     const bundled = resolve('files/images/fallback-bg.png');
     try {
         await fs.access(bundled);
-        return bundled;
+        // Validate that it's a non-empty PNG (signature check)
+        const fd = await fs.open(bundled, 'r');
+        try {
+            const { size } = await fd.stat();
+            if (size < 8) throw new Error('fallback image too small');
+            const sig = Buffer.alloc(8);
+            await fd.read(sig, 0, 8, 0);
+            const pngSig = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+            if (!sig.equals(pngSig)) throw new Error('fallback image invalid signature');
+            return bundled;
+        } finally {
+            await fd.close();
+        }
     } catch {
-        console.warn('Bundled fallback background not found, creating minimal PNG');
+        console.warn('Bundled fallback background missing or invalid, creating minimal PNG');
         const out = resolve('/tmp/fallback-bg.png');
         await fs.mkdir(dirname(out), { recursive: true });
         const tinyPng = Buffer.from(

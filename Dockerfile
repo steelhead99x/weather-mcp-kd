@@ -14,10 +14,9 @@ RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit
 # Copy source code
 COPY . .
 
-# Ensure a fallback background image exists (small PNG) to avoid lavfi filters at runtime
-# If you don't have one, the code generates a tiny PNG in /tmp as last resort.
-RUN mkdir -p files/images && \
-    test -f files/images/fallback-bg.png || printf '' > files/images/fallback-bg.png
+# Ensure background images directory exists. Do NOT create an empty fallback image; the app
+# will generate a valid tiny PNG at runtime if none is provided.
+RUN mkdir -p files/images
 
 # Build the application
 RUN npm run build
