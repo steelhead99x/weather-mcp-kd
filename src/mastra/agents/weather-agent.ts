@@ -140,6 +140,7 @@ async function getFallbackBackgroundPng(): Promise<string> {
         await fs.access(bundled);
         return bundled;
     } catch {
+        console.warn('Bundled fallback background not found, creating minimal PNG');
         // As last resort: create a 1x1 PNG in memory (tiny), then scale in ffmpeg via image input
         const out = resolve('/tmp/fallback-bg.png');
         await fs.mkdir(dirname(out), { recursive: true });
