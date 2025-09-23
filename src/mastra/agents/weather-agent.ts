@@ -336,11 +336,12 @@ const ttsWeatherTool = createTool({
             let audioSource = 'tts';
 
             try {
-                if (!process.env.DEEPGRAM_API_KEY) {
+                if (process.env.DEEPGRAM_API_KEY) {
+                    audioBuffer = await synthesizeWithDeepgramTTS(finalText);
+                    console.log(`[tts-weather-upload] TTS successful with Deepgram`);
+                } else {
                     throw new Error('DEEPGRAM_API_KEY not configured');
                 }
-                audioBuffer = await synthesizeWithDeepgramTTS(finalText);
-                console.log(`[tts-weather-upload] TTS successful with Deepgram`);
             } catch (error) {
                 console.warn(`[tts-weather-upload] TTS failed: ${error instanceof Error ? error.message : String(error)}`);
                 console.warn('[tts-weather-upload] Using test tone as fallback');
@@ -497,6 +498,7 @@ const ttsWeatherTool = createTool({
                     const maxAttempts = 10;
                     const pollInterval = 3000;
 
+                    let stopPollingUpload = false;
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                         try {
                             console.log(`[tts-weather-upload] Polling upload attempt ${attempt}/${maxAttempts}...`);
@@ -519,18 +521,22 @@ const ttsWeatherTool = createTool({
                                         }
 
                                         if (status === 'errored') {
-                                            throw new Error(`Upload failed with status: ${status}`);
+                                            console.warn(`[tts-weather-upload] Upload failed with status: ${status}`);
+                                            stopPollingUpload = true;
+                                            break;
                                         }
                                     } catch (parseError) {
                                         if (parseError instanceof Error && parseError.message.includes('Upload failed')) {
-                                            throw parseError;
+                                            console.warn(`[tts-weather-upload] Upload error encountered: ${parseError.message}`);
+                                            stopPollingUpload = true;
+                                            break;
                                         }
                                         // Continue if parse error
                                     }
                                 }
                             }
 
-                            if (assetId) break;
+                            if (assetId || stopPollingUpload) break;
 
                             if (attempt < maxAttempts) {
                                 await new Promise(resolve => setTimeout(resolve, pollInterval));
