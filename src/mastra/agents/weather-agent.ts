@@ -335,16 +335,20 @@ const ttsWeatherTool = createTool({
             let audioBuffer: Buffer;
             let audioSource = 'tts';
 
-            try {
-                if (process.env.DEEPGRAM_API_KEY) {
+            if (process.env.DEEPGRAM_API_KEY) {
+                try {
                     audioBuffer = await synthesizeWithDeepgramTTS(finalText);
                     console.log(`[tts-weather-upload] TTS successful with Deepgram`);
-                } else {
-                    throw new Error('DEEPGRAM_API_KEY not configured');
+                } catch (error) {
+                    console.warn(`[tts-weather-upload] TTS failed: ${error instanceof Error ? error.message : String(error)}`);
+                    console.warn('[tts-weather-upload] Using test tone as fallback');
+
+                    // Create a proper test tone WAV file
+                    audioBuffer = createTestToneWAV(3, 440); // 3 second tone at 440Hz
+                    audioSource = 'fallback';
                 }
-            } catch (error) {
-                console.warn(`[tts-weather-upload] TTS failed: ${error instanceof Error ? error.message : String(error)}`);
-                console.warn('[tts-weather-upload] Using test tone as fallback');
+            } else {
+                console.warn('[tts-weather-upload] DEEPGRAM_API_KEY not configured. Using test tone as fallback');
 
                 // Create a proper test tone WAV file
                 audioBuffer = createTestToneWAV(3, 440); // 3 second tone at 440Hz
@@ -738,7 +742,7 @@ export const weatherAgent = new Agent({
     - Use ALL weather data from the weatherTool response
 
     AUDIO GENERATION:
-    - Keep audio scripts under 500 characters
+    - Keep audio scripts under 750 characters
     - Use natural, conversational language with smooth flow
     - Include location name, today's highlights, tomorrow's outlook, and key temperatures
     - Write like a friendly broadcaster: "Good morning from..." or "Hello from..."
