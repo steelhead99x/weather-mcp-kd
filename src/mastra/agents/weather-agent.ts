@@ -467,7 +467,8 @@ const ttsWeatherTool = createTool({
                     'Content-Type': 'video/mp4',
                     'Content-Length': videoBuffer.length.toString(),
                 },
-                body: videoBuffer,
+                // Body must be a Web-compatible type for fetch; convert Buffer to Uint8Array
+                body: new Uint8Array(videoBuffer),
             });
 
             if (!uploadResponse.ok) {
