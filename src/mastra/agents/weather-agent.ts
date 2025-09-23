@@ -7,16 +7,13 @@ import { resolve, dirname, join } from 'path';
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
+import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
 import { Memory } from "@mastra/memory";
 import { InMemoryStore } from "@mastra/core/storage";
 import ffmpeg from 'fluent-ffmpeg';
-// IMPORTANT: Avoid using ffmpeg-static on Alpine to prevent glibc/musl issues
-// import ffmpegStatic from 'ffmpeg-static';
 import { existsSync } from 'fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-// Add: streamVNext MCP client
-import { muxMcpClient as streamClient } from '../mcp/mux-upload-client';
 
 const execFileAsync = promisify(execFile);
 
@@ -26,7 +23,6 @@ const execFileAsync = promisify(execFile);
         '/usr/bin/ffmpeg',
         '/usr/local/bin/ffmpeg',
         '/bin/ffmpeg',
-        // typeof ffmpegStatic === 'string' ? ffmpegStatic : null, // intentionally not used on Alpine
     ].filter(Boolean) as string[];
 
     const found = candidates.find(p => {
@@ -44,7 +40,6 @@ const execFileAsync = promisify(execFile);
 // Log ffmpeg version once at startup to verify runtime binary
 (async () => {
     try {
-        // Try the path fluent-ffmpeg is configured with (it prepends path internally)
         const { stdout } = await execFileAsync('ffmpeg', ['-version']);
         console.log('[ffmpeg] Version:\n' + stdout.split('\n').slice(0, 3).join('\n'));
     } catch (e) {
@@ -58,23 +53,23 @@ async function createVideoFromAudioAndImage(
     imagePath: string,
     outputPath: string
 ): Promise<void> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolvePromise, reject) => {
         ffmpeg()
             .input(imagePath)
             .inputOptions(['-loop 1'])
             .input(audioPath)
-            .audioCodec('aac')              // ensure explicit selection
+            .audioCodec('aac')
             .videoCodec('libx264')
             .outputOptions([
-                '-b:a 128k',               // slightly lower bitrate to reduce resource use
+                '-b:a 128k',
                 '-pix_fmt yuv420p',
                 '-shortest',
-                '-movflags +faststart',    // better muxing for streaming and sometimes fewer fs issues
+                '-movflags +faststart',
             ])
             .output(outputPath)
             .on('start', (cmd: string) => console.log(`[createVideo] FFmpeg: ${cmd}`))
             .on('stderr', (line: string) => console.log(`[createVideo][stderr] ${line}`))
-            .on('end', () => resolve())
+            .on('end', () => resolvePromise())
             .on('error', (err: Error) => {
                 console.error(`[createVideo] Error: ${err.message}`);
                 reject(new Error(`FFmpeg failed: ${err.message}`));
@@ -89,8 +84,7 @@ async function synthesizeWithDeepgramTTS(text: string): Promise<Buffer> {
     if (!apiKey) {
         throw new Error('DEEPGRAM_API_KEY not set in environment');
     }
-    const model = process.env.DEEPGRAM_TTS_MODEL || 'aura-asteria-en';
-    // Request linear PCM to wrap as WAV (Deepgram returns WAV for linear16)
+    const model = process.env.DEEPGRAM_TTS_MODEL || process.env.DEEPGRAM_VOICE || 'aura-asteria-en';
     const url = new URL('https://api.deepgram.com/v1/speak');
     url.searchParams.set('model', model);
     url.searchParams.set('encoding', 'linear16');
@@ -134,19 +128,16 @@ async function getRandomBackgroundImage(): Promise<string> {
     }
 }
 
-// Provide a bundled fallback background image (avoid lavfi filter dependency)
+// Provide a bundled fallback background image
 async function getFallbackBackgroundPng(): Promise<string> {
-    // Place a small static PNG in repo at files/images/fallback-bg.png
     const bundled = resolve('files/images/fallback-bg.png');
     try {
         await fs.access(bundled);
         return bundled;
     } catch {
         console.warn('Bundled fallback background not found, creating minimal PNG');
-        // As last resort: create a 1x1 PNG in memory (tiny), then scale in ffmpeg via image input
         const out = resolve('/tmp/fallback-bg.png');
         await fs.mkdir(dirname(out), { recursive: true });
-        // A minimal 1x1 transparent PNG
         const tinyPng = Buffer.from(
             '89504E470D0A1A0A0000000D4948445200000001000000010806000000' +
             '1F15C4890000000A49444154789C6360000002000150A0A4' +
@@ -157,14 +148,104 @@ async function getFallbackBackgroundPng(): Promise<string> {
     }
 }
 
-// ... existing code ...
+// Build natural, concise speech from forecast
+function buildNaturalSpeechFromForecast(zip: string, weatherData: any): string {
+    const loc = weatherData?.location?.displayName || 'your area';
+    const fc = Array.isArray(weatherData?.forecast) ? weatherData.forecast : [];
+    const today = fc[0];
+    const tonightOrNext = fc[1];
+    const tomorrow = fc[2];
 
+    const parts: string[] = [];
+    parts.push(`Here's your forecast for ${loc}, ${zip}.`);
+
+    if (today) {
+        parts.push(`${today.name}: ${today.shortForecast.toLowerCase()}, around ${today.temperature} degrees ${today.temperatureUnit}. Winds ${today.windSpeed} ${today.windDirection}.`);
+    }
+    if (tonightOrNext) {
+        parts.push(`${tonightOrNext.name}: ${tonightOrNext.shortForecast.toLowerCase()}, near ${tonightOrNext.temperature} degrees ${tonightOrNext.temperatureUnit}.`);
+    }
+    if (tomorrow) {
+        parts.push(`Looking ahead to ${tomorrow.name.toLowerCase()}: ${tomorrow.shortForecast.toLowerCase()}, about ${tomorrow.temperature} degrees ${tomorrow.temperatureUnit}.`);
+    }
+
+    parts.push(`Stay comfortable and check back if plans change.`);
+    return parts.join(' ');
+}
+
+// Upload local file to Mux direct upload URL (PUT)
+async function putFileToMux(uploadUrl: string, filePath: string): Promise<void> {
+    const fileBuffer = await fs.readFile(filePath);
+    const fileSize = fileBuffer.length;
+    const copy = new Uint8Array(fileBuffer);
+    const fileAB = copy.buffer;
+    const res = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': fileSize.toString(),
+        },
+        body: new Blob([fileAB], { type: 'application/octet-stream' }),
+    } as any);
+    if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(`Mux PUT failed: ${res.status} ${res.statusText} ${t}`);
+    }
+}
+
+// Poll Mux asset until ready, return HLS and player URLs
+async function waitForMuxAssetReady(assetId: string, {
+    pollMs = Math.max(1000, parseInt(process.env.MUX_VERIFY_POLL_MS || '5000', 10) || 5000),
+    timeoutMs = Math.min(30 * 60 * 1000, Math.max(10_000, parseInt(process.env.MUX_VERIFY_TIMEOUT_MS || '300000', 10) || 300000)),
+}: { pollMs?: number; timeoutMs?: number } = {}) {
+    const tools = await assetsClient.getTools();
+    const getAsset =
+        tools['get_video_assets'] ||
+        tools['retrieve_video_assets'] ||
+        tools['video.assets.get'] ||
+        tools['video.assets.retrieve'];
+    if (!getAsset) throw new Error('Mux assets client has no retrieval tool');
+
+    const start = Date.now();
+    let lastPayload: any;
+    while (Date.now() - start < timeoutMs) {
+        try {
+            const res = await getAsset.execute({ context: { ASSET_ID: assetId } });
+            const text = Array.isArray(res) ? (res[0] as any)?.text ?? '' : String(res ?? '');
+            try { lastPayload = JSON.parse(text); } catch { lastPayload = { raw: text }; }
+            const status = lastPayload?.status as string | undefined;
+            if (status === 'ready') {
+                const playbackId = Array.isArray(lastPayload?.playback_ids) && lastPayload.playback_ids.length > 0
+                    ? (lastPayload.playback_ids[0]?.id as string | undefined)
+                    : undefined;
+                return {
+                    status,
+                    playbackId,
+                    hlsUrl: playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : undefined,
+                    // Always provide a stable player URL using the uploaded asset
+                    playerUrl: `https://streamingportfolio.com/player?assetId=${assetId}`,
+                    asset: lastPayload,
+                    assetId,
+                };
+            }
+            if (status === 'errored') {
+                throw new Error(`Mux asset errored: ${JSON.stringify(lastPayload)}`);
+            }
+        } catch {
+            // transient errors: continue
+        }
+        await new Promise(r => setTimeout(r, pollMs));
+    }
+    throw new Error('Timeout waiting for Mux asset to be ready');
+}
+
+// Weather-to-tts-and-upload tool
 const ttsWeatherTool = createTool({
     id: "tts-weather-upload",
-    description: "Convert weather report to audio and upload to Mux",
+    description: "Convert weather report to audio, create a simple video, upload to Mux, and return a streaming URL.",
     inputSchema: z.object({
         zipCode: z.string().describe("5-digit ZIP code"),
-        text: z.string().optional().describe("Weather text to convert to speech"),
+        text: z.string().optional().describe("Optional custom text. If omitted, a natural forecast will be generated."),
     }),
     execute: async ({ context }) => {
         let { zipCode, text } = context as { zipCode?: string; text?: string };
@@ -179,55 +260,36 @@ const ttsWeatherTool = createTool({
         }
 
         try {
-            // If no text provided, fetch weather and build a concise summary for TTS
+            // Build natural speech if custom text not provided
             let finalText = (text || '').trim();
             let weatherData: any = null;
 
             if (!finalText) {
                 weatherData = await weatherTool.execute({ context: { zipCode: zip } } as any);
-                const loc = weatherData?.location?.displayName || 'your area';
-                const fc = Array.isArray(weatherData?.forecast) ? weatherData.forecast : [];
-                const p0 = fc[0];
-                const p1 = fc[1];
-                const p2 = fc[2];
-
-                const parts: string[] = [];
-                parts.push(`Weather for ${loc} (${zip}).`);
-                if (p0) {
-                    parts.push(`${p0.name}: ${p0.shortForecast}, ${p0.temperature}\u00B0${p0.temperatureUnit}. Winds ${p0.windSpeed} ${p0.windDirection}.`);
-                }
-                if (p1) {
-                    parts.push(`${p1.name}: ${p1.shortForecast}, ${p1.temperature}\u00B0${p1.temperatureUnit}.`);
-                }
-                if (p2) {
-                    parts.push(`Then ${p2.name.toLowerCase()}: ${p2.shortForecast.toLowerCase()}, around ${p2.temperature}\u00B0${p2.temperatureUnit}.`);
-                }
-                finalText = parts.join(' ');
+                finalText = buildNaturalSpeechFromForecast(zip, weatherData);
             }
 
             // Synthesize TTS (Deepgram)
             const audioBuffer = await synthesizeWithDeepgramTTS(finalText);
-            const audioSource = 'deepgram';
 
-            // Use /tmp for temp files in container environments
+            // Temp paths
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
             const baseDir = process.env.TTS_TMP_DIR || '/tmp/tts';
             const audioPath = join(baseDir, `weather-${timestamp}-${zip}.wav`);
             const videoPath = join(baseDir, `weather-${timestamp}-${zip}.mp4`);
 
             await fs.mkdir(dirname(resolve(audioPath)), { recursive: true });
-
             await fs.writeFile(resolve(audioPath), audioBuffer);
-            console.log(`[tts-weather-upload] Audio saved: ${audioPath} (${audioBuffer.length} bytes, source: ${audioSource})`);
+            console.log(`[tts-weather-upload] Audio saved: ${audioPath} (${audioBuffer.length} bytes)`);
 
-            // Get random background image or bundled fallback
+            // Background image or fallback
             let finalImagePath: string;
             try {
                 finalImagePath = await getRandomBackgroundImage();
                 console.log(`[tts-weather-upload] Using background image: ${finalImagePath}`);
             } catch {
                 finalImagePath = await getFallbackBackgroundPng();
-                console.log(`[tts-weather-upload] Using bundled fallback background: ${finalImagePath}`);
+                console.log(`[tts-weather-upload] Using fallback background: ${finalImagePath}`);
             }
 
             console.log(`[tts-weather-upload] Creating video...`);
@@ -236,27 +298,100 @@ const ttsWeatherTool = createTool({
                 finalImagePath,
                 resolve(videoPath)
             );
-
             console.log(`[tts-weather-upload] Video created: ${videoPath}`);
 
-            // Optionally attempt Mux upload if credentials and MCP are configured
+            // Upload to Mux and get streaming URLs
             let mux: any = null;
+            let playbackUrl: string | undefined;
+            // We will always return a playerUrl once we know assetId
+            let playerUrl: string | undefined;
+            let assetId: string | undefined;
+            let playbackId: string | undefined;
+
             try {
                 if (process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET) {
-                    await uploadClient.getTools();
-                    // Best-effort: create a direct upload for a file we will upload externally (not via MCP here)
-                    // Return the temp file paths for caller to handle actual HTTP upload if needed.
-                    mux = { message: 'Mux MCP available. Use video.uploads.create to create a direct upload and POST the file.' };
+                    const uploadTools = await uploadClient.getTools();
+                    let create = uploadTools['create_video_uploads'] || uploadTools['video.uploads.create'];
+                    if (!create) throw new Error('Mux MCP missing upload tool');
+
+                    const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
+                    const createArgs: any = {
+                        cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
+                        new_asset_settings: { playback_policies: [playbackPolicy] },
+                    };
+                    if (process.env.MUX_UPLOAD_TEST === 'true') createArgs.test = true;
+
+                    const createRes = await create.execute({ context: createArgs });
+                    const blocks = Array.isArray(createRes) ? createRes : [createRes];
+                    let uploadId: string | undefined;
+                    let uploadUrl: string | undefined;
+                    for (const b of blocks as any[]) {
+                        const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
+                        if (!t) continue;
+                        try {
+                            const payload = JSON.parse(t);
+                            uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
+                            uploadUrl = uploadUrl || payload.url || payload.upload?.url;
+                            assetId = assetId || payload.asset_id || payload.asset?.id;
+                        } catch {}
+                    }
+                    if (!uploadUrl) throw new Error('No upload URL from Mux');
+
+                    await putFileToMux(uploadUrl, resolve(videoPath));
+
+                    // If assetId still missing, try retrieving by uploadId
+                    if (!assetId && uploadId) {
+                        const retrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
+                        if (retrieve) {
+                            try {
+                                const r = await retrieve.execute({ context: { UPLOAD_ID: uploadId } });
+                                const rb = Array.isArray(r) ? r : [r];
+                                for (const b of rb as any[]) {
+                                    const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
+                                    if (!t) continue;
+                                    try {
+                                        const payload = JSON.parse(t);
+                                        assetId = assetId || payload.asset_id || payload.asset?.id;
+                                    } catch {}
+                                }
+                            } catch {}
+                        }
+                    }
+
+                    if (!assetId) throw new Error('No asset_id after upload');
+
+                    // Build the always-present player URL immediately from assetId
+                    playerUrl = `https://streamingportfolio.com/player?assetId=${assetId}`;
+
+                    // Poll until ready for HLS URL
+                    const ready = await waitForMuxAssetReady(assetId);
+                    playbackUrl = ready.hlsUrl;
+                    playbackId = ready.playbackId || undefined;
+
+                    mux = {
+                        assetId,
+                        playbackId,
+                        hlsUrl: playbackUrl,
+                        playerUrl,
+                    };
+                } else {
+                    mux = { error: 'Mux credentials missing. Set MUX_TOKEN_ID and MUX_TOKEN_SECRET.' };
                 }
             } catch (e) {
-                console.warn('[tts-weather-upload] Mux upload skipped:', e instanceof Error ? e.message : String(e));
+                console.warn('[tts-weather-upload] Mux upload failed/skipped:', e instanceof Error ? e.message : String(e));
+                mux = { error: e instanceof Error ? e.message : String(e) };
             }
 
-            // Clean up files if requested
+            // Cleanup
             if (process.env.TTS_CLEANUP === 'true') {
                 try { await fs.unlink(resolve(audioPath)); } catch {}
                 try { await fs.unlink(resolve(videoPath)); } catch {}
                 console.log('[tts-weather-upload] Cleaned up temp files');
+            }
+
+            // Always include playerUrl if we know assetId
+            if (!playerUrl && assetId) {
+                playerUrl = `https://streamingportfolio.com/player?assetId=${assetId}`;
             }
 
             return {
@@ -266,6 +401,10 @@ const ttsWeatherTool = createTool({
                 localAudioFile: audioPath,
                 localVideoFile: videoPath,
                 mux,
+                playbackUrl,
+                playerUrl,
+                assetId,
+                playbackId,
             };
 
         } catch (error) {
@@ -280,21 +419,18 @@ const ttsWeatherTool = createTool({
     },
 });
 
-// Build the agent that can answer weather and generate TTS summaries
-
 function buildSystemPrompt() {
     return [
         'You are a helpful weather assistant.',
-        'When the user asks about weather without providing a ZIP code, ask them to share a 5-digit ZIP.',
+        'When the user asks about weather without providing a ZIP code, ask for a 5-digit ZIP.',
         'Be concise and factual.',
     ].join(' ');
 }
 
 export const weatherAgent = new Agent({
     name: 'weatherAgent',
-    description: 'A helpful weather assistant that provides weather information for ZIP codes and can generate audio/video summaries using TTS and Mux upload capabilities.',
+    description: 'Provides weather info for ZIP codes and can generate a natural TTS video uploaded to Mux with a streaming URL.',
     instructions: buildSystemPrompt(),
-    // Avoid hard-failing on unavailable model name by selecting from env or a stable default
     model: anthropic(process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307'),
     tools: {
         weatherTool,
@@ -305,7 +441,7 @@ export const weatherAgent = new Agent({
     }) as any,
 });
 
-// Lightweight helper to extract a 5-digit ZIP and optional quoted text from user messages
+// Extract a 5-digit ZIP and optional quoted text
 function extractZipAndQuotedText(messages: Array<{ role: string; content: string }>) {
     const zipMatches: string[] = [];
     let quoted: string | undefined;
@@ -314,7 +450,6 @@ function extractZipAndQuotedText(messages: Array<{ role: string; content: string
         const content = String(m?.content || '');
         const zips = content.match(/\b(\d{5})(?:-\d{4})?\b/g) || [];
         for (const z of zips) {
-            // take the first 5 digits
             const zip5 = z.slice(0, 5);
             if (/^\d{5}$/.test(zip5)) zipMatches.push(zip5);
         }
@@ -328,60 +463,50 @@ function extractZipAndQuotedText(messages: Array<{ role: string; content: string
     return { zipCode, quotedText: quoted };
 }
 
-// Attach a minimal .text(messages) method for test scripts
+// Minimal .text shim
 async function textShim(args: { messages: Array<{ role: string; content: string }> }): Promise<{ text: string }> {
     const messages = args?.messages || [];
     const lastUser = [...messages].reverse().find(m => m.role === 'user');
     const lastContent = lastUser?.content || '';
     const { zipCode, quotedText } = extractZipAndQuotedText(messages);
 
-    console.log('[textShim] Processing messages:', messages.length);
-    console.log('[textShim] Last user content:', lastContent);
-    console.log('[textShim] Extracted ZIP:', zipCode);
-
-    // If no ZIP anywhere, ask for it
     if (!zipCode) {
         return {
-            text: 'Please share a 5-digit ZIP code so I can fetch your local weather. You can say "My ZIP is 10001" or provide a postal code.'
+            text: 'Please share a 5-digit ZIP code so I can fetch your local weather.'
         };
     }
 
-    // If the user is asking for TTS/audio, trigger the TTS tool
+    // If audio/stream requested, run the TTS+upload tool and return URLs clearly
     if (/\b(audio|tts|voice|speak|stream)\b/i.test(lastContent)) {
         try {
-            console.log('[textShim] TTS request detected, calling ttsWeatherTool');
-            if (!ttsWeatherTool.execute) {
-                return {
-                    text: `TTS functionality is not available. The ttsWeatherTool.execute method is not defined.`
-                };
-            }
-            const res = await ttsWeatherTool.execute({ context: { zipCode, text: quotedText } } as any);
-            console.log('[textShim] TTS tool result:', res);
-            
+            const res = await (ttsWeatherTool.execute as any)({ context: { zipCode, text: quotedText } });
             if ((res as any)?.success) {
                 const r: any = res;
-                const muxNote = r?.mux ? ' Mux upload tooling is available; you can create a direct upload to stream the audio/video.' : '';
-                return {
-                    text: `TTS audio created for ZIP ${zipCode}. Summary: ${r.summaryText || quotedText || 'Weather update'}. Local files: ${r.localAudioFile || 'n/a'}, ${r.localVideoFile || 'n/a'}.${muxNote}`
-                };
+                const url = r.playbackUrl || r?.mux?.hlsUrl;
+                // Always prefer the concrete playerUrl based on assetId when available
+                const player = r.playerUrl || (r.assetId ? `https://streamingportfolio.com/player?assetId=${r.assetId}` : undefined);
+                const summary = r.summaryText || quotedText || 'Weather update';
+                const pieces = [
+                    `Your streaming audio is ready.`,
+                    url ? `HLS: ${url}` : '',
+                    player ? `Player: ${player}` : '',
+                    `Spoken summary: ${summary}`
+                ].filter(Boolean);
+                return { text: pieces.join(' ') };
             }
             return {
-                text: `Attempted TTS for ZIP ${zipCode}, but it was not successful: ${(res as any)?.message || (res as any)?.error || 'unknown error'}. You may need to configure credentials or try again.`
+                text: `TTS for ZIP ${zipCode} failed: ${(res as any)?.message || (res as any)?.error || 'unknown error'}.`
             };
         } catch (e) {
-            console.error('[textShim] TTS error:', e);
             return {
-                text: `TTS request for ZIP ${zipCode} failed: ${e instanceof Error ? e.message : String(e)}. Check credentials/configuration and try again.`
+                text: `TTS request for ZIP ${zipCode} failed: ${e instanceof Error ? e.message : String(e)}.`
             };
         }
     }
 
-    // Otherwise, fetch and summarize the weather
+    // Otherwise, return a concise weather summary
     try {
-        console.log('[textShim] Fetching weather for ZIP:', zipCode);
         const data: any = await weatherTool.execute({ context: { zipCode } } as any);
-        console.log('[textShim] Weather data received:', data);
-        
         const loc = data?.location?.displayName || 'your area';
         const fc = Array.isArray(data?.forecast) ? data.forecast : [];
         const p0 = fc[0];
@@ -390,18 +515,13 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
         const parts: string[] = [];
         parts.push(`Weather for ${loc} (${zipCode}).`);
         if (p0) parts.push(`${p0.name}: ${p0.shortForecast}, ${p0.temperature}°${p0.temperatureUnit}.`);
-        if (p1) parts.push(`${p1.name}: ${p1.shortForecast}, ${p0.temperature}°${p1.temperatureUnit}.`);
+        if (p1) parts.push(`${p1.name}: ${p1.shortForecast}, ${p1.temperature}°${p1.temperatureUnit}.`);
         if (p2) parts.push(`Then ${p2.name.toLowerCase()}: ${p2.shortForecast.toLowerCase()}, around ${p2.temperature}°${p2.temperatureUnit}.`);
-        
-        const result = parts.join(' ');
-        console.log('[textShim] Weather response:', result);
-        return { text: result };
+        return { text: parts.join(' ') };
     } catch (e) {
-        console.error('[textShim] Weather fetch error:', e);
         return { text: `Sorry, I couldn't fetch the weather for ZIP ${zipCode}: ${e instanceof Error ? e.message : String(e)}.` };
     }
 }
 
-// For tests to import a stable instance with a .text() shim
 export const weatherAgentTestWrapper: any = weatherAgent as any;
 (weatherAgentTestWrapper as any).text = textShim;
