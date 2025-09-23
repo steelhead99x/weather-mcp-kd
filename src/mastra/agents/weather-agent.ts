@@ -16,6 +16,9 @@ import ffmpegStatic from 'ffmpeg-static';
 // Set the path to the ffmpeg binary
 if (ffmpegStatic) {
     ffmpeg.setFfmpegPath(ffmpegStatic);
+} else {
+    // Fallback to system ffmpeg
+    console.log('[weather-agent] Using system ffmpeg (ffmpeg-static not available)');
 }
 
 // Video creation utility
@@ -25,6 +28,11 @@ async function createVideoFromAudioAndImage(
     outputPath: string
 ): Promise<void> {
     return new Promise((resolve, reject) => {
+        // Check if FFmpeg is available
+        if (!ffmpegStatic) {
+            console.warn('[createVideo] ffmpeg-static not available, trying system ffmpeg');
+        }
+
         ffmpeg()
             .input(imagePath)
             .inputOptions(['-loop 1']) // Loop the image
@@ -50,7 +58,8 @@ async function createVideoFromAudioAndImage(
             })
             .on('error', (err: Error) => {
                 console.error(`[createVideo] FFmpeg error: ${err.message}`);
-                reject(err);
+                console.error(`[createVideo] Make sure FFmpeg is installed and accessible`);
+                reject(new Error(`FFmpeg failed: ${err.message}. Please ensure FFmpeg is properly installed.`));
             })
             .run();
     });
@@ -423,32 +432,45 @@ const ttsWeatherTool = createTool({
                 await fs.access(imagePath);
                 console.log(`[tts-weather-upload] Using existing image: ${imagePath}`);
             } catch {
-                console.warn(`[tts-weather-upload] Image not found at: ${imagePath}`);
+                console.log(`[tts-weather-upload] Image not found at: ${imagePath}`);
                 console.log(`[tts-weather-upload] Please ensure baby.jpeg exists at files/images/baby.jpeg`);
-                
+
                 // Create the images directory if it doesn't exist
                 const imageDir = resolve('files/images');
                 await fs.mkdir(imageDir, { recursive: true });
-                
+
                 // Create a simple colored background as fallback
                 const defaultImagePath = resolve(`${baseDir}/weather-bg.png`);
-                
-                await new Promise<void>((resolve, reject) => {
-                    ffmpeg()
-                        .input('color=darkblue:size=1280x720:duration=1')
-                        .inputFormat('lavfi')
-                        .output(defaultImagePath)
-                        .outputOptions(['-vframes 1'])
-                        .on('end', () => {
-                            console.log(`[tts-weather-upload] Created fallback background: ${defaultImagePath}`);
-                            console.log(`[tts-weather-upload] To use your image, place it at: files/images/baby.jpeg`);
-                            resolve();
-                        })
-                        .on('error', reject)
-                        .run();
-                });
-                
-                finalImagePath = defaultImagePath;
+
+                try {
+                    await new Promise<void>((resolve, reject) => {
+                        ffmpeg()
+                            .input('color=darkblue:size=1280x720:duration=1')
+                            .inputFormat('lavfi')
+                            .output(defaultImagePath)
+                            .outputOptions(['-vframes 1'])
+                            .on('end', () => {
+                                console.log(`[tts-weather-upload] Created fallback background: ${defaultImagePath}`);
+                                console.log(`[tts-weather-upload] To use your image, place it at: files/images/baby.jpeg`);
+                                resolve();
+                            })
+                            .on('error', reject)
+                            .run();
+                    });
+
+                    finalImagePath = defaultImagePath;
+                } catch (ffmpegError) {
+                    console.error(`[tts-weather-upload] Failed to create fallback image with FFmpeg:`, ffmpegError);
+
+                    // Create a minimal solid color PNG using Canvas or similar
+                    // For now, we'll skip video creation and return an error
+                    return {
+                        success: false,
+                        zipCode,
+                        error: `FFmpeg not available and no image found at ${imagePath}. Please install FFmpeg or provide the image file.`,
+                        message: `Failed to create TTS video and upload for ZIP ${zipCode}: FFmpeg not available and no image found.`,
+                    };
+                }
             }
 
             // Create video from audio and image using FFmpeg
@@ -503,12 +525,12 @@ const ttsWeatherTool = createTool({
 
             let createRes;
             let lastError;
-            
+
             for (let i = 0; i < createArgsVariants.length; i++) {
                 const createArgs = createArgsVariants[i];
-                
+
                 console.log(`[DEBUG] Trying Mux format ${i + 1}:`, JSON.stringify(createArgs, null, 2));
-                
+
                 try {
                     createRes = await create.execute({ context: createArgs });
                     console.log(`[DEBUG] Mux format ${i + 1} succeeded!`);
@@ -601,12 +623,12 @@ const ttsWeatherTool = createTool({
             await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
 
             // Try to get upload info with asset_id
-            const retrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
+            const uploadToolsRetrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
             let playbackUrl = '';
 
-            if (retrieve && uploadId) {
+            if (uploadToolsRetrieve && uploadId) {
                 try {
-                    const retrieveRes = await retrieve.execute({ context: { UPLOAD_ID: uploadId } });
+                    const retrieveRes = await uploadToolsRetrieve.execute({ context: { upload_id: uploadId } });
                     const retrieveBlocks = Array.isArray(retrieveRes) ? retrieveRes : [retrieveRes];
 
                     for (const block of retrieveBlocks as any[]) {

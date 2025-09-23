@@ -21,7 +21,7 @@ RUN npm run build
 
 # Create directories for file uploads
 RUN mkdir -p files/uploads/tts files/uploads/images
-
+RUN apt-get update && apt-get install -y ffmpeg
 # Expose port
 EXPOSE 8080
 
