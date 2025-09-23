@@ -112,53 +112,8 @@ class MuxAssetsMCPClient {
             }
         }
 
-        // If only generic invoke_api_endpoint is provided, add convenient wrappers for assets endpoints
-        if (tools['invoke_api_endpoint']) {
-            const addWrapper = (id: string, endpoint: string, description: string, schema?: z.ZodSchema) => {
-                tools[id] = createTool({
-                    id,
-                    description,
-                    inputSchema: schema || z.object({ ASSET_ID: z.string().optional() }).passthrough(),
-                    execute: async ({ context }) => {
-                        if (!this.client) throw new Error("Client not connected");
-                        // Prefer direct endpoint if present
-                        const direct = tools[endpoint];
-                        if (direct && direct !== tools[id]) return direct.execute({ context });
-                        const ctx = context || {};
-                        const attemptArgs = [
-                            { endpoint_name: endpoint, arguments: ctx },
-                            { endpoint_name: endpoint, ...ctx },
-                            { endpoint, arguments: ctx },
-                            { endpoint, ...ctx },
-                            { endpoint_name: endpoint, parameters: ctx },
-                            { endpoint, parameters: ctx },
-                            { endpoint_name: endpoint, body: ctx },
-                            { endpoint_name: endpoint, data: ctx },
-                            { endpoint, body: ctx },
-                            { endpoint, params: ctx },
-                            { endpoint, data: ctx },
-                            { name: endpoint, arguments: ctx },
-                            { name: endpoint, ...ctx },
-                            { endpoint_name: endpoint, body: JSON.stringify(ctx) },
-                        ];
-                        let lastErr: any;
-                        for (const args of attemptArgs) {
-                            try { return (await this.client.callTool({ name: 'invoke_api_endpoint', arguments: args })).content; }
-                            catch (e) { lastErr = e; }
-                        }
-                        throw lastErr || new Error('invoke_api_endpoint failed');
-                    },
-                });
-            };
-
-            // Snake_case canonical wrapper IDs (invoke dotted endpoints internally)
-            addWrapper('retrieve_video_assets', 'video.assets.retrieve', 'Retrieve a single asset by ID');
-            addWrapper('list_video_assets', 'video.assets.list', 'List assets with pagination', z.object({ limit: z.number().optional(), page: z.number().optional() }).passthrough());
-
-            // Dotted aliases
-            addWrapper('video.assets.retrieve', 'video.assets.retrieve', 'Retrieve a single asset by ID');
-            addWrapper('video.assets.list', 'video.assets.list', 'List assets with pagination', z.object({ limit: z.number().optional(), page: z.number().optional() }).passthrough());
-        }
+        // The Mux MCP provides direct tools, so we don't need the invoke_api_endpoint wrapper
+        // The tools are already available as direct MCP tools
 
         return tools;
     }

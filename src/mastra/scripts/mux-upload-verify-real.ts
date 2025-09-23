@@ -121,8 +121,24 @@ async function main() {
         create = uploadTools['video.uploads.create'];
     }
 
+    // If no direct tools, use invoke_api_endpoint
     if (!create) {
-        throw new Error('Mux MCP did not expose tool create_video_uploads or video.uploads.create.');
+        const invokeTool = uploadTools['invoke_api_endpoint'];
+        if (!invokeTool) {
+            throw new Error('Mux MCP did not expose any upload tools or invoke_api_endpoint.');
+        }
+        
+        // Create a wrapper for the invoke_api_endpoint tool
+        create = {
+            execute: async ({ context }: { context: any }) => {
+                return await invokeTool.execute({ 
+                    context: { 
+                        endpoint_name: 'create_video_uploads',
+                        arguments: context 
+                    } 
+                });
+            }
+        };
     }
 
     console.log('[mux-upload-verify-real] Creating upload via MCP...');
@@ -202,7 +218,23 @@ async function main() {
             await delay(10000); // Wait 10 seconds for processing to start
             
             // Now try to get the upload info again to get the asset_id
-            const retrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
+            let retrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
+            if (!retrieve) {
+                const invokeTool = uploadTools['invoke_api_endpoint'];
+                if (invokeTool) {
+                    retrieve = {
+                        execute: async ({ context }: { context: any }) => {
+                            return await invokeTool.execute({ 
+                                context: { 
+                                    endpoint_name: 'retrieve_video_uploads',
+                                    arguments: context 
+                                } 
+                            });
+                        }
+                    };
+                }
+            }
+            
             if (retrieve && uploadId) {
                 console.log('[mux-upload-verify-real] Retrieving upload info to get asset_id...');
                 try {
@@ -255,8 +287,23 @@ async function main() {
         assetsTools['video.assets.get'] ||
         assetsTools['video.assets.retrieve'];
 
+    // If no direct tools, use invoke_api_endpoint
     if (!getAsset) {
-        throw new Error('Mux MCP did not expose any asset retrieval tool (get_video_assets, retrieve_video_assets, video.assets.get, or video.assets.retrieve).');
+        const invokeTool = assetsTools['invoke_api_endpoint'];
+        if (!invokeTool) {
+            throw new Error('Mux MCP did not expose any asset retrieval tool or invoke_api_endpoint.');
+        }
+        
+        getAsset = {
+            execute: async ({ context }: { context: any }) => {
+                return await invokeTool.execute({ 
+                    context: { 
+                        endpoint_name: 'retrieve_video_assets',
+                        arguments: context 
+                    } 
+                });
+            }
+        };
     }
 
     const validStatuses = new Set(['preparing', 'processing', 'ready', 'errored']);
