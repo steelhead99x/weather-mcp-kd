@@ -251,9 +251,8 @@ function formatDateForSpeech(date: Date): string {
     const month = get('month');
     const dayStr = get('day');
     const year = get('year');
-    const hour = get('hour');
-    const minute = get('minute');
-    const dayPeriod = get('dayPeriod'); // AM/PM
+    const hourStr = get('hour');
+    const minuteStr = get('minute');
     const tzLong = get('timeZoneName');
 
     const dayNum = parseInt(dayStr || '0', 10);
@@ -266,7 +265,21 @@ function formatDateForSpeech(date: Date): string {
     };
 
     const dayWithOrdinal = Number.isFinite(dayNum) && dayNum > 0 ? ordinal(dayNum) : dayStr;
-    const timePart = [hour, minute].filter(Boolean).join(':') + (dayPeriod ? ` ${dayPeriod}` : '');
+
+    // Natural time phrasing
+    const hourNum = parseInt(hourStr || '0', 10);
+    const minuteNum = parseInt(minuteStr || '0', 10);
+    const period = (() => {
+        // Approximate period of day for more natural phrasing
+        const h24 = date.getHours();
+        if (h24 >= 5 && h24 < 12) return 'in the morning';
+        if (h24 >= 12 && h24 < 17) return 'in the afternoon';
+        if (h24 >= 17 && h24 < 21) return 'in the evening';
+        return 'at night';
+    })();
+
+    const timeCore = minuteNum === 0 ? `${hourNum}` : `${hourNum}:${minuteStr}`;
+    const timePart = `${timeCore} ${period}`;
     const tzPart = tzLong || 'local time';
 
     return `${weekday}, ${month} ${dayWithOrdinal}, ${year} at ${timePart} ${tzPart}`;
@@ -437,6 +450,9 @@ const ttsWeatherTool = createTool({
                     .replace(/(\d{1,3})\s*F\b/gi, '$1 degrees')
                     // Normalize percent
                     .replace(/(\d{1,3})%/g, '$1 percent');
+
+                // Speak 5-digit ZIP codes as spaced digits (e.g., 90210 -> 9 0 2 1 0)
+                out = out.replace(/\b(\d{5})\b/g, (_m, d) => String(d).split('').join(' '));
 
                 // Encourage short phrases and micro-pauses using commas and dashes
                 // Replace long runs of text with shorter sentences

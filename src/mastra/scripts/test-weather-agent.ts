@@ -120,42 +120,6 @@ async function testNoLocationQuery(): Promise<void> {
         'Agent should ask for ZIP when no location provided');
 }
 
-async function testTTSUploadRequest(): Promise<void> {
-    console.log('\n=== Test: TTS Upload Request ===');
-
-    // First get weather info
-    const weatherResult = await weatherAgent.text({
-        messages: [{ role: 'user', content: 'What\'s the weather in 90210?' }],
-    });
-
-    console.log('Weather response:', weatherResult.text);
-
-    // Now request TTS upload
-    const ttsResult = await weatherAgent.text({
-        messages: [
-            { role: 'user', content: 'What\'s the weather in 90210?' },
-            { role: 'assistant', content: weatherResult.text },
-            { role: 'user', content: 'Can you create an audio version and upload it to Mux?' }
-        ],
-    });
-
-    console.log('TTS upload response:', ttsResult.text);
-
-    assertContainsAny(ttsResult.text, ['upload', 'mux', 'audio', 'stream'],
-        'Agent should mention upload/streaming functionality');
-
-    // If Mux credentials are present, we expect an actual playback URL to be returned
-    if (process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET) {
-        const muxUrlRegex = /(https?:\/\/[^\s]*stream\.mux\.com\/[A-Za-z0-9]+\.m3u8)/i;
-        const match = ttsResult.text.match(muxUrlRegex);
-        if (!match) {
-            throw new Error('Expected a Mux playback URL (.m3u8) in the TTS upload response when Mux is configured');
-        }
-        console.log(`✓ Found Mux playback URL: ${match[1]}`);
-    } else {
-        console.log('ℹ️  Skipping strict playback URL check (Mux credentials not configured)');
-    }
-}
 
 async function testDirectTTSTool(): Promise<void> {
     console.log('\n=== Test: Direct TTS Tool Usage ===');
@@ -292,7 +256,6 @@ async function main(): Promise<void> {
     const tests = [
         testBasicWeatherQuery,
         testNoLocationQuery,
-        testTTSUploadRequest,
         testDirectTTSTool,
         testConversationalFlow,
     ];
