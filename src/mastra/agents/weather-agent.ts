@@ -12,6 +12,7 @@ import { Memory } from "@mastra/memory";
 import { InMemoryStore } from "@mastra/core/storage";
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
+import { existsSync } from 'fs';
 
 // Configure FFmpeg path
 if (ffmpegStatic) {
@@ -408,7 +409,13 @@ const ttsWeatherTool = createTool({
             const createUpload = uploadTools['create_video_uploads'];
 
             if (!createUpload) {
-                throw new Error('Mux upload tool not available');
+                console.error('Mux upload tool not available');
+                return {
+                    success: false,
+                    zipCode,
+                    error: 'Mux upload tool not available',
+                    message: 'Failed to initiate upload with Mux'
+                };
             }
 
             const uploadArgs = {
@@ -442,7 +449,13 @@ const ttsWeatherTool = createTool({
             }
 
             if (!uploadUrl) {
-                throw new Error('No upload URL received from Mux');
+                console.error('No upload URL received from Mux');
+                return {
+                    success: false,
+                    zipCode,
+                    error: 'No upload URL received from Mux',
+                    message: 'Mux did not return an upload URL'
+                };
             }
 
             // Upload video file
@@ -458,7 +471,13 @@ const ttsWeatherTool = createTool({
             });
 
             if (!uploadResponse.ok) {
-                throw new Error(`Upload failed: ${uploadResponse.status}`);
+                console.error(`Upload failed: ${uploadResponse.status}`);
+                return {
+                    success: false,
+                    zipCode,
+                    error: `Upload failed: ${uploadResponse.status}`,
+                    message: 'Mux upload request failed'
+                };
             }
 
             console.log('[tts-weather-upload] File upload successful');
@@ -744,6 +763,35 @@ export const weatherAgent = new Agent({
         }
     })
 });
+
+// Configure FFmpeg path robustly
+(function configureFfmpeg() {
+    // ffmpeg-static can be string | null depending on platform
+    const bin = typeof ffmpegStatic === 'string' ? ffmpegStatic : null;
+
+    // Fallbacks to common system locations (Alpine and Debian/Ubuntu images)
+    const candidates = [
+        bin,
+        '/usr/bin/ffmpeg',
+        '/usr/local/bin/ffmpeg',
+        '/bin/ffmpeg'
+    ].filter(Boolean) as string[];
+
+    const found = candidates.find(p => {
+        try {
+            return existsSync(p);
+        } catch {
+            return false;
+        }
+    });
+
+    if (found) {
+        ffmpeg.setFfmpegPath(found);
+        console.log(`[ffmpeg] Using ffmpeg at: ${found}`);
+    } else {
+        console.warn('[ffmpeg] No ffmpeg binary found. Video features will fail until ffmpeg is available.');
+    }
+})();
 
 // Test wrapper for development
 export const weatherAgentTestWrapper = {
