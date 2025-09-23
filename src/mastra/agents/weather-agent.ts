@@ -1,3 +1,4 @@
+
 import 'dotenv/config';
 import { Agent } from "@mastra/core";
 import { anthropic } from "@ai-sdk/anthropic";
@@ -497,57 +498,27 @@ const ttsWeatherTool = createTool({
 
             console.log('[tts-weather-upload] Creating Mux upload for video...');
 
-            // Try multiple argument formats for the MCP tool
-            const createArgsVariants = [
-                // Format 1: Based on API schema (playback_policies as array)
-                {
-                    cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
-                    new_asset_settings: {
-                        playback_policies: ['signed'],
-                        mp4_support: 'standard'
-                    }
+            // Use only the argument format that succeeded in logs (Format 1)
+            const createArgs = {
+                cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
+                new_asset_settings: {
+                    playback_policies: ['signed'],
+                    mp4_support: 'standard',
                 },
-                // Format 2: Alternative format
-                {
-                    cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
-                    new_asset_settings: {
-                        playbook_policy: 'signed',
-                        mp4_support: 'standard'
-                    },
-                    ...(process.env.MUX_UPLOAD_TEST === 'true' ? { test: true } : {})
-                },
-                // Format 3: Minimal format
-                {
-                    cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
-                    ...(process.env.MUX_UPLOAD_TEST === 'true' ? { test: true } : {})
-                }
-            ];
+            };
 
             let createRes;
-            let lastError;
-
-            for (let i = 0; i < createArgsVariants.length; i++) {
-                const createArgs = createArgsVariants[i];
-
-                console.log(`[DEBUG] Trying Mux format ${i + 1}:`, JSON.stringify(createArgs, null, 2));
-
-                try {
-                    createRes = await create.execute({ context: createArgs });
-                    console.log(`[DEBUG] Mux format ${i + 1} succeeded!`);
-                    break;
-                } catch (error) {
-                    lastError = error;
-                    console.warn(`[DEBUG] Mux format ${i + 1} failed:`, error);
-                }
-            }
-
-            if (!createRes) {
-                console.error('[tts-weather-upload] All Mux MCP format attempts failed:', lastError);
+            try {
+                console.log(`[DEBUG] Invoking Mux create_video_uploads with stable args`, JSON.stringify(createArgs, null, 2));
+                createRes = await create.execute({ context: createArgs });
+                console.log(`[DEBUG] Mux create_video_uploads succeeded`);
+            } catch (error) {
+                console.error('[tts-weather-upload] Mux create_video_uploads failed:', error);
                 return {
                     success: false,
                     zipCode,
-                    error: `All Mux formats failed: ${lastError}`,
-                    message: `Failed to create TTS video and upload for ZIP ${zipCode}: All Mux formats failed`,
+                    error: `Mux create upload failed: ${error instanceof Error ? error.message : String(error)}`,
+                    message: `Failed to create TTS video and upload for ZIP ${zipCode}: create upload failed`,
                 };
             }
 
@@ -622,37 +593,9 @@ const ttsWeatherTool = createTool({
             // Wait for processing and get playback URL
             await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
 
-            // Try to get upload info with asset_id
-            const uploadToolsRetrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
+            // Try to get playback URL directly from assets client if we have assetId
             let playbackUrl = '';
 
-            if (uploadToolsRetrieve && uploadId) {
-                try {
-                    const retrieveRes = await uploadToolsRetrieve.execute({ context: { upload_id: uploadId } });
-                    const retrieveBlocks = Array.isArray(retrieveRes) ? retrieveRes : [retrieveRes];
-
-                    for (const block of retrieveBlocks as any[]) {
-                        const text = block && typeof block === 'object' && typeof block.text === 'string' ? block.text : undefined;
-                        if (!text) continue;
-                        try {
-                            const payload = JSON.parse(text);
-                            assetId = assetId || payload.asset_id || payload.asset?.id;
-
-                            const ids = payload.asset?.playback_ids || payload.playback_ids;
-                            if (Array.isArray(ids) && ids.length > 0 && ids[0]?.id) {
-                                const playbackId = ids[0].id;
-                                playbackUrl = `https://stream.mux.com/${playbackId}.m3u8`;
-                            }
-                        } catch {
-                            // ignore non-JSON blocks
-                        }
-                    }
-                } catch (error) {
-                    console.warn('[tts-weather-upload] Failed to retrieve upload info:', error);
-                }
-            }
-
-            // If we still don't have a playback URL but have an assetId, try assets client
             if (!playbackUrl && assetId) {
                 try {
                     const assetsTools = await assetsClient.getTools();
@@ -762,7 +705,7 @@ export const weatherAgent = new Agent({
     - End with: "Generating your audio report now — please stand by while I generate the audio and Mux asset."
 
     TTS AUDIO SCRIPT (STRICT <= 500 characters total):
-    - Immediately call ttsWeatherTool and pass a concise script (<= 500 characters), written in the selected persona’s voice.
+    - Immediately call ttsWeatherTool and pass a concise script (<= 500 characters), written in the selected persona's voice.
     - Include: city/state name, current or next period highlight, temp and wind, and a short tip.
     - Keep it natural and coherent; do NOT exceed 500 characters.
 
