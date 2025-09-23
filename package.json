@@ -36,6 +36,7 @@
     "@mastra/core": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "^0.15.2",
+    "@mux/mcp": "^12.8.0",
     "ai": "^3.4.33",
     "dotenv": "^16.4.5",
     "ffmpeg-static": "^5.2.0",
