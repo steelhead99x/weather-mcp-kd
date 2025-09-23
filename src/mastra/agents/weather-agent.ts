@@ -49,7 +49,7 @@ async function createVideoFromAudioAndImage(
     });
 }
 
-// Generate TTS with Deepgram (WAV format for best quality)
+// Generate TTS with Deepgram (fixed format parameters)
 async function synthesizeWithDeepgramTTS(text: string): Promise<Buffer> {
     const apiKey = process.env.DEEPGRAM_API_KEY;
     if (!apiKey) throw new Error('DEEPGRAM_API_KEY not set');
@@ -76,12 +76,12 @@ async function synthesizeWithDeepgramTTS(text: string): Promise<Buffer> {
     }
 
     const arrayBuffer = await response.arrayBuffer();
-    
+
     // Verify we got audio data
     if (arrayBuffer.byteLength < 1000) {
         throw new Error(`Deepgram returned insufficient audio data: ${arrayBuffer.byteLength} bytes`);
     }
-    
+
     return Buffer.from(arrayBuffer);
 }
 
@@ -130,14 +130,64 @@ function createTestToneWAV(durationSeconds: number = 2, frequency: number = 440)
     return buffer;
 }
 
-// Improve text for natural speech
+// Get a random background image from files/images/
+async function getRandomBackgroundImage(): Promise<string> {
+    const imagesDir = resolve('files/images');
+
+    // Read directory and handle I/O errors
+    let files: string[];
+    try {
+        files = await fs.readdir(imagesDir);
+    } catch (error) {
+        console.warn(`[getRandomBackground] Error reading images dir: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+    }
+
+    // Filter for image files
+    const imageFiles = files.filter(file => /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file));
+
+    // If there are no image files, surface a clear error without catching it locally
+    if (imageFiles.length === 0) {
+        const msg = 'No image files found in files/images/';
+        console.warn(`[getRandomBackground] ${msg}`);
+        throw new Error(msg);
+    }
+
+    // Select random image
+    const randomIndex = Math.floor(Math.random() * imageFiles.length);
+    const selectedImage = imageFiles[randomIndex];
+    const imagePath = resolve(imagesDir, selectedImage);
+
+    // Verify file exists (and propagate any error)
+    try {
+        await fs.access(imagePath);
+    } catch (error) {
+        console.warn(`[getRandomBackground] Unable to access selected image: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+    }
+
+    console.log(`[getRandomBackground] Selected: ${selectedImage}`);
+    return imagePath;
+}
+
+// Improve text for more natural speech
 function optimizeTextForSpeech(text: string): string {
-    return text
-        // Expand abbreviations for clearer speech
+    // Pre-normalize whitespace
+    const pre = text.replace(/\s+/g, ' ').trim();
+
+    // Convert numeric ZIP callouts like "zip 94102" to spoken-friendly
+    const pronounceZip = (zip: string) =>
+        zip.replace(/(\d)(?=\d)/g, '$1 ').trim(); // "94102" -> "9 4 1 0 2"
+
+    let t = pre
+        // Expand abbreviations and make more conversational
         .replace(/\bmph\b/gi, 'miles per hour')
-        .replace(/\bF\b/g, 'degrees')
+        .replace(/\bF\b(?!\w)/g, 'degrees fahrenheit')
         .replace(/(\d+)\s*°\s*F/gi, '$1 degrees')
         .replace(/(\d+)\s*°/g, '$1 degrees')
+        .replace(/(\d+)\s*degrees\s+fahrenheit/gi, '$1 degrees')
+
+        // Direction abbreviations
         .replace(/\bN\b(?=\W|$)/g, 'north')
         .replace(/\bS\b(?=\W|$)/g, 'south')
         .replace(/\bE\b(?=\W|$)/g, 'east')
@@ -146,14 +196,99 @@ function optimizeTextForSpeech(text: string): string {
         .replace(/\bNE\b/gi, 'northeast')
         .replace(/\bSW\b/gi, 'southwest')
         .replace(/\bSE\b/gi, 'southeast')
+
+        // Numbers and percentages
         .replace(/(\d+)%/g, '$1 percent')
-        // Add natural pauses
+        .replace(/\b(\d+)\s*-\s*(\d+)\b/g, '$1 to $2') // ranges like "65-70" become "65 to 70"
+
+        // Weather terms for natural flow
+        .replace(/\bpartly\s+cloudy\b/gi, 'partly cloudy skies')
+        .replace(/\bmostly\s+sunny\b/gi, 'mostly sunny conditions')
+        .replace(/\bmostly\s+cloudy\b/gi, 'mostly cloudy skies')
+        .replace(/\bscattered\s+(?:thunder)?storms?\b/gi, 'scattered storms')
+        .replace(/\bisolated\s+(?:thunder)?storms?\b/gi, 'isolated storms')
+
+        // Time references
+        .replace(/\btonight\b/gi, 'this evening')
+        .replace(/\btomorrow\s+night\b/gi, 'tomorrow evening')
+
+        // Add natural pauses and pacing
         .replace(/\.\s+/g, '. ')
         .replace(/,\s*/g, ', ')
         .replace(/:\s*/g, ': ')
-        // Normalize spacing
-        .replace(/\s+/g, ' ')
-        .trim();
+        .replace(/;\s*/g, ', and ')
+
+        // Make temperatures sound more natural
+        .replace(/high\s+of\s+(\d+)/gi, 'high around $1')
+        .replace(/low\s+of\s+(\d+)/gi, 'low around $1')
+        .replace(/highs?\s+(\d+)/gi, 'highs around $1')
+        .replace(/lows?\s+(\d+)/gi, 'lows around $1')
+
+        // Wind descriptions
+        .replace(/winds?\s+([^.]+?)\s+at\s+(\d+)/gi, '$1 winds at $2');
+
+    // Speak ZIP codes naturally wherever explicitly mentioned
+    t = t.replace(/\bzip\s*(?:code)?\s*(\d{5})\b/gi, (_m, z) => {
+        return `zip code ${pronounceZip(z)}`;
+    });
+    // Also handle standalone 5-digit sequences that are clearly ZIP context like "for 94102" when preceded by "zip" earlier
+    // If the original contained "ZIP" but this occurrence doesn't, still add spacing pronunciation hint
+    if (/zip/i.test(pre)) {
+        t = t.replace(/\b(\d{5})\b/g, (_m, z) => pronounceZip(z));
+    }
+
+    // Subtle SSML-like cues for TTS without using SSML: add ellipses for gentle pauses after openers
+    t = t
+        .replace(/\b(Good (morning|afternoon|evening)|Hello|Hi)\b/gi, (m) => `${m}...`)
+        .replace(/\b(Now,? looking ahead|As for tonight|Looking ahead to tomorrow)\b/gi, (m) => `${m},`);
+
+    // Normalize spacing
+    t = t.replace(/\s+/g, ' ').trim();
+
+    // Keep scripts comfortably short and flowing: split long commas into shorter sentences
+    if (t.length > 520) {
+        const parts = t.split(/,\s+/);
+        let out = '';
+        for (const p of parts) {
+            if ((out + (out ? '. ' : '') + p).length <= 480) {
+                out += (out ? '. ' : '') + p;
+            } else {
+                break;
+            }
+        }
+        t = out || t.slice(0, 497) + '...';
+    }
+
+    return t;
+}
+
+// Enhanced ZIP code extraction that handles various formats
+function extractZipCode(text: string): string | null {
+    // Clean the input text
+    const cleanText = text.replace(/[^\w\s-]/g, ' ').trim();
+
+    // Try different ZIP code patterns
+    const patterns = [
+        /\b(\d{5})\b/,                    // Simple 5-digit
+        /zip\s*:?\s*(\d{5})/i,           // "ZIP: 12345" or "zip 12345"
+        /postal\s*:?\s*(\d{5})/i,        // "postal: 12345"
+        /(\d{5})\s*-?\s*\d{4}/,          // ZIP+4 format, extract first 5
+        /area\s*code\s*(\d{5})/i,        // "area code 12345"
+        /location\s*:?\s*(\d{5})/i,      // "location: 12345"
+        /\b(?:zip|zipcode|postal\s*code)\s*(?:is|=)?\s*(\d{5})\b/i, // "zip is 12345"
+    ];
+
+    for (const pattern of patterns) {
+        const match = cleanText.match(pattern);
+        if (match && match[1]) {
+            const zip = match[1];
+            if (/^\d{5}$/.test(zip)) {
+                return zip;
+            }
+        }
+    }
+
+    return null;
 }
 
 // Create TTS weather report tool
@@ -165,17 +300,25 @@ const ttsWeatherTool = createTool({
         text: z.string().optional().describe("Weather text to convert to speech"),
     }),
     execute: async ({ context }) => {
-        const { zipCode, text } = context;
+        let { zipCode, text } = context;
 
+        // Extract ZIP code if it's embedded in text or other formats
         if (!zipCode || !/^\d{5}$/.test(zipCode)) {
-            throw new Error(`Invalid ZIP code: ${zipCode}`);
+            const extractedZip = extractZipCode(String(zipCode ?? text ?? ''));
+            if (extractedZip) {
+                zipCode = extractedZip;
+                console.log(`[tts-weather-upload] Extracted ZIP code: ${zipCode}`);
+            } else {
+                throw new Error(`Invalid ZIP code format: ${zipCode}. Please provide a 5-digit ZIP code.`);
+            }
         }
 
         console.log(`[tts-weather-upload] Creating audio for ZIP ${zipCode}`);
 
         try {
             // Default weather text if none provided
-            const weatherText = text || `Weather report for ZIP code ${zipCode}: Partly cloudy with a high of 72 degrees. Light winds from the southwest at 8 miles per hour. Have a great day!`;
+            const defaultScript = `Hello from zip code ${zipCode}. Partly cloudy skies with a high around 72 degrees, a gentle southwest breeze near 8 miles per hour. This evening, mostly clear with lows around 58. Have a great day.`;
+            const weatherText = text || defaultScript;
 
             // Optimize text for natural speech
             const speechText = optimizeTextForSpeech(weatherText);
@@ -185,7 +328,7 @@ const ttsWeatherTool = createTool({
                 ? speechText.slice(0, 497) + '...'
                 : speechText;
 
-            console.log(`[tts-weather-upload] Speech text: "${finalText}"`);
+            console.log(`[tts-weather-upload] Speech text (${finalText.length} chars): "${finalText}"`);
 
             // Generate TTS audio
             let audioBuffer: Buffer;
@@ -219,15 +362,14 @@ const ttsWeatherTool = createTool({
             await fs.writeFile(resolve(audioPath), audioBuffer);
             console.log(`[tts-weather-upload] Audio saved: ${audioPath} (${audioBuffer.length} bytes, source: ${audioSource})`);
 
-            // Check for image, create default if needed
-            const imagePath = resolve('files/images/weather.jpg');
-            let finalImagePath = imagePath;
+            // Get random background image
+            let finalImagePath: string;
 
             try {
-                await fs.access(imagePath);
-                console.log(`[tts-weather-upload] Using existing image: ${imagePath}`);
+                finalImagePath = await getRandomBackgroundImage();
+                console.log(`[tts-weather-upload] Using background image: ${finalImagePath}`);
             } catch {
-                // Create simple colored background
+                // Create simple colored background as fallback
                 const defaultImagePath = resolve(`${baseDir}/weather-bg-${timestamp}.png`);
                 console.log(`[tts-weather-upload] Creating default background image...`);
 
@@ -329,18 +471,18 @@ const ttsWeatherTool = createTool({
                 console.log('[tts-weather-upload] Polling upload status to get asset_id...');
                 const uploadTools2 = await uploadClient.getTools();
                 const retrieveUpload = uploadTools2['retrieve_video_uploads'] || uploadTools2['video.uploads.get'];
-                
+
                 if (retrieveUpload) {
                     // Poll upload status until we get asset_id
                     const maxAttempts = 10;
                     const pollInterval = 3000;
-                    
+
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                         try {
                             console.log(`[tts-weather-upload] Polling upload attempt ${attempt}/${maxAttempts}...`);
                             const uploadResult = await retrieveUpload.execute({ context: { UPLOAD_ID: uploadId } });
                             const uploadBlocks = Array.isArray(uploadResult) ? uploadResult : [uploadResult];
-                            
+
                             for (const block of uploadBlocks as any[]) {
                                 const text = block?.text;
                                 if (text) {
@@ -348,14 +490,14 @@ const ttsWeatherTool = createTool({
                                         const uploadData = JSON.parse(text);
                                         const status = uploadData.status;
                                         const foundAssetId = uploadData.asset_id || uploadData.asset?.id;
-                                        
+
                                         console.log(`[tts-weather-upload] Upload status: ${status}, asset_id: ${foundAssetId || 'pending'}`);
-                                        
+
                                         if (foundAssetId) {
                                             assetId = foundAssetId;
                                             break;
                                         }
-                                        
+
                                         if (status === 'errored') {
                                             throw new Error(`Upload failed with status: ${status}`);
                                         }
@@ -367,9 +509,9 @@ const ttsWeatherTool = createTool({
                                     }
                                 }
                             }
-                            
+
                             if (assetId) break;
-                            
+
                             if (attempt < maxAttempts) {
                                 await new Promise(resolve => setTimeout(resolve, pollInterval));
                             }
@@ -388,46 +530,46 @@ const ttsWeatherTool = createTool({
             // Get playback URL from asset status using asset_id
             let playbackUrl = '';
             let playbackId = '';
-            
+
             if (assetId) {
                 console.log('[tts-weather-upload] Polling asset status to get playback_id...');
                 try {
                     const assetsTools = await assetsClient.getTools();
-                    const getAsset = assetsTools['retrieve_video_assets'] || 
-                                   assetsTools['get_video_assets'] ||
-                                   assetsTools['video.assets.retrieve'] ||
-                                   assetsTools['video.assets.get'];
-                    
+                    const getAsset = assetsTools['retrieve_video_assets'] ||
+                        assetsTools['get_video_assets'] ||
+                        assetsTools['video.assets.retrieve'] ||
+                        assetsTools['video.assets.get'];
+
                     if (getAsset) {
                         // Poll asset status until ready
                         const maxAssetAttempts = 15;
                         const assetPollInterval = 4000;
-                        
+
                         for (let attempt = 1; attempt <= maxAssetAttempts; attempt++) {
                             try {
                                 console.log(`[tts-weather-upload] Polling asset attempt ${attempt}/${maxAssetAttempts}...`);
                                 const assetResult = await getAsset.execute({ context: { ASSET_ID: assetId } });
                                 const assetText = Array.isArray(assetResult) ? assetResult[0]?.text : String(assetResult);
-                                
+
                                 try {
                                     const assetData = JSON.parse(assetText);
                                     const assetStatus = assetData.status;
                                     const playbackIds = assetData.playback_ids;
-                                    
+
                                     console.log(`[tts-weather-upload] Asset status: ${assetStatus}`);
-                                    
+
                                     if (assetStatus === 'ready' && Array.isArray(playbackIds) && playbackIds.length > 0) {
                                         playbackId = playbackIds[0].id;
                                         playbackUrl = `https://stream.mux.com/${playbackId}.m3u8`;
                                         console.log(`[tts-weather-upload] Asset ready! Playback ID: ${playbackId}`);
                                         break;
                                     }
-                                    
+
                                     if (assetStatus === 'errored') {
                                         console.warn('[tts-weather-upload] Asset processing failed');
                                         break;
                                     }
-                                    
+
                                     if (attempt < maxAssetAttempts && ['preparing', 'processing'].includes(assetStatus)) {
                                         console.log(`[tts-weather-upload] Asset still ${assetStatus}, waiting...`);
                                         await new Promise(resolve => setTimeout(resolve, assetPollInterval));
@@ -504,15 +646,16 @@ const resolveZipTool = createTool({
         const location = String(context.location || '').trim();
         if (!location) throw new Error('Location is required');
 
-        // If already a ZIP, validate it
-        if (/^\d{5}$/.test(location)) {
-            const response = await fetch(`https://api.zippopotam.us/us/${location}`);
-            if (!response.ok) throw new Error(`Invalid ZIP: ${location}`);
+        // Enhanced ZIP extraction
+        const extractedZip = extractZipCode(location);
+        if (extractedZip) {
+            const response = await fetch(`https://api.zippopotam.us/us/${extractedZip}`);
+            if (!response.ok) throw new Error(`Invalid ZIP: ${extractedZip}`);
 
             const data = await response.json();
             const place = data.places?.[0];
             return {
-                zipCode: location,
+                zipCode: extractedZip,
                 city: place?.["place name"] || 'Unknown',
                 state: place?.["state abbreviation"] || '',
             };
@@ -570,9 +713,10 @@ export const weatherAgent = new Agent({
 
     AUDIO GENERATION:
     - Keep audio scripts under 500 characters
-    - Use natural, conversational language
-    - Include city/state, today's highlights, tomorrow's outlook, and key temperatures
-    - Speak slowly and clearly with simple words
+    - Use natural, conversational language with smooth flow
+    - Include location name, today's highlights, tomorrow's outlook, and key temperatures
+    - Write like a friendly broadcaster: "Good morning from..." or "Hello from..."
+    - Use transitions like "Now, looking ahead to tomorrow..." or "As for tonight..."
 
     RESPONSE FORMAT:
     Always show weather details first, then mention generating audio, then show streaming URLs after upload completes.
@@ -588,7 +732,7 @@ export const weatherAgent = new Agent({
 
     CRITICAL: Both the StreamingPortfolio player URL and the Mux stream URL must be included in every successful audio response.
 
-    Example audio script: "Good morning from San Francisco, California. Today expect partly cloudy skies with a high of 68 degrees. Light southwest winds at 8 miles per hour. Tonight, mostly clear with lows around 55. Tomorrow looks sunny with highs near 70. Perfect weather for outdoor activities. Drive safely!"
+    Example natural audio script: "Good morning from beautiful San Francisco, California. Today we're looking at partly cloudy skies with a high around 68 degrees. Southwest winds at a gentle 8 miles per hour. Tonight, expect mostly clear conditions with lows around 55. Looking ahead to tomorrow, sunny skies return with highs near 70. Perfect weather for getting outdoors. Stay safe and have a wonderful day!"
     `,
     model: anthropic("claude-3-5-haiku-latest"),
     tools: { resolveZipTool, weatherTool, ttsWeatherTool },
@@ -605,7 +749,9 @@ export const weatherAgent = new Agent({
 export const weatherAgentTestWrapper = {
     text: async ({ messages }: { messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> }) => {
         const lastMessage = messages[messages.length - 1]?.content || '';
-        const zipMatch = lastMessage.match(/\b(\d{5})\b/);
+
+        // Enhanced ZIP extraction for testing
+        const extractedZip = extractZipCode(lastMessage);
         const wantsAudio = /\b(audio|tts|stream|upload|mux)\b/i.test(lastMessage);
 
         // Mock data for testing
@@ -616,12 +762,11 @@ export const weatherAgentTestWrapper = {
             '94102': 'San Francisco, CA',
         };
 
-        if (wantsAudio && zipMatch) {
-            const zip = zipMatch[1];
-            const city = mockCities[zip] || `ZIP ${zip}`;
+        if (wantsAudio && extractedZip) {
+            const city = mockCities[extractedZip] || `ZIP ${extractedZip}`;
             const mockAssetId = `NB83021TnUBoemuDiICOekyKq5wxblC2Kmv02JtU1nTLQ`;
             const mockPlaybackId = `sample123playback`;
-            
+
             return {
                 text: [
                     `**Weather for ${city}**`,
@@ -640,10 +785,9 @@ export const weatherAgentTestWrapper = {
             };
         }
 
-        if (zipMatch) {
-            const zip = zipMatch[1];
-            const city = mockCities[zip] || `ZIP ${zip}`;
-            
+        if (extractedZip) {
+            const city = mockCities[extractedZip] || `ZIP ${extractedZip}`;
+
             return {
                 text: [
                     `**Weather for ${city}**`,
