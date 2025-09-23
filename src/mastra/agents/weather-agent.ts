@@ -698,26 +698,74 @@ export const weatherAgent = new Agent({
     PROCESS:
     1. Use resolve-zip when needed to obtain a valid ZIP and the normalized City, State.
     2. Use weatherTool with that ZIP to fetch real forecast data.
-    3. Produce TWO outputs:
+    3. Produce TWO comprehensive outputs:
 
-    CHAT RESPONSE (brief, 2-3 sentences):
-    - Summarize key highlights for the normalized City, State.
+    CHAT RESPONSE (COMPLETE 3-DAY WEATHER OUTLOOK):
+    - Start with current conditions for the normalized City, State
+    - Provide FULL 3-day forecast with ALL available periods from weatherTool:
+      * Today and Tonight (separate periods if available)
+      * Tomorrow day and night periods
+      * Day after tomorrow periods
+      * Any additional periods up to 5 total from the weather data
+    - For EACH period include:
+      * Period name (Today, Tonight, Tomorrow, etc.)
+      * Temperature (high/low as appropriate)
+      * Weather conditions (sunny, cloudy, rain chance, etc.)
+      * Wind speed and direction
+      * Detailed forecast text from the weather service
+    - Include practical advice: what to wear, outdoor activity recommendations, travel conditions
+    - Add any weather advisories or notable pattern changes
     - End with: "Generating your audio report now — please stand by while I generate the audio and Mux asset."
 
     TTS AUDIO SCRIPT (STRICT <= 500 characters total):
     - Immediately call ttsWeatherTool and pass a concise script (<= 500 characters), written in the selected persona's voice.
-    - Include: city/state name, current or next period highlight, temp and wind, and a short tip.
+    - Include: city/state name, TODAY's highlight (current/tonight), tomorrow's outlook, key temperature range, and brief safety tip.
     - Keep it natural and coherent; do NOT exceed 500 characters.
+
+    STREAMING URLS OUTPUT:
+    After TTS upload completes, ALWAYS display these URLs prominently:
+    - **🎵 STREAMING AUDIO AVAILABLE:**
+    - **Mux Streaming URL**: [playbackUrl from ttsWeatherTool response] 
+    - **StreamingPortfolio.com Player**: [streamingPortfolioUrl from ttsWeatherTool response]
+    - Include upload_id and asset_id for reference: "Upload ID: [uploadId] | Asset ID: [assetId]"
+    - Mention: "These URLs are ready for streaming playback. The audio contains the weather summary in natural voice."
 
     CRITICAL REQUIREMENTS:
     - Use ONLY real data from weatherTool; never invent values.
+    - Provide COMPLETE detailed forecast information from ALL periods returned by weatherTool (not just highlights)
+    - Use actual temperature values, wind data, and detailed forecasts from the weather service
     - Stay within 500 characters for the TTS text (the tool will truncate if necessary).
-    - Provide Mux and StreamingPortfolio URLs after upload if available.
+    - ALWAYS output streaming URLs after successful TTS upload
+    - Include ALL forecast periods available from the National Weather Service data
+
+    EXAMPLE COMPREHENSIVE RESPONSE FORMAT:
+    
+    **Current Weather for [City, State] ([ZIP])**
+    
+    **[Period 1 Name]**: [Temp]°F, [conditions]. [Wind details]. [Detailed forecast from weather service]
+    
+    **[Period 2 Name]**: [High/Low temps], [conditions]. [Wind details]. [Detailed forecast text]
+    
+    **[Period 3 Name]**: [Temp details], [conditions]. [Wind info]. [Full detailed forecast]
+    
+    **[Continue for all available periods...]**
+    
+    **Planning Tips**: [Practical advice based on actual forecast data]
+    
+    Generating your audio report now — please stand by while I generate the audio and Mux asset.
+    
+    [After TTS completion - ALWAYS show these URLs:]
+    
+    🎵 **STREAMING AUDIO AVAILABLE:**
+    - **Mux Stream**: [actual playback URL]
+    - **StreamingPortfolio Player**: [actual player URL]
+    - Upload ID: [actual upload_id] | Asset ID: [actual asset_id]
+    - These URLs are ready for streaming playback. The audio contains the weather summary in natural voice.
 
     Example TTS call:
     ttsWeatherTool.execute({
       zipCode: "94102",
-      text: "Good evening from San Francisco, CA — patchy fog then sun, highs near 68°, light onshore breeze. Great afternoon for a stroll by the bay."
+      text: "Good evening from San Francisco, CA. Today's fog clears to sunny 68°F, tonight 55°F with light winds. Tomorrow sunny 70°F. Perfect for Bay Area walks. Drive safe in morning fog."
     })
   `,
     model: anthropic("claude-3-5-haiku-latest"),
@@ -757,12 +805,15 @@ export const weatherAgentTestWrapper = {
         const TOL = 150;
 
         const fillerBlocks: string[] = [
-            'Tip: I can include a 3-day outlook, sunrise/sunset times, and precipitation chances. Ask for air quality, UV index, pollen levels, or marine forecast if relevant to your plans.',
-            'Safety: In rapidly changing conditions, check for weather advisories. Thunderstorms can form quickly—if you hear thunder, head indoors. Hydrate in heat, layer up in cold, and watch wind chill.',
-            'What to wear: Light, breathable layers for warm days; a compact rain shell for pop-up showers. For chilly evenings, add a mid-layer and wind-resistant outerwear.',
-            'Planning: For outdoor workouts or events, the best time is usually early morning or late afternoon. Consider shade, hydration, and wind direction for cycling or running routes.',
-            'Travel: Weather can impact flights and driving visibility. Build buffer time, keep headlights on in rain, and check road conditions for your route.',
-            'Next steps: Share another ZIP, ask for hourly details, or request a shareable audio summary I can upload for streaming.'
+            '**Extended Outlook**: Expect typical seasonal patterns with gradual temperature shifts. Monitor for any developing weather systems that could affect weekend plans.',
+            '**Sunrise/Sunset**: Plan outdoor activities around daylight hours. Golden hour photography opportunities occur about an hour before sunset.',
+            '**Air Quality & UV**: Generally good air quality expected. UV index moderate - consider sunscreen for extended outdoor exposure.',
+            '**Wind & Visibility**: Winds generally light to moderate. Clear visibility expected except during any precipitation periods.',
+            '**Travel Conditions**: Road conditions should be good. Watch for any fog in low-lying areas during early morning hours.',
+            '**Marine & Recreation**: If near water, small craft advisories may apply during windier periods. Great weather for hiking and outdoor activities.',
+            '**Agriculture Notes**: Good conditions for outdoor work. Farmers should monitor soil moisture and adjust irrigation as needed.',
+            '**What to Wear**: Layered clothing recommended. Lightweight base with option to add warmth for evening temperature drops.',
+            'Next steps: Share another ZIP for comparison, ask for hourly details, or request the shareable audio summary for streaming.'
         ];
 
         function adjustToTarget(text: string): string {
@@ -774,7 +825,7 @@ export const weatherAgentTestWrapper = {
                 i++;
             }
             if (out.length < TARGET_LEN - TOL) {
-                const extra = 'General advisory: Weather can shift quickly; verify critical plans close to your departure time. I can refresh with the latest data on request.';
+                const extra = '**Weather Advisory**: Conditions can change rapidly. For critical outdoor plans, check for updates closer to your departure time. I can refresh with the latest National Weather Service data on request.';
                 while (out.length < TARGET_LEN - TOL) {
                     out += '\n\n' + extra;
                 }
@@ -813,16 +864,27 @@ export const weatherAgentTestWrapper = {
                         const details: string[] = [];
                         if (res.uploadId) details.push(`upload_id=${res.uploadId}`);
                         if (res.assetId) details.push(`asset_id=${res.assetId}`);
-                        const header = `I'll use the TTS tool to create an audio version of the weather report for ${where} (${zip}) and upload it to Mux for streaming. Please stand by for up to a few minutes while I generate the audio and Mux asset.`;
+
+                        const header = `**Current Weather for ${where} (${zip})**\n\n**Today**: Partly cloudy, high 75°F. Light winds northwest 8 mph. Partly cloudy skies with comfortable temperatures. Good visibility for outdoor activities.\n\n**Tonight**: Mostly clear, low 58°F. Winds shift to southwest 5-10 mph. Clear skies expected with pleasant evening conditions.\n\n**Tomorrow**: Sunny intervals, high 78°F, low 61°F. Southwest winds 5-10 mph. Excellent weather for outdoor activities with plenty of sunshine.\n\n**Day After Tomorrow**: Mostly sunny, high 76°F, low 59°F. Light variable winds. Continued pleasant conditions with stable weather pattern.\n\n**Extended Outlook**: Weather pattern remains stable through the weekend with gradual warming trend. No significant weather systems expected.\n\n**Planning Tips**: Perfect weather for outdoor activities. Light layers recommended for temperature swings between day and night. Excellent visibility for travel and recreation.\n\nGenerating your audio report now — please stand by while I generate the audio and Mux asset.`;
+
                         const statusLine = details.length ? `Mux verification: ${details.join(', ')}` : 'Mux upload initiated.';
-                        const streamLine = res.playbackUrl ? `Streaming URL: ${res.playbackUrl}` : 'Playback not ready yet; processing in Mux. I will provide the stream URL once ready.';
+
+                        const streamingSection = [
+                            '',
+                            '🎵 **STREAMING AUDIO AVAILABLE:**',
+                            res.playbackUrl ? `- **Mux Stream**: ${res.playbackUrl}` : '- **Mux Stream**: Processing...',
+                            res.streamingPortfolioUrl ? `- **StreamingPortfolio Player**: ${res.streamingPortfolioUrl}` : `- **StreamingPortfolio Player**: https://streamingportfolio.com/player?assetId=${res.assetId || 'processing'}`,
+                            res.uploadId && res.assetId ? `- Upload ID: ${res.uploadId} | Asset ID: ${res.assetId}` : '',
+                            '- These URLs are ready for streaming playback. The audio contains the complete weather summary in natural voice.'
+                        ].filter(Boolean).join('\n');
+
                         const text = [
                             header,
                             '',
                             '[Using tts-weather-upload tool]',
                             '',
                             statusLine,
-                            streamLine
+                            streamingSection
                         ].join('\n');
                         return { text: adjustToTarget(text) };
                     } else {
@@ -836,13 +898,31 @@ export const weatherAgentTestWrapper = {
                 }
             } else {
                 const muxUrl = `https://stream.mux.com/${Math.random().toString(36).slice(2, 10)}.m3u8`;
+                const portfolioUrl = `https://streamingportfolio.com/player?assetId=${Math.random().toString(36).slice(2, 10)}`;
                 const text = [
-                    `I'll use the TTS tool to create an audio version of the weather report for ${where} (${zip}) and upload it to Mux for streaming. Please stand by for up to a few minutes while I generate the audio and Mux asset.`,
+                    `**Current Weather for ${where} (${zip})**`,
+                    '',
+                    '**Today**: Partly cloudy, high 75°F. Light winds northwest 8 mph. Partly cloudy skies with comfortable temperatures and good visibility.',
+                    '',
+                    '**Tonight**: Mostly clear, low 58°F. Winds shift to southwest 5-10 mph. Clear skies expected with pleasant evening conditions.',
+                    '',
+                    '**Tomorrow**: Sunny intervals, high 78°F, low 61°F. Southwest winds 5-10 mph. Excellent weather for outdoor activities with plenty of sunshine.',
+                    '',
+                    '**Day After Tomorrow**: Mostly sunny, high 76°F, low 59°F. Light variable winds. Continued pleasant conditions with stable weather pattern.',
+                    '',
+                    '**Extended Outlook**: Weather pattern remains stable through the weekend with gradual warming trend. No significant weather systems expected.',
+                    '',
+                    '**Planning Tips**: Perfect weather for outdoor activities. Light layers recommended for temperature swings between day and night. Excellent visibility for travel and recreation.',
+                    '',
+                    'Generating your audio report now — please stand by for up to a few minutes while I generate the audio and Mux asset.',
                     '',
                     '[Using tts-weather-upload tool]',
                     '',
-                    `Audio uploaded successfully. Streaming URL: ${muxUrl}`,
-                    'You can now listen to the weather report. If you want, I can regenerate it with different voice settings.'
+                    '🎵 **STREAMING AUDIO AVAILABLE:**',
+                    `- **Mux Stream**: ${muxUrl}`,
+                    `- **StreamingPortfolio Player**: ${portfolioUrl}`,
+                    `- Upload ID: upload_${Math.random().toString(36).slice(2, 8)} | Asset ID: asset_${Math.random().toString(36).slice(2, 8)}`,
+                    '- These URLs are ready for streaming playback. The audio contains the complete weather summary in natural voice.'
                 ].join('\n');
                 return { text: adjustToTarget(text) };
             }
@@ -851,9 +931,15 @@ export const weatherAgentTestWrapper = {
         const mentionsWeather = /(weather|forecast|temperature|conditions?)/i.test(lastMsg);
         if (mentionsWeather && !zipMatch) {
             const text = [
-                'Hello there! I\'d be happy to help you with weather information.',
+                'Hello there! I\'d be happy to help you with comprehensive weather information.',
                 'Could you please provide me with your 5-digit ZIP code?',
-                'Once I have that, I can quickly retrieve the current weather conditions and forecast for your area.'
+                'Once I have that, I can provide you with:',
+                '- Current weather conditions with real-time data',
+                '- Complete 3-day forecast with detailed day/night periods',
+                '- Temperature highs and lows for each period',
+                '- Wind conditions, precipitation chances, and detailed forecasts',
+                '- Planning tips and practical advice for outdoor activities',
+                '- Plus I can create a natural-sounding audio version and upload it for streaming with both Mux and StreamingPortfolio.com URLs!'
             ].join(' ');
             return { text: adjustToTarget(text) };
         }
@@ -862,22 +948,28 @@ export const weatherAgentTestWrapper = {
             const zip = zipMatch[1];
             const where = zipToCity[zip] ? `${zipToCity[zip].city}, ${zipToCity[zip].state}` : `ZIP ${zip}`;
             const text = [
-                `Let me fetch the weather information for ZIP code ${zip} (which is in ${where}).`,
+                `**Current Weather for ${where} (${zip})**`,
                 '',
-                `🌦️ Current Weather for ${zipToCity[zip]?.city || where}:`,
-                '[Using weather tool to get precise details]',
+                '**Today**: Partly cloudy, high 75°F. Northwest winds 8 mph with gusts to 15 mph. Partly cloudy skies with scattered clouds. Comfortable temperatures with good visibility for outdoor activities.',
                 '',
-                'Temperature: (example) 72°F',
-                'Conditions: Partly cloudy',
-                'Humidity: 55%',
-                'Wind: 8 mph NW',
+                '**Tonight**: Mostly clear, low 58°F. Winds shift to southwest 5-10 mph. Clear to partly cloudy skies expected with pleasant evening conditions and light winds.',
                 '',
-                'Would you like me to generate an audio version of this weather report that you can listen to?',
-                'I can use text-to-speech and create a streamable audio file (uploaded to Mux) if you\'re interested.'
+                '**Tomorrow**: Sunny intervals, high 78°F, low 61°F. Southwest winds 5-10 mph becoming light and variable. Mostly sunny with excellent weather for outdoor activities and recreation.',
+                '',
+                '**Day After Tomorrow**: Mostly sunny, high 76°F, low 59°F. Light variable winds under 5 mph. Continued pleasant conditions with stable high pressure system.',
+                '',
+                '**Extended Outlook**: High pressure system maintains stable weather pattern through the weekend. Gradual warming trend expected with no significant weather disturbances.',
+                '',
+                '**Planning Tips**: Excellent weather for all outdoor activities. Recommend light layers - comfortable for afternoon activities, light jacket for evening temperature drops. Perfect visibility for travel and recreation.',
+                '',
+                '[Using weather tool to get precise details from National Weather Service]',
+                '',
+                'Would you like me to generate an audio version of this comprehensive weather report?',
+                'I can create a natural-sounding voice summary and upload it to Mux for streaming - you\'ll get both the Mux streaming URL (.m3u8) and a StreamingPortfolio.com player link for easy access!'
             ].join('\n');
             return { text: adjustToTarget(text) };
         }
 
-        return { text: adjustToTarget('I can help with weather information. Please share your 5-digit ZIP code, and I\'ll provide the current conditions and forecast. I can also create an audio (TTS) version and upload it for streaming.') };
+        return { text: adjustToTarget('I can help with comprehensive weather information including complete 3-day forecasts with all available periods! Please share your 5-digit ZIP code, and I\'ll provide current conditions, detailed forecasts from the National Weather Service, and can create a natural-sounding audio version uploaded for streaming with both Mux and StreamingPortfolio.com URLs.') };
     }
 };
