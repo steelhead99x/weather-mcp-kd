@@ -8,6 +8,16 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
 import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
+
+// Pre-warm MCP on module load (non-blocking, best-effort)
+(async () => {
+    try {
+        await Promise.race([
+            Promise.allSettled([uploadClient.getTools(), assetsClient.getTools()]),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('prewarm-timeout')), Math.max(5000, parseInt(process.env.MUX_PREWARM_TIMEOUT_MS || '8000', 10) || 8000)),
+        ]);
+    } catch { /* ignore */ }
+})();
 import { Memory } from "@mastra/memory";
 import { InMemoryStore } from "@mastra/core/storage";
 import ffmpeg from 'fluent-ffmpeg';
@@ -211,18 +221,58 @@ async function putFileToMux(uploadUrl: string, filePath: string): Promise<void> 
     const fileSize = fileBuffer.length;
     const copy = new Uint8Array(fileBuffer);
     const fileAB = copy.buffer;
-    const res = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/octet-stream',
-            'Content-Length': fileSize.toString(),
-        },
-        body: new Blob([fileAB], { type: 'application/octet-stream' }),
-    } as any);
-    if (!res.ok) {
-        const t = await res.text().catch(() => '');
-        throw new Error(`Mux PUT failed: ${res.status} ${res.statusText} ${t}`);
+
+    // Retry with exponential backoff for transient failures/timeouts
+    const maxAttempts = Math.max(3, parseInt(process.env.MUX_UPLOAD_RETRY_ATTEMPTS || '5', 10) || 5);
+    const baseDelay = Math.max(500, parseInt(process.env.MUX_UPLOAD_RETRY_BASE_MS || '1000', 10) || 1000);
+
+    let lastErr: any;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutMs = Math.max(60_000, parseInt(process.env.MUX_PUT_TIMEOUT_MS || '120000', 10) || 120000);
+            const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+            const res = await fetch(uploadUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/octet-stream',
+                    'Content-Length': fileSize.toString(),
+                },
+                body: new Blob([fileAB], { type: 'application/octet-stream' }),
+                signal: controller.signal,
+            } as any);
+
+            clearTimeout(timeout);
+
+            if (!res.ok) {
+                const t = await res.text().catch(() => '');
+                // Retry on 5xx or 429; fail fast on 4xx (except 429)
+                if (res.status >= 500 || res.status === 429) {
+                    throw new Error(`Mux PUT transient error: ${res.status} ${res.statusText} ${t}`);
+                }
+                throw new Error(`Mux PUT failed: ${res.status} ${res.statusText} ${t}`);
+            }
+
+            // Drain body if present to allow keep-alive reuse
+            await res.text().catch(() => '');
+            return;
+        } catch (e) {
+            lastErr = e;
+            const msg = e instanceof Error ? e.message : String(e);
+            const isAbort = msg.toLowerCase().includes('aborted');
+            const isNetwork = /network|fetch|timed?out|socket|ecconnreset|econnrefused|etimedout|eai_again/i.test(msg);
+            const shouldRetry = isAbort || isNetwork || /transient/i.test(msg);
+            if (attempt < maxAttempts && shouldRetry) {
+                const delay = baseDelay * Math.pow(2, attempt - 1);
+                console.warn(`[mux-upload] PUT attempt ${attempt} failed (${msg}). Retrying in ${delay}ms...`);
+                await new Promise(r => setTimeout(r, delay));
+                continue;
+            }
+            break;
+        }
     }
+    throw new Error(lastErr instanceof Error ? lastErr.message : String(lastErr));
 }
 
 // Poll Mux asset until ready, return HLS and player URLs
@@ -262,8 +312,9 @@ async function waitForMuxAssetReady(assetId: string, {
             if (status === 'errored') {
                 throw new Error(`Mux asset errored: ${JSON.stringify(lastPayload)}`);
             }
-        } catch {
-            // transient errors: continue
+        } catch (e) {
+            // transient errors: jitter then continue
+            await new Promise(r => setTimeout(r, Math.min(2000, pollMs)));
         }
         await new Promise(r => setTimeout(r, pollMs));
     }
@@ -343,6 +394,15 @@ const ttsWeatherTool = createTool({
 
             try {
                 if (process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET) {
+
+                    // Pre-warm MCP clients (one-time best-effort)
+                    try {
+                        await Promise.allSettled([
+                            uploadClient.getTools(),
+                            assetsClient.getTools(),
+                        ]);
+                    } catch { /* best-effort */ }
+
                     const uploadTools = await uploadClient.getTools();
                     let create = uploadTools['create_video_uploads'] || uploadTools['video.uploads.create'];
                     if (!create) throw new Error('Mux MCP missing upload tool');
@@ -372,22 +432,31 @@ const ttsWeatherTool = createTool({
 
                     await putFileToMux(uploadUrl, resolve(videoPath));
 
-                    // If assetId still missing, try retrieving by uploadId
+                    // Robustly retrieve assetId by polling the upload record if missing
                     if (!assetId && uploadId) {
                         const retrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
                         if (retrieve) {
-                            try {
-                                const r = await retrieve.execute({ context: { UPLOAD_ID: uploadId } });
-                                const rb = Array.isArray(r) ? r : [r];
-                                for (const b of rb as any[]) {
-                                    const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
-                                    if (!t) continue;
-                                    try {
-                                        const payload = JSON.parse(t);
-                                        assetId = assetId || payload.asset_id || payload.asset?.id;
-                                    } catch {}
+                            const attempts = Math.max(5, parseInt(process.env.MUX_RETRIEVE_RETRY_ATTEMPTS || '8', 10) || 8);
+                            const base = Math.max(500, parseInt(process.env.MUX_RETRIEVE_RETRY_BASE_MS || '1000', 10) || 1000);
+                            for (let i = 1; i <= attempts && !assetId; i++) {
+                                try {
+                                    const r = await retrieve.execute({ context: { UPLOAD_ID: uploadId } });
+                                    const rb = Array.isArray(r) ? r : [r];
+                                    for (const b of rb as any[]) {
+                                        const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
+                                        if (!t) continue;
+                                        try {
+                                            const payload = JSON.parse(t);
+                                            assetId = assetId || payload.asset_id || payload.asset?.id;
+                                            if (assetId) break;
+                                        } catch {}
+                                    }
+                                } catch {}
+                                if (!assetId) {
+                                    const delay = base * Math.pow(1.5, i - 1);
+                                    await new Promise(r => setTimeout(r, delay));
                                 }
-                            } catch {}
+                            }
                         }
                     }
 
