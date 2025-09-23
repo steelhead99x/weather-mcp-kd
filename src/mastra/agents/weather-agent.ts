@@ -148,28 +148,60 @@ async function getFallbackBackgroundPng(): Promise<string> {
     }
 }
 
-// Build natural, concise speech from forecast
-function buildNaturalSpeechFromForecast(zip: string, weatherData: any): string {
+// Pronounce ZIP digits clearly as spaced digits
+function speakZip(zip: string): string {
+    return zip.split('').join(' ');
+}
+
+// Build agriculture-focused, clear speech from forecast
+function buildAgriSpeechFromForecast(zip: string, weatherData: any): string {
     const loc = weatherData?.location?.displayName || 'your area';
     const fc = Array.isArray(weatherData?.forecast) ? weatherData.forecast : [];
     const today = fc[0];
     const tonightOrNext = fc[1];
     const tomorrow = fc[2];
 
+    const sayZip = speakZip(zip);
+
+    // Helper to simplify wind
+    const windPhrase = (p: any) => {
+        if (!p?.windSpeed) return '';
+        return `Winds ${String(p.windSpeed).replace(/\s+/g, ' ')} ${p.windDirection || ''}`.trim() + '.';
+    };
+
     const parts: string[] = [];
-    parts.push(`Here's your forecast for ${loc}, ${zip}.`);
+    parts.push(`Agriculture weather for ${loc}. ZIP ${sayZip}.`);
 
     if (today) {
-        parts.push(`${today.name}: ${today.shortForecast.toLowerCase()}, around ${today.temperature} degrees ${today.temperatureUnit}. Winds ${today.windSpeed} ${today.windDirection}.`);
+        parts.push(`${today.name}: ${today.shortForecast.toLowerCase()}. Temperature around ${today.temperature} degrees ${today.temperatureUnit}. ${windPhrase(today)}`);
     }
     if (tonightOrNext) {
-        parts.push(`${tonightOrNext.name}: ${tonightOrNext.shortForecast.toLowerCase()}, near ${tonightOrNext.temperature} degrees ${tonightOrNext.temperatureUnit}.`);
+        parts.push(`${tonightOrNext.name}: ${tonightOrNext.shortForecast.toLowerCase()}. Near ${tonightOrNext.temperature} degrees ${tonightOrNext.temperatureUnit}.`);
     }
     if (tomorrow) {
-        parts.push(`Looking ahead to ${tomorrow.name.toLowerCase()}: ${tomorrow.shortForecast.toLowerCase()}, about ${tomorrow.temperature} degrees ${tomorrow.temperatureUnit}.`);
+        parts.push(`Looking to ${tomorrow.name.toLowerCase()}: ${tomorrow.shortForecast.toLowerCase()}, about ${tomorrow.temperature} degrees ${tomorrow.temperatureUnit}.`);
     }
 
-    parts.push(`Stay comfortable and check back if plans change.`);
+    // Simple ag guidance (temp-focused). In a real system, add precip/soil moisture/evapotranspiration.
+    const ref = today || tomorrow || tonightOrNext;
+    if (ref) {
+        const t = ref.temperature;
+        if (typeof t === 'number') {
+            if (t >= 90) {
+                parts.push(`Advice: Plan irrigation and avoid mid-day transplanting. Schedule field work early morning or evening to reduce heat stress on crops and livestock.`);
+            } else if (t >= 80) {
+                parts.push(`Advice: Monitor crop water needs and consider light irrigation. Midday heat can stress tender plants—shade where possible.`);
+            } else if (t >= 60) {
+                parts.push(`Advice: Good window for planting, pruning, and spraying if winds are calm. Watch for rapid drying in full sun.`);
+            } else if (t >= 40) {
+                parts.push(`Advice: Cool conditions. Protect sensitive seedlings overnight. Consider row covers for warmth retention.`);
+            } else {
+                parts.push(`Advice: Cold conditions. Protect frost–sensitive crops and ensure livestock shelter and water supply remain unfrozen.`);
+            }
+        }
+    }
+
+    parts.push(`Check back before spraying or harvesting—conditions can shift quickly.`);
     return parts.join(' ');
 }
 
@@ -222,7 +254,6 @@ async function waitForMuxAssetReady(assetId: string, {
                     status,
                     playbackId,
                     hlsUrl: playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : undefined,
-                    // Always provide a stable player URL using the uploaded asset
                     playerUrl: `https://streamingportfolio.com/player?assetId=${assetId}`,
                     asset: lastPayload,
                     assetId,
@@ -242,10 +273,10 @@ async function waitForMuxAssetReady(assetId: string, {
 // Weather-to-tts-and-upload tool
 const ttsWeatherTool = createTool({
     id: "tts-weather-upload",
-    description: "Convert weather report to audio, create a simple video, upload to Mux, and return a streaming URL.",
+    description: "Convert weather report to agriculture-focused audio, create a simple video, upload to Mux, and return a streaming URL.",
     inputSchema: z.object({
         zipCode: z.string().describe("5-digit ZIP code"),
-        text: z.string().optional().describe("Optional custom text. If omitted, a natural forecast will be generated."),
+        text: z.string().optional().describe("Optional custom text. If omitted, a natural agriculture forecast will be generated."),
     }),
     execute: async ({ context }) => {
         let { zipCode, text } = context as { zipCode?: string; text?: string };
@@ -260,13 +291,16 @@ const ttsWeatherTool = createTool({
         }
 
         try {
-            // Build natural speech if custom text not provided
+            // Build agriculture-focused speech if custom text not provided
             let finalText = (text || '').trim();
             let weatherData: any = null;
 
             if (!finalText) {
                 weatherData = await weatherTool.execute({ context: { zipCode: zip } } as any);
-                finalText = buildNaturalSpeechFromForecast(zip, weatherData);
+                finalText = buildAgriSpeechFromForecast(zip, weatherData);
+            } else {
+                // If user provides text, still ensure we clearly say the ZIP for audio clarity
+                finalText = `For ZIP ${speakZip(zip)}. ${finalText}`;
             }
 
             // Synthesize TTS (Deepgram)
@@ -303,7 +337,6 @@ const ttsWeatherTool = createTool({
             // Upload to Mux and get streaming URLs
             let mux: any = null;
             let playbackUrl: string | undefined;
-            // We will always return a playerUrl once we know assetId
             let playerUrl: string | undefined;
             let assetId: string | undefined;
             let playbackId: string | undefined;
@@ -360,7 +393,7 @@ const ttsWeatherTool = createTool({
 
                     if (!assetId) throw new Error('No asset_id after upload');
 
-                    // Build the always-present player URL immediately from assetId
+                    // Build player URL immediately from assetId (always provide)
                     playerUrl = `https://streamingportfolio.com/player?assetId=${assetId}`;
 
                     // Poll until ready for HLS URL
@@ -421,15 +454,16 @@ const ttsWeatherTool = createTool({
 
 function buildSystemPrompt() {
     return [
-        'You are a helpful weather assistant.',
+        'You are a helpful agriculture-focused weather assistant.',
         'When the user asks about weather without providing a ZIP code, ask for a 5-digit ZIP.',
-        'Be concise and factual.',
+        'Be concise, clear, and natural; speak digits of ZIP codes clearly when generating TTS.',
+        'Offer practical farm and field guidance tied to conditions (planting, irrigation, spraying, frost, livestock).',
     ].join(' ');
 }
 
 export const weatherAgent = new Agent({
     name: 'weatherAgent',
-    description: 'Provides weather info for ZIP codes and can generate a natural TTS video uploaded to Mux with a streaming URL.',
+    description: 'Provides agriculture-focused weather info for ZIP codes and generates a clear, natural TTS video uploaded to Mux with a streaming URL.',
     instructions: buildSystemPrompt(),
     model: anthropic(process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307'),
     tools: {
@@ -472,7 +506,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
 
     if (!zipCode) {
         return {
-            text: 'Please share a 5-digit ZIP code so I can fetch your local weather.'
+            text: 'Please share a 5-digit ZIP code so I can fetch your local agriculture weather.'
         };
     }
 
@@ -485,9 +519,9 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
                 const url = r.playbackUrl || r?.mux?.hlsUrl;
                 // Always prefer the concrete playerUrl based on assetId when available
                 const player = r.playerUrl || (r.assetId ? `https://streamingportfolio.com/player?assetId=${r.assetId}` : undefined);
-                const summary = r.summaryText || quotedText || 'Weather update';
+                const summary = r.summaryText || quotedText || `Agriculture weather for ZIP ${zipCode}`;
                 const pieces = [
-                    `Your streaming audio is ready.`,
+                    `Your agriculture streaming audio is ready.`,
                     url ? `HLS: ${url}` : '',
                     player ? `Player: ${player}` : '',
                     `Spoken summary: ${summary}`
@@ -504,7 +538,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
         }
     }
 
-    // Otherwise, return a concise weather summary
+    // Otherwise, return a concise agriculture-focused weather summary
     try {
         const data: any = await weatherTool.execute({ context: { zipCode } } as any);
         const loc = data?.location?.displayName || 'your area';
@@ -512,11 +546,24 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
         const p0 = fc[0];
         const p1 = fc[1];
         const p2 = fc[2];
+
         const parts: string[] = [];
-        parts.push(`Weather for ${loc} (${zipCode}).`);
-        if (p0) parts.push(`${p0.name}: ${p0.shortForecast}, ${p0.temperature}°${p0.temperatureUnit}.`);
+        parts.push(`Agriculture weather for ${loc} (${zipCode}).`);
+        if (p0) parts.push(`${p0.name}: ${p0.shortForecast}, ${p0.temperature}°${p0.temperatureUnit}. Winds ${p0.windSpeed} ${p0.windDirection}.`);
         if (p1) parts.push(`${p1.name}: ${p1.shortForecast}, ${p1.temperature}°${p1.temperatureUnit}.`);
         if (p2) parts.push(`Then ${p2.name.toLowerCase()}: ${p2.shortForecast.toLowerCase()}, around ${p2.temperature}°${p2.temperatureUnit}.`);
+
+        // Brief advice
+        const ref = p0 || p1 || p2;
+        if (ref && typeof ref.temperature === 'number') {
+            const t = ref.temperature;
+            if (t >= 90) parts.push('Advice: Consider irrigation and avoid mid-day transplanting.');
+            else if (t >= 80) parts.push('Advice: Monitor water needs; provide shade for tender plants.');
+            else if (t >= 60) parts.push('Advice: Good window for planting and field work if winds are calm.');
+            else if (t >= 40) parts.push('Advice: Protect sensitive seedlings overnight.');
+            else parts.push('Advice: Frost risk—protect sensitive crops and ensure livestock shelter.');
+        }
+
         return { text: parts.join(' ') };
     } catch (e) {
         return { text: `Sorry, I couldn't fetch the weather for ZIP ${zipCode}: ${e instanceof Error ? e.message : String(e)}.` };
