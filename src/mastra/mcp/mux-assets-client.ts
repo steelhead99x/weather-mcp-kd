@@ -115,6 +115,11 @@ class MuxAssetsMCPClient {
         // If only generic invoke_api_endpoint is provided, add convenient wrappers for assets endpoints
         if (tools['invoke_api_endpoint']) {
             const addWrapper = (id: string, endpoint: string, description: string, schema?: z.ZodSchema) => {
+                // Do not overwrite real Mux MCP tools; only add wrapper if missing
+                if (tools[id]) {
+                    Logger.debug(`Skipping wrapper for ${id}; direct MCP tool already exists.`);
+                    return;
+                }
                 tools[id] = createTool({
                     id,
                     description,
@@ -125,15 +130,21 @@ class MuxAssetsMCPClient {
                         const direct = tools[endpoint];
                         if (direct && direct !== tools[id]) return direct.execute({ context });
                         const ctx = context || {};
+                        const idVal = (ctx as any).ASSET_ID || (ctx as any).asset_id || (ctx as any).id;
+                        const path = idVal ? { ASSET_ID: idVal, asset_id: idVal, id: idVal } : undefined;
                         const attemptArgs = [
                             { endpoint, args: ctx },
                             { endpoint_name: endpoint, args: ctx },
+                            path ? { endpoint, args: { path, ...ctx } } : null,
+                            path ? { endpoint_name: endpoint, args: { path, ...ctx } } : null,
+                            { endpoint, args: { body: ctx } },
+                            { endpoint_name: endpoint, args: { body: ctx } },
                             { endpoint, ...ctx },
                             { endpoint, body: ctx },
                             { endpoint, params: ctx },
                             { endpoint, arguments: ctx },
                             { name: endpoint, arguments: ctx },
-                        ];
+                        ].filter(Boolean) as any[];
                         let lastErr: any;
                         for (const args of attemptArgs) {
                             try { return (await this.client.callTool({ name: 'invoke_api_endpoint', arguments: args })).content; }

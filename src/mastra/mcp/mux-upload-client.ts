@@ -402,6 +402,11 @@ class MuxMCPClient {
 
             if (hasInvoke) {
                 const addWrapper = (id: string, endpoint: string, description: string) => {
+                    // Do not overwrite real Mux MCP tools; only add wrapper if missing
+                    if (tools[id]) {
+                        Logger.debug(`Skipping wrapper for ${id}; direct MCP tool already exists.`);
+                        return;
+                    }
                     tools[id] = createTool({
                         id,
                         description,
@@ -421,12 +426,26 @@ class MuxMCPClient {
                             Logger.debug(`Using invoke_api_endpoint wrapper for: ${endpoint}`);
 
                             const ctx = context || {};
-                            const attemptArgs = [
-                                // Standard format that most MCP servers expect
-                                { endpoint, args: ctx },
 
-                                // Direct endpoint call format
+                            // Build canonical path/body wrappers for common endpoints
+                            const idVal = (ctx as any).UPLOAD_ID || (ctx as any).upload_id || (ctx as any).id;
+                            const assetVal = (ctx as any).ASSET_ID || (ctx as any).asset_id || (ctx as any).id;
+                            const pathForUploads = idVal ? { UPLOAD_ID: idVal, upload_id: idVal, id: idVal } : undefined;
+                            const pathForAssets = assetVal ? { ASSET_ID: assetVal, asset_id: assetVal, id: assetVal } : undefined;
+                            const path = endpoint.includes('uploads') ? pathForUploads : (endpoint.includes('assets') ? pathForAssets : undefined);
+
+                            const attemptArgs = [
+                                // Standard simple args
+                                { endpoint, args: ctx },
                                 { endpoint_name: endpoint, args: ctx },
+
+                                // Path-wrapped args (common for REST-style invoke wrappers)
+                                path ? { endpoint, args: { path, ...ctx } } : null,
+                                path ? { endpoint_name: endpoint, args: { path, ...ctx } } : null,
+
+                                // Body-wrapped variants (especially for create endpoints)
+                                { endpoint, args: { body: ctx } },
+                                { endpoint_name: endpoint, args: { body: ctx } },
 
                                 // Legacy formats (keep as fallback)
                                 { endpoint, ...ctx },
@@ -439,7 +458,7 @@ class MuxMCPClient {
                                 { tool: endpoint, arguments: ctx },
                                 { endpoint, input: ctx },
                                 { endpoint, payload: ctx },
-                            ];
+                            ].filter(Boolean) as any[];
 
                             let lastErr: any;
                             for (const args of attemptArgs) {

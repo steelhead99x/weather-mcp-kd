@@ -443,14 +443,23 @@ const ttsWeatherTool = createTool({
                             const base = Math.max(500, parseInt(process.env.MUX_RETRIEVE_RETRY_BASE_MS || '1000', 10) || 1000);
                             for (let i = 1; i <= attempts && !assetId; i++) {
                                 try {
-                                    const r = await retrieve.execute({ context: { UPLOAD_ID: uploadId } });
+                                    const r = await retrieve.execute({
+                                        context: {
+                                            UPLOAD_ID: uploadId,
+                                            // keep aliases for safety
+                                            upload_id: uploadId,
+                                            id: uploadId,
+                                        }
+                                    });
                                     const rb = Array.isArray(r) ? r : [r];
                                     for (const b of rb as any[]) {
                                         const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
                                         if (!t) continue;
                                         try {
                                             const payload = JSON.parse(t);
-                                            assetId = assetId || payload.asset_id || payload.asset?.id;
+                                            const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
+                                            const up = (data && typeof data === 'object' && 'upload' in data) ? (data as any).upload : data;
+                                            assetId = assetId || up.asset_id || up.assetId || up.asset?.id;
                                             if (assetId) break;
                                         } catch {}
                                     }
@@ -458,6 +467,36 @@ const ttsWeatherTool = createTool({
                                 if (!assetId) {
                                     const delay = base * Math.pow(1.5, i - 1);
                                     await new Promise(r => setTimeout(r, delay));
+                                }
+                            }
+                            // Secondary timed poll (ensures we don't stop early)
+                            if (!assetId) {
+                                const pollMs = Math.max(2000, parseInt(process.env.MUX_RETRIEVE_POLL_MS || '5000', 10) || 5000);
+                                const timeoutMs = Math.min(10 * 60 * 1000, Math.max(20_000, parseInt(process.env.MUX_RETRIEVE_TIMEOUT_MS || '180000', 10) || 180000));
+                                const start = Date.now();
+                                while (!assetId && (Date.now() - start) < timeoutMs) {
+                                    try {
+                                        const r = await retrieve.execute({
+                                            context: {
+                                                UPLOAD_ID: uploadId,
+                                                upload_id: uploadId,
+                                                id: uploadId,
+                                            }
+                                        });
+                                        const rb = Array.isArray(r) ? r : [r];
+                                        for (const b of rb as any[]) {
+                                            const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
+                                            if (!t) continue;
+                                            try {
+                                                const payload = JSON.parse(t);
+                                                const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
+                                                const up = (data && typeof data === 'object' && 'upload' in data) ? (data as any).upload : data;
+                                                assetId = assetId || up.asset_id || up.assetId || up.asset?.id;
+                                                if (assetId) break;
+                                            } catch {}
+                                        }
+                                    } catch {}
+                                    if (!assetId) await new Promise(r => setTimeout(r, pollMs));
                                 }
                             }
                         }
@@ -499,6 +538,12 @@ const ttsWeatherTool = createTool({
                 playerUrl = `https://streamingportfolio.com/player?assetId=${assetId}`;
             }
 
+            try {
+                await Promise.allSettled([
+                    uploadClient.disconnect(),
+                    assetsClient.disconnect(),
+                ]);
+            } catch {}
             return {
                 success: true,
                 zipCode: zip,
@@ -514,6 +559,12 @@ const ttsWeatherTool = createTool({
 
         } catch (error) {
             console.error(`[tts-weather-upload] Error:`, error);
+            try {
+                await Promise.allSettled([
+                    uploadClient.disconnect(),
+                    assetsClient.disconnect(),
+                ]);
+            } catch {}
             return {
                 success: false,
                 zipCode: zip,
@@ -583,22 +634,45 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
     }
 
     // If audio/stream requested, run the TTS+upload tool and return URLs clearly
+    // If audio/stream requested, run the TTS+upload tool and return URLs clearly
     if (/\b(audio|tts|voice|speak|stream)\b/i.test(lastContent)) {
         try {
             const res = await (ttsWeatherTool.execute as any)({ context: { zipCode, text: quotedText } });
             if ((res as any)?.success) {
                 const r: any = res;
-                const url = r.playbackUrl || r?.mux?.hlsUrl;
-                // Always prefer the concrete playerUrl based on assetId when available
-                const player = r.playerUrl || (r.assetId ? `https://streamingportfolio.com/player?assetId=${r.assetId}` : undefined);
+
+                // Consolidate tool results to ensure playback URLs are always surfaced
+                const playbackUrl =
+                    r.playbackUrl ||
+                    r?.mux?.hlsUrl ||
+                    (r?.playbackId ? `https://stream.mux.com/${r.playbackId}.m3u8` : undefined);
+
+                const assetId = r.assetId || r?.mux?.assetId;
+                const playbackId = r.playbackId || r?.mux?.playbackId;
+
+                const playerUrl =
+                    r.playerUrl ||
+                    r?.mux?.playerUrl ||
+                    (assetId ? `https://streamingportfolio.com/player?assetId=${assetId}` : undefined);
+
                 const summary = r.summaryText || quotedText || `Agriculture weather for ZIP ${zipCode}`;
-                const pieces = [
-                    `Your agriculture streaming audio is ready.`,
-                    url ? `HLS: ${url}` : '',
-                    player ? `Player: ${player}` : '',
-                    `Spoken summary: ${summary}`
-                ].filter(Boolean);
-                return { text: pieces.join(' ') };
+
+                // Build concise end-user message with clear playback links
+                const lines: string[] = [];
+                lines.push(`Agricultural Weather Insights for ${zipCode}:`);
+                lines.push(summary);
+
+                // Always show player URL if we have an assetId, even while HLS readies
+                if (playerUrl) lines.push(`Player URL: ${playerUrl}`);
+
+                // Show HLS when available
+                if (playbackUrl) lines.push(`HLS: ${playbackUrl}`);
+
+                // Also surface IDs for debugging/deep links if needed by UI
+                if (playbackId) lines.push(`Playback ID: ${playbackId}`);
+                if (assetId) lines.push(`Asset ID: ${assetId}`);
+
+                return { text: lines.join(' ') };
             }
             return {
                 text: `TTS for ZIP ${zipCode} failed: ${(res as any)?.message || (res as any)?.error || 'unknown error'}.`
