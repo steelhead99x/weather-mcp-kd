@@ -14,7 +14,10 @@ import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
     try {
         await Promise.race([
             Promise.allSettled([uploadClient.getTools(), assetsClient.getTools()]),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('prewarm-timeout')), Math.max(5000, parseInt(process.env.MUX_PREWARM_TIMEOUT_MS || '8000', 10) || 8000)),
+            new Promise((_, rej) => {
+    const ms = Math.max(5000, parseInt(process.env.MUX_PREWARM_TIMEOUT_MS || '8000', 10) || 8000);
+    setTimeout(() => rej(new Error('prewarm-timeout')), ms);
+  })
         ]);
     } catch { /* ignore */ }
 })();
