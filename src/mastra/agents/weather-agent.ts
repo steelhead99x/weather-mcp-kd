@@ -290,6 +290,7 @@ function buildSystemPrompt() {
 
 export const weatherAgent = new Agent({
     name: 'weatherAgent',
+    description: 'A helpful weather assistant that provides weather information for ZIP codes and can generate audio/video summaries using TTS and Mux upload capabilities.',
     instructions: buildSystemPrompt(),
     model: anthropic('claude-3-5-sonnet-latest'),
     tools: {
