@@ -7,7 +7,6 @@ import { resolve, dirname, join } from 'path';
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
-import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
 import { Memory } from "@mastra/memory";
 import { InMemoryStore } from "@mastra/core/storage";
 import ffmpeg from 'fluent-ffmpeg';
@@ -121,10 +120,14 @@ async function getRandomBackgroundImage(): Promise<string> {
             .filter(e => e.isFile())
             .map(e => join(imagesDir, e.name))
             .filter(p => allowed.some(ext => p.toLowerCase().endsWith(ext)));
-        if (!choices.length) throw new Error('No images found');
+        if (!choices.length) {
+            console.warn('No images found in background directory');
+            throw new Error('No images found');
+        }
         const idx = Math.floor(Math.random() * choices.length);
         return choices[idx]!;
     } catch (e) {
+        console.warn('Background image access failed:', e instanceof Error ? e.message : String(e));
         throw new Error('No background image available');
     }
 }
@@ -237,7 +240,7 @@ const ttsWeatherTool = createTool({
             let mux: any = null;
             try {
                 if (process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET) {
-                    const tools = await uploadClient.getTools();
+                    await uploadClient.getTools();
                     // Best-effort: create a direct upload for a file we will upload externally (not via MCP here)
                     // Return the temp file paths for caller to handle actual HTTP upload if needed.
                     mux = { message: 'Mux MCP available. Use video.uploads.create to create a direct upload and POST the file.' };
