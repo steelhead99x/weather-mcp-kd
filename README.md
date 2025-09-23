@@ -166,3 +166,9 @@ This updated README reflects the current codebase by:
 3. Updating the project structure to show all current components
 4. Adding information about the technologies used in the project (Mux, Claude, OpenTelemetry)
 5. Keeping the same basic format and structure while updating the content to match the current implementation
+
+The agent can now handle requests like:
+"Get information about asset xyz123"
+"Give me the playback URL for asset abc456"
+"Create an MP4 URL with 720p resolution for playback ID def789"
+"Generate a thumbnail at 30 seconds for this video"

@@ -93,6 +93,18 @@ async function testTTSUploadRequest(): Promise<void> {
 
     assertContainsAny(ttsResult.text, ['upload', 'mux', 'audio', 'stream'],
         'Agent should mention upload/streaming functionality');
+
+    // If Mux credentials are present, we expect an actual playback URL to be returned
+    if (process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET) {
+        const muxUrlRegex = /(https?:\/\/[^\s]*stream\.mux\.com\/[A-Za-z0-9]+\.m3u8)/i;
+        const match = ttsResult.text.match(muxUrlRegex);
+        if (!match) {
+            throw new Error('Expected a Mux playback URL (.m3u8) in the TTS upload response when Mux is configured');
+        }
+        console.log(`✓ Found Mux playback URL: ${match[1]}`);
+    } else {
+        console.log('ℹ️  Skipping strict playback URL check (Mux credentials not configured)');
+    }
 }
 
 async function testDirectTTSTool(): Promise<void> {
@@ -233,6 +245,22 @@ async function main(): Promise<void> {
     }
 
     console.log(`\n📊 Test Results: ${passed} passed, ${failed} failed`);
+
+    // If we have Mux identifiers in the environment, surface handy playback links to "finish" the flow
+    const assetId = process.env.MUX_ASSET_ID;
+    const playbackId = process.env.MUX_PLAYBACK_ID;
+    if (assetId) {
+        const playerUrl = `https://streamingportfolio.com/player?assetId=${assetId}`;
+        console.log(`\n🎥 Player link (streamingportfolio): ${playerUrl}`);
+    } else if (playbackId) {
+        const hlsUrl = `https://stream.mux.com/${playbackId}.m3u8`;
+        console.log(`\n🎥 Mux HLS link: ${hlsUrl}`);
+        console.log('ℹ️  Set MUX_ASSET_ID to also get the streamingportfolio player link.');
+    } else {
+        console.log('\nℹ️  Tip: To generate a player link, run the Mux upload script to obtain IDs:');
+        console.log('    npm run mux:upload:verify   # or: ts-node src/mastra/scripts/mux-upload-verify-real.ts');
+        console.log('Then export MUX_ASSET_ID and/or MUX_PLAYBACK_ID and re-run this test.');
+    }
 
     if (failed === 0) {
         console.log('🎉 All tests passed!');

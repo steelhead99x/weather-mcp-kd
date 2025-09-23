@@ -591,7 +591,36 @@ const ttsWeatherTool = createTool({
             console.log('[tts-weather-upload] File uploaded successfully to Mux');
 
             // Wait for processing and get playback URL
-            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+            await new Promise(resolve => setTimeout(resolve, 3000)); // brief initial wait
+
+            // Resolve assetId by polling the upload status if needed
+            try {
+                if (!assetId && uploadId) {
+                    const uploadTools2 = await uploadClient.getTools();
+                    const getUpload = uploadTools2['retrieve_video_uploads'] || uploadTools2['video.uploads.get'];
+                    if (getUpload) {
+                        const pollMs = 3000;
+                        const maxWaitMs = 30000;
+                        const start = Date.now();
+                        while (!assetId && Date.now() - start < maxWaitMs) {
+                            const res = await getUpload.execute({ context: { UPLOAD_ID: uploadId } });
+                            const txt = Array.isArray(res) ? (res[0] as any)?.text ?? '' : String(res ?? '');
+                            try {
+                                const data = JSON.parse(txt);
+                                assetId = data?.asset_id || data?.asset?.id || assetId;
+                                const status = data?.status || data?.upload?.status;
+                                if (!assetId && status && status !== 'asset_created') {
+                                    await new Promise(r => setTimeout(r, pollMs));
+                                }
+                            } catch {
+                                await new Promise(r => setTimeout(r, pollMs));
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[tts-weather-upload] Error retrieving upload via Upload MCP:', e);
+            }
 
             // Try to get playback URL directly from assets client if we have assetId
             let playbackUrl = '';
@@ -602,7 +631,7 @@ const ttsWeatherTool = createTool({
                     const getAsset = assetsTools['retrieve_video_assets'] || assetsTools['video.assets.retrieve'] || assetsTools['video.assets.get'];
                     if (getAsset) {
                         const pollMs = 3000;
-                        const maxWaitMs = 20000;
+                        const maxWaitMs = 45000;
                         const start = Date.now();
                         while (!playbackUrl && Date.now() - start < maxWaitMs) {
                             const res = await getAsset.execute({ context: { ASSET_ID: assetId } });
@@ -724,12 +753,22 @@ export const weatherAgent = new Agent({
     - Keep it natural and coherent; do NOT exceed 500 characters.
 
     STREAMING URLS OUTPUT:
-    After TTS upload completes, ALWAYS display these URLs prominently:
-    🎵 **STREAMING AUDIO AVAILABLE:**
-    - **Audio Player**: [actual audioUrl - StreamingPortfolio format]
-    - **Mux Stream**: [actual playback URL - Mux format]
+    After TTS upload completes, check the asset status and display URLs appropriately:
+    
+    IF asset status is 'ready':
+    🎵 **STREAMING AUDIO READY:**
+    - **Audio Player**: [StreamingPortfolio format URL]
+    - **Mux Stream**: [actual playback URL if available]
     - Upload ID: [actual upload_id] | Asset ID: [actual asset_id]
     - These URLs are ready for streaming playback. The audio contains the weather summary in natural voice.
+    
+    IF asset status is 'processing' or other:
+    🎵 **STREAMING AUDIO PROCESSING:**
+    - **Audio Player**: [StreamingPortfolio format URL] (processing)
+    - **Mux Stream**: Processing... (will be available shortly)
+    - Upload ID: [actual upload_id] | Asset ID: [actual asset_id]
+    - Asset Status: [actual status]
+    - The audio is being processed and will be available for streaming shortly.
 
     CRITICAL REQUIREMENTS:
     - Use ONLY real data from weatherTool; never invent values.
@@ -872,11 +911,14 @@ export const weatherAgentTestWrapper = {
 
                         const streamingSection = [
                             '',
-                            '🎵 **STREAMING AUDIO AVAILABLE:**',
+                            res.assetStatus === 'ready' ? '🎵 **STREAMING AUDIO READY:**' : '🎵 **STREAMING AUDIO PROCESSING:**',
                             res.audioUrl ? `- **Audio Player**: ${res.audioUrl}` : `- **Audio Player**: https://streamingportfolio.com/player?assetId=${res.assetId || 'processing'}`,
                             res.playbackUrl ? `- **Mux Stream**: ${res.playbackUrl}` : '- **Mux Stream**: Processing...',
                             res.uploadId && res.assetId ? `- Upload ID: ${res.uploadId} | Asset ID: ${res.assetId}` : '',
-                            '- These URLs are ready for streaming playback. The audio contains the complete weather summary in natural voice.'
+                            res.assetStatus ? `- Asset Status: ${res.assetStatus}` : '',
+                            res.assetStatus === 'ready'
+                                ? '- These URLs are ready for streaming playback. The audio contains the complete weather summary in natural voice.'
+                                : '- The audio is being processed and will be available for streaming shortly.'
                         ].filter(Boolean).join('\n');
 
                         const text = [
