@@ -654,6 +654,7 @@ const ttsWeatherTool = createTool({
                 assetId,
                 playbackUrl: playbackUrl || (assetId ? `https://stream.mux.com/placeholder-${assetId}.m3u8` : undefined),
                 streamingPortfolioUrl: assetId ? `https://streamingportfolio.com/player?assetId=${assetId}` : undefined,
+                audioUrl: assetId ? `https://streamingportfolio.com/player?assetId=${assetId}` : undefined,
                 localAudioFile: absAudioPath,
                 localVideoFile: absVideoPath,
                 localImageFile: finalImagePath,
@@ -724,11 +725,11 @@ export const weatherAgent = new Agent({
 
     STREAMING URLS OUTPUT:
     After TTS upload completes, ALWAYS display these URLs prominently:
-    - **🎵 STREAMING AUDIO AVAILABLE:**
-    - **Mux Streaming URL**: [playbackUrl from ttsWeatherTool response] 
-    - **StreamingPortfolio.com Player**: [streamingPortfolioUrl from ttsWeatherTool response]
-    - Include upload_id and asset_id for reference: "Upload ID: [uploadId] | Asset ID: [assetId]"
-    - Mention: "These URLs are ready for streaming playback. The audio contains the weather summary in natural voice."
+    🎵 **STREAMING AUDIO AVAILABLE:**
+    - **Audio Player**: [actual audioUrl - StreamingPortfolio format]
+    - **Mux Stream**: [actual playback URL - Mux format]
+    - Upload ID: [actual upload_id] | Asset ID: [actual asset_id]
+    - These URLs are ready for streaming playback. The audio contains the weather summary in natural voice.
 
     CRITICAL REQUIREMENTS:
     - Use ONLY real data from weatherTool; never invent values.
@@ -872,8 +873,8 @@ export const weatherAgentTestWrapper = {
                         const streamingSection = [
                             '',
                             '🎵 **STREAMING AUDIO AVAILABLE:**',
+                            res.audioUrl ? `- **Audio Player**: ${res.audioUrl}` : `- **Audio Player**: https://streamingportfolio.com/player?assetId=${res.assetId || 'processing'}`,
                             res.playbackUrl ? `- **Mux Stream**: ${res.playbackUrl}` : '- **Mux Stream**: Processing...',
-                            res.streamingPortfolioUrl ? `- **StreamingPortfolio Player**: ${res.streamingPortfolioUrl}` : `- **StreamingPortfolio Player**: https://streamingportfolio.com/player?assetId=${res.assetId || 'processing'}`,
                             res.uploadId && res.assetId ? `- Upload ID: ${res.uploadId} | Asset ID: ${res.assetId}` : '',
                             '- These URLs are ready for streaming playback. The audio contains the complete weather summary in natural voice.'
                         ].filter(Boolean).join('\n');

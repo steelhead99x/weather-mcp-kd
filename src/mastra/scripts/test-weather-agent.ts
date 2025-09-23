@@ -3,7 +3,7 @@
  *
  * What it does:
  *   - Asks the agent a weather question by ZIP
- *   - Asks it to create TTS and upload to Mux (if configured)
+ *   - Asks it to create TTS and upload to MuxURL (if configured)
  *
  * Usage:
  *   npm run test:weather-agent
