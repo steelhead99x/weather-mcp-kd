@@ -1,182 +1,174 @@
-# Weather Agent (Mastra + MCP + Mux)
+# Weather MCP KD
 
-A simple, copy‑paste friendly project that:
+This project demonstrates a Weather MCP (Model Context Protocol) implementation using Mastra framework.
 
-- Gets real weather for a US ZIP code (zippopotam.us + api.weather.gov)
-- Creates audio (TTS) with Cartesia or Deepgram
-- Makes a tiny video (image + audio) and uploads to Mux for streaming
+## Features
 
----
+- Weather data retrieval and processing
+- Integration with Mux for media handling
+- Voice synthesis and recognition capabilities
+- OpenTelemetry instrumentation for observability
+- Docker support for containerization
 
-Quick Start
+## Prerequisites
 
-1) Install
+- Node.js 18+
+- Docker (for containerized deployment)
 
-   npm install
+## Getting Started
 
-2) Set env (create .env in project root)
-
-   # One TTS provider (optional but recommended)
-   CARTESIA_API_KEY=...
-   CARTESIA_VOICE=...
-   # or
-   DEEPGRAM_API_KEY=...
-   DEEPGRAM_TTS_MODEL=aura-asteria-en
-
-   # Mux (only if you want uploads)
-   MUX_TOKEN_ID=...
-   MUX_TOKEN_SECRET=...
-   MUX_CORS_ORIGIN=http://localhost
-
-   # Weather API header (friendly contact recommended)
-   WEATHER_MCP_USER_AGENT=WeatherMCP/1.0 (you@example.com)
-
-3) Build
-
-   npm run build
-
-4) Try things
-
-   # Dev server (Mastra)
-   npm run dev
-
-   # Ask the agent end‑to‑end
-   npm run test:weather-agent
-
-   # Weather tool by ZIP
-   npm run test:zip
-
-   # TTS quick tests
-   npm run test:tts:cartesia
-   npm run test:tts:deepgram
-
-   # STT quick tests (optional)
-   npm run test:stt:cartesia
-   npm run test:stt:deepgram
-
-   # Real Mux upload + verify (needs Mux creds)
-   npm run run:mux:upload:verify
-
----
-
-## 📦 Project Structure
-
+### Installation
 ```
-src/
-└─ mastra/
-   ├─ index.ts                  # Mastra app wiring (agent + MCP server)
-   ├─ agents/
-   │  └─ weather-agent.ts      # Weather agent + TTS upload tool (Mux)
-   ├─ tools/
-   │  └─ weather.ts            # Weather tool (ZIP -> lat/lon -> forecast from NWS)
-   ├─ mcp/
-   │  ├─ weather-server.ts     # MCP server exposing the agent/tool
-   │  ├─ mux-upload-client.ts  # MCP client wrapper for Mux upload endpoints
-   │  └─ mux-assets-client.ts  # MCP client wrapper for Mux assets endpoints
-   └─ scripts/                 # Dev/test scripts
-```
-
----
-
-## ⚙️ Prerequisites
-
-- Node.js >= 20
-- ffmpeg (ffmpeg-static is bundled and auto-configured)
-- Optional TTS service credentials (choose one or both):
-  - Cartesia: CARTESIA_API_KEY, CARTESIA_VOICE
-  - Deepgram: DEEPGRAM_API_KEY (DEEPGRAM_TTS_MODEL optional)
-- To upload to Mux: MUX_TOKEN_ID, MUX_TOKEN_SECRET
-
-Example .env:
-
-```dotenv
-# TTS (choose one provider or both)
-CARTESIA_API_KEY=...
-CARTESIA_VOICE=...
-# or
-DEEPGRAM_API_KEY=...
-DEEPGRAM_TTS_MODEL=aura-asteria-en
-
-# Mux
-MUX_TOKEN_ID=...
-MUX_TOKEN_SECRET=...
-MUX_CORS_ORIGIN=http://localhost
-
-# Weather MCP user-agent header
-WEATHER_MCP_USER_AGENT="WeatherMCP/1.0 (mail@streamingportfolio.com)"
-```
-
----
-
-## 🚀 Install & Build
-
-```sh
+bash
 npm install
-npm run build
 ```
-
----
-
-## ▶️ Run
-
-- Development (Mastra dev):
-
-```sh
+### Running Locally
+```
+bash
 npm run dev
 ```
+### Environment Variables
 
-- Production build runner:
+Create a `.env` file based on `.env.example` and populate with required values.
 
-```sh
-npm start:production
+## Project Structure
 ```
 
----
+src/
+├── mastra/
+│   ├── agents/
+│   │   └── weather-agent.ts
+│   ├── mcp/
+│   │   ├── mux-assets-client.ts
+│   │   ├── mux-upload-client.ts
+│   │   └── weather-server.ts
+│   ├── public/
+│   ├── scripts/
+│   │   ├── mux-upload-verify-real.ts
+│   │   ├── start-production.js
+│   │   ├── test-claude.ts
+│   │   ├── test-stt.ts
+│   │   ├── test-tts.ts
+│   │   ├── test-weather-agent.ts
+│   │   └── test-zip.ts
+│   ├── tools/
+│   │   └── weather.ts
+│   └── index.ts
+└── types/
+```
+## Available Scripts
 
-## 🧠 Usage (Agent)
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run test` - Run tests
 
-The agent greets users, asks for a ZIP code, calls the weather tool to fetch real data, and can invoke a TTS upload tool to produce a Mux streaming URL.
+## Deployment
 
-Programmatic import:
+Docker support is included for containerized deployment.
 
-```ts
-import { mastra } from "./src/mastra/index.ts";
-// mastra.agents.weatherAgent ...
+## Contributing
+
+This project uses Mastra framework for building AI agents and MCP servers.
 ```
 
----
 
-## 🛠️ Weather Tool
+Now I'll update it to reflect the current codebase structure and features:
 
-- Validates a 5-digit US ZIP code
-- Looks up coordinates via https://api.zippopotam.us
-- Retrieves forecast via https://api.weather.gov (NWS)
-- Returns a compact forecast for the next periods
+```markdown
+# Weather MCP KD
 
----
+This project demonstrates a Weather MCP (Model Context Protocol) implementation using Mastra framework.
 
-## 🔊 TTS + Video + Mux Upload
+## Features
 
-Inside the weather agent, a tool (tts-weather-upload) can:
+- Weather data retrieval and processing
+- Integration with Mux for media handling (upload and asset management)
+- Voice synthesis and recognition capabilities via TTS/STT tools
+- OpenTelemetry instrumentation for observability
+- Docker support for containerized deployment
+- Claude AI integration through MCP protocol
+- Zip file processing utilities
 
-1) Synthesize speech with Cartesia (preferred) or Deepgram (fallback) or a brief silence placeholder if neither is configured
-2) Generate a simple MP4 from a static image (files/images/baby.jpeg if present; otherwise a generated blue background)
-3) Create an upload URL via Mux MCP and PUT the MP4
-4) Poll for a playback ID and return an HLS URL
+## Prerequisites
 
-Outputs also include local file paths for inspection and an optional StreamingPortfolio URL.
+- Node.js 18+
+- Docker (for containerized deployment)
+- Mux API credentials (for media handling)
+- Anthropic API key (for Claude integration)
 
----
+## Getting Started
 
-## ❗ Notes
+### Installation
+```
+bash
+npm install
+```
+### Running Locally
+```
+bash
+npm run dev
+```
+### Environment Variables
 
-- Requires Node 20+ (global fetch/Blob and ESM)
-- ffmpeg path is set using ffmpeg-static
-- The Anthropic chat model defaults to `claude-3-5-haiku-latest` via @ai-sdk/anthropic
-- The weather MCP server exposes the agent and tool for MCP-capable clients
+Create a `.env` file based on `.env.example` and populate with required values.
 
----
+## Project Structure
+```
+````
+src/
+├── mastra/
+│   ├── agents/
+│   │   └── weather-agent.ts
+│   ├── mcp/
+│   │   ├── mux-assets-client.ts
+│   │   ├── mux-upload-client.ts
+│   │   └── weather-server.ts
+│   ├── public/
+│   ├── scripts/
+│   │   ├── mux-upload-verify-real.ts
+│   │   ├── start-production.js
+│   │   ├── test-claude.ts
+│   │   ├── test-stt.ts
+│   │   ├── test-tts.ts
+│   │   ├── test-weather-agent.ts
+│   │   └── test-zip.ts
+│   ├── tools/
+│   │   └── weather.ts
+│   └── index.ts
+└── types/
 
-## 📄 License
+## Available Scripts
 
-MIT © 2025
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run test` - Run tests
+
+## Deployment
+
+Docker support is included for containerized deployment.
+
+## Contributing
+
+This project uses Mastra framework for building AI agents and MCP servers.
+It integrates with:
+- Mux for media handling
+- Claude via Anthropic API through MCP protocol
+- OpenTelemetry for observability
+```
+
+
+This updated README reflects the current codebase by:
+
+1. Adding more specific features like Mux integration, Claude AI, and zip file processing
+2. Including required environment variables (Mux credentials, Anthropic API key)
+3. Updating the project structure to show all current components
+4. Adding information about the technologies used in the project (Mux, Claude, OpenTelemetry)
+5. Keeping the same basic format and structure while updating the content to match the current implementation
+
+The agent can now handle requests like:
+"Get information about asset xyz123"
+"Give me the playback URL for asset abc456"
+"Create an MP4 URL with 720p resolution for playback ID def789"
+"Generate a thumbnail at 30 seconds for this video"

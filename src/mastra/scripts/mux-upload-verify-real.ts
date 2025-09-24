@@ -80,6 +80,7 @@ async function uploadFileToMux(uploadUrl: string, filePath: string): Promise<voi
  * - DEBUG: enable verbose logging
  */
 async function main() {
+    try {
     const preferredPath = process.env.MUX_SAMPLE_FILE || 'files/uploads/samples/mux-sample.mp4';
     let absPath = resolve(preferredPath);
 
@@ -192,9 +193,10 @@ async function main() {
         if (!text) continue;
         try {
             const payload = JSON.parse(text);
-            assetId = assetId || payload.asset_id || payload.asset?.id;
-            uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
-            uploadUrl = uploadUrl || payload.url || payload.upload?.url;
+            const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
+            assetId = assetId || data.asset_id || data.asset?.id || data.assetId;
+            uploadId = uploadId || data.upload_id || data.id || data.upload?.id || data.uploadId;
+            uploadUrl = uploadUrl || data.url || data.upload?.url || data.uploadUrl;
         } catch {
             // ignore non-JSON text blocks
         }
@@ -238,8 +240,14 @@ async function main() {
             if (retrieve && uploadId) {
                 console.log('[mux-upload-verify-real] Retrieving upload info to get asset_id...');
                 try {
-                    // Fix: Use UPLOAD_ID instead of id (based on the MCP schema)
-                    const retrieveRes = await retrieve.execute({ context: { UPLOAD_ID: uploadId } });
+                    // Retrieve by upload id; prefer UPLOAD_ID key
+                    const retrieveRes = await retrieve.execute({
+                        context: {
+                            UPLOAD_ID: uploadId,
+                            upload_id: uploadId,
+                            id: uploadId,
+                        }
+                    });
                     const retrieveBlocks = Array.isArray(retrieveRes) ? retrieveRes : [retrieveRes];
                     
                     for (const block of retrieveBlocks as any[]) {
@@ -248,10 +256,12 @@ async function main() {
                         try {
                             const payload = JSON.parse(text);
                             console.log('[mux-upload-verify-real] Retrieved upload info:', JSON.stringify(payload, null, 2));
-                            assetId = assetId || payload.asset_id || payload.asset?.id;
-                            
+                            // Handle common wrapper shapes: direct, {data:{}}, {upload:{}}
+                            const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
+                            const up = (data && typeof data === 'object' && 'upload' in data) ? (data as any).upload : data;
+                            assetId = assetId || up.asset_id || up.assetId || up.asset?.id;
                             // Also check status
-                            const status = payload.status;
+                            const status = up.status || data.status || payload.status;
                             console.log(`[mux-upload-verify-real] Upload status: ${status}`);
                         } catch {
                             // ignore non-JSON text blocks
@@ -259,6 +269,44 @@ async function main() {
                     }
                 } catch (error) {
                     console.warn('[mux-upload-verify-real] Failed to retrieve upload info after file upload:', error);
+                }
+            }
+
+            // If assetId still missing, poll retrieve_video_uploads until it appears
+            if (!assetId && retrieve && uploadId) {
+                const pollMsRetrieve = Math.max(2000, parseInt(process.env.MUX_RETRIEVE_POLL_MS || '5000', 10) || 5000);
+                const timeoutMsRetrieve = Math.min(10 * 60 * 1000, Math.max(20_000, parseInt(process.env.MUX_RETRIEVE_TIMEOUT_MS || '180000', 10) || 180000));
+                console.log(`[mux-upload-verify-real] Polling upload ${uploadId} for asset_id (every ${pollMsRetrieve}ms, timeout ${timeoutMsRetrieve}ms)...`);
+                const startRetrieve = Date.now();
+                while (!assetId && (Date.now() - startRetrieve) < timeoutMsRetrieve) {
+                    try {
+                        const r = await retrieve.execute({
+                            context: {
+                                UPLOAD_ID: uploadId,
+                                upload_id: uploadId,
+                                id: uploadId,
+                            }
+                        });
+                        const rb = Array.isArray(r) ? r : [r];
+                        for (const b of rb as any[]) {
+                            const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
+                            if (!t) continue;
+                            try {
+                                const payload = JSON.parse(t);
+                                const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
+                                const up = (data && typeof data === 'object' && 'upload' in data) ? (data as any).upload : data;
+                                assetId = assetId || up.asset_id || up.assetId || up.asset?.id;
+                                const status = up.status || data.status || payload.status;
+                                console.log(`[mux-upload-verify-real] Upload status: ${status} ${assetId ? `(asset_id=${assetId})` : ''}`);
+                                if (assetId) break;
+                            } catch {}
+                        }
+                    } catch (e) {
+                        console.warn('[mux-upload-verify-real] retrieve_video_uploads poll error:', e instanceof Error ? e.message : String(e));
+                    }
+                    if (!assetId) {
+                        await delay(pollMsRetrieve);
+                    }
                 }
             }
         } catch (uploadError) {
@@ -277,6 +325,9 @@ async function main() {
         console.warn('[mux-upload-verify-real] You can run asset verification later using the upload_id or check the Mux dashboard.');
         return;
     }
+
+    // Always output player URL now that we have assetId
+    console.log(`MUX_PLAYER_URL=https://streamingportfolio.com/player?assetId=${assetId}`);
 
     // 2) Poll asset status via assets client until ready/errored
     const assetsTools = await assetsClient.getTools();
@@ -317,8 +368,8 @@ async function main() {
     let lastPayload: any;
     while (Date.now() - start < timeoutMs) {
         try {
-            // Pass the asset ID directly as the expected parameter
-            const res = await getAsset.execute({ context: { ASSET_ID: assetId } });
+            // Pass the asset ID with multiple key variants for compatibility
+            const res = await getAsset.execute({ context: { id: assetId, ASSET_ID: assetId, asset_id: assetId } });
             const text = Array.isArray(res) ? (res[0] as any)?.text ?? '' : String(res ?? '');
             try {
                 lastPayload = JSON.parse(text);
@@ -372,6 +423,17 @@ async function main() {
     console.log('✅ Mux upload and verification succeeded. Asset is ready.');
     if (playbackId) {
         console.log(`🎥 Your video is now available at: https://stream.mux.com/${playbackId}.m3u8`);
+    }
+    } finally {
+        try {
+            await Promise.allSettled([
+                uploadClient.disconnect(),
+                assetsClient.disconnect(),
+            ]);
+            if (process.env.DEBUG) {
+                console.log('[mux-upload-verify-real] Disconnected MCP clients.');
+            }
+        } catch {}
     }
 }
 

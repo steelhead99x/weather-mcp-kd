@@ -22,7 +22,7 @@ class Logger {
 class MuxAssetsMCPClient {
     private static readonly MIN_CONNECTION_TIMEOUT = 5000;
     private static readonly MAX_CONNECTION_TIMEOUT = 300000;
-    private static readonly DEFAULT_CONNECTION_TIMEOUT = 45000;
+    private static readonly DEFAULT_CONNECTION_TIMEOUT = 20000;
 
     private client: Client | null = null;
     private transport: StdioClientTransport | null = null;
@@ -54,7 +54,7 @@ class MuxAssetsMCPClient {
 
         this.transport = new StdioClientTransport({
             command: "npx",
-            args: ["--no-install", ...mcpArgs],
+            args: mcpArgs,
             env: {
                 ...process.env,
                 MUX_TOKEN_ID: process.env.MUX_TOKEN_ID,
@@ -112,8 +112,57 @@ class MuxAssetsMCPClient {
             }
         }
 
-        // The Mux MCP provides direct tools, so we don't need the invoke_api_endpoint wrapper
-        // The tools are already available as direct MCP tools
+        // If only generic invoke_api_endpoint is provided, add convenient wrappers for assets endpoints
+        if (tools['invoke_api_endpoint']) {
+            const addWrapper = (id: string, endpoint: string, description: string, schema?: z.ZodSchema) => {
+                // Do not overwrite real Mux MCP tools; only add wrapper if missing
+                if (tools[id]) {
+                    Logger.debug(`Skipping wrapper for ${id}; direct MCP tool already exists.`);
+                    return;
+                }
+                tools[id] = createTool({
+                    id,
+                    description,
+                    inputSchema: schema || z.object({ ASSET_ID: z.string().optional() }).passthrough(),
+                    execute: async ({ context }) => {
+                        if (!this.client) throw new Error("Client not connected");
+                        // Prefer direct endpoint if present
+                        const direct = tools[endpoint];
+                        if (direct && direct !== tools[id]) return direct.execute({ context });
+                        const ctx = context || {};
+                        const idVal = (ctx as any).ASSET_ID || (ctx as any).asset_id || (ctx as any).id;
+                        const path = idVal ? { ASSET_ID: idVal, asset_id: idVal, id: idVal } : undefined;
+                        const attemptArgs = [
+                            { endpoint, args: ctx },
+                            { endpoint_name: endpoint, args: ctx },
+                            path ? { endpoint, args: { path, ...ctx } } : null,
+                            path ? { endpoint_name: endpoint, args: { path, ...ctx } } : null,
+                            { endpoint, args: { body: ctx } },
+                            { endpoint_name: endpoint, args: { body: ctx } },
+                            { endpoint, ...ctx },
+                            { endpoint, body: ctx },
+                            { endpoint, params: ctx },
+                            { endpoint, arguments: ctx },
+                            { name: endpoint, arguments: ctx },
+                        ].filter(Boolean) as any[];
+                        let lastErr: any;
+                        for (const args of attemptArgs) {
+                            try { return (await this.client.callTool({ name: 'invoke_api_endpoint', arguments: args })).content; }
+                            catch (e) { lastErr = e; }
+                        }
+                        throw lastErr || new Error('invoke_api_endpoint failed');
+                    },
+                });
+            };
+
+            // Snake_case canonical endpoints
+            addWrapper('retrieve_video_assets', 'retrieve_video_assets', 'Retrieve a single asset by ID');
+            addWrapper('list_video_assets', 'list_video_assets', 'List assets with pagination', z.object({ limit: z.number().optional(), page: z.number().optional() }).passthrough());
+
+            // Dotted aliases
+            addWrapper('video.assets.retrieve', 'retrieve_video_assets', 'Retrieve a single asset by ID');
+            addWrapper('video.assets.list', 'list_video_assets', 'List assets with pagination', z.object({ limit: z.number().optional(), page: z.number().optional() }).passthrough());
+        }
 
         return tools;
     }

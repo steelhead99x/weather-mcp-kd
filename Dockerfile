@@ -1,37 +1,35 @@
-FROM node:20-bookworm-slim
+FROM node:20-alpine
 
-# Install ffmpeg for video processing (Debian provides H.264/AAC support)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
-    rm -rf /var/lib/apt/lists/*
+# Install ffmpeg for video processing (system ffmpeg with musl)
+RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 
 # Copy package files (lockfile optional)
 COPY package*.json ./
 
-# Install dependencies
-# - Use npm ci when package-lock.json is present for reproducible installs
-# - Fallback to npm install when lockfile is absent (e.g., in certain CI/CD contexts)
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
+# Install dependencies (omit dev in production)
+RUN npm install --omit=dev
 
 # Copy source code
 COPY . .
 
+# Ensure background images directory exists. Do NOT create an empty fallback image; the app
+# will generate a valid tiny PNG at runtime if none is provided.
+RUN mkdir -p files/images
+
 # Build the application
 RUN npm run build
 
-# Create directories for file uploads
-RUN mkdir -p files/uploads/tts files/uploads/images
+# Create runtime temp directory
+RUN mkdir -p /tmp/tts
 
-# Expose port
 EXPOSE 8080
 
-# Set environment variables
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV HOST=0.0.0.0
-ENV FFMPEG_PATH=/usr/bin/ffmpeg
+# Ensure temp dir is configurable
+ENV TTS_TMP_DIR=/tmp/tts
 
-# Start the application with telemetry
 CMD ["npm", "run", "start:telemetry"]

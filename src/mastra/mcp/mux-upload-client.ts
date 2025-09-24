@@ -132,7 +132,7 @@ class MuxMCPClient {
 
             this.transport = new StdioClientTransport({
                 command: "npx",
-                args: ["--no-install", ...mcpArgs],
+                args: mcpArgs,
                 env: {
                     ...process.env,
                     MUX_TOKEN_ID: process.env.MUX_TOKEN_ID,
@@ -396,8 +396,104 @@ class MuxMCPClient {
                 }
             }
 
-            // The Mux MCP provides direct tools, so we don't need the invoke_api_endpoint wrapper
-            // The tools are already available as direct MCP tools
+            // If MCP only exposes generic invoke_api_endpoint, synthesize concrete tools for video.uploads
+            const hasInvoke = !!tools['invoke_api_endpoint'];
+            Logger.debug(`Has invoke_api_endpoint: ${hasInvoke}`);
+
+            if (hasInvoke) {
+                const addWrapper = (id: string, endpoint: string, description: string) => {
+                    // Do not overwrite real Mux MCP tools; only add wrapper if missing
+                    if (tools[id]) {
+                        Logger.debug(`Skipping wrapper for ${id}; direct MCP tool already exists.`);
+                        return;
+                    }
+                    tools[id] = createTool({
+                        id,
+                        description,
+                        inputSchema: z.object({
+                            UPLOAD_ID: z.string().optional().describe("Upload ID"),
+                        }).passthrough(),
+                        execute: async ({ context }) => {
+                            if (!this.client) throw new Error("Client not connected");
+
+                            // Try direct tool call first (best case - the MCP exposes the endpoint directly)
+                            const directTool = tools[endpoint];
+                            if (directTool && directTool !== tools[id]) {
+                                Logger.debug(`Using direct tool: ${endpoint}`);
+                                return directTool.execute({ context });
+                            }
+
+                            Logger.debug(`Using invoke_api_endpoint wrapper for: ${endpoint}`);
+
+                            const ctx = context || {};
+
+                            // Build canonical path/body wrappers for common endpoints
+                            const idVal = (ctx as any).UPLOAD_ID || (ctx as any).upload_id || (ctx as any).id;
+                            const assetVal = (ctx as any).ASSET_ID || (ctx as any).asset_id || (ctx as any).id;
+                            const pathForUploads = idVal ? { UPLOAD_ID: idVal, upload_id: idVal, id: idVal } : undefined;
+                            const pathForAssets = assetVal ? { ASSET_ID: assetVal, asset_id: assetVal, id: assetVal } : undefined;
+                            const path = endpoint.includes('uploads') ? pathForUploads : (endpoint.includes('assets') ? pathForAssets : undefined);
+
+                            const attemptArgs = [
+                                // Standard simple args
+                                { endpoint, args: ctx },
+                                { endpoint_name: endpoint, args: ctx },
+
+                                // Path-wrapped args (common for REST-style invoke wrappers)
+                                path ? { endpoint, args: { path, ...ctx } } : null,
+                                path ? { endpoint_name: endpoint, args: { path, ...ctx } } : null,
+
+                                // Body-wrapped variants (especially for create endpoints)
+                                { endpoint, args: { body: ctx } },
+                                { endpoint_name: endpoint, args: { body: ctx } },
+
+                                // Legacy formats (keep as fallback)
+                                { endpoint, ...ctx },
+                                { endpoint, body: ctx },
+                                { endpoint, params: ctx },
+                                { endpoint, data: ctx },
+                                { endpoint, arguments: ctx },
+                                { name: endpoint, arguments: ctx },
+                                { id: endpoint, arguments: ctx },
+                                { tool: endpoint, arguments: ctx },
+                                { endpoint, input: ctx },
+                                { endpoint, payload: ctx },
+                            ].filter(Boolean) as any[];
+
+                            let lastErr: any;
+                            for (const args of attemptArgs) {
+                                try {
+                                    Logger.debug(`Invoking endpoint via wrapper: ${endpoint}`, args);
+                                    const res = await this.client.callTool({ name: 'invoke_api_endpoint', arguments: args });
+                                    return res.content;
+                                } catch (e) {
+                                    lastErr = e;
+                                    const errorMsg = e instanceof Error ? e.message : String(e);
+                                    Logger.warn(`invoke_api_endpoint failed with args variant, trying next: ${errorMsg}`);
+
+                                    // Log the specific argument structure that failed for debugging
+                                    if (process.env.DEBUG) {
+                                        Logger.debug('Failed args structure:', JSON.stringify(args, null, 2));
+                                    }
+                                }
+                            }
+                            throw lastErr || new Error('invoke_api_endpoint failed for all argument variants');
+                        },
+                    });
+                };
+
+                // Primary snake_case IDs (match MCP endpoint names exactly)
+                addWrapper('create_video_uploads', 'create_video_uploads', 'Creates a new direct upload for video content');
+                addWrapper('retrieve_video_uploads', 'retrieve_video_uploads', 'Fetches information about a single direct upload');
+                addWrapper('list_video_uploads', 'list_video_uploads', 'Lists direct uploads');
+                addWrapper('cancel_video_uploads', 'cancel_video_uploads', 'Cancels a direct upload in waiting state');
+
+                // Dotted aliases for convenience/compatibility (map to snake endpoints under the hood)
+                addWrapper('video.uploads.create', 'create_video_uploads', 'Creates a new direct upload for video content');
+                addWrapper('video.uploads.get', 'retrieve_video_uploads', 'Fetches information about a single direct upload');
+                addWrapper('video.uploads.list', 'list_video_uploads', 'Lists direct uploads');
+                addWrapper('video.uploads.cancel', 'cancel_video_uploads', 'Cancels a direct upload in waiting state');
+            }
 
             Logger.info(`Successfully created ${Object.keys(tools).length} Mastra tools from MCP`);
             Logger.debug("Final tool names:", Object.keys(tools));
