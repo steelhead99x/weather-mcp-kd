@@ -29,19 +29,18 @@ import { weatherTool } from "../tools/weather.js";
  *    - Returns server status and timestamp
  */
 
-// Expose a custom MCP tool that streams text via Agent.streamVNext (vNext) or Agent.stream
+// Simplified agent tool that focuses on getting responses working
 const askWeatherAgent = createTool({
   id: "ask_weatherAgent",
-  description:
-    "Ask the weatherAgent a question. Supports both streamVNext (experimental) and regular stream methods.",
+  description: "Ask the weatherAgent a question. Returns weather information for ZIP codes.",
   inputSchema: z.object({
-    message: z.string().describe("The user question or input for the agent."),
+    message: z.string().describe("The user question or input for the agent (should contain a ZIP code)."),
     format: z
-      .enum(["default", "aisdk"]) // optional: allow ai sdk v5 formatting for client compatibility
+      .enum(["default", "aisdk"])
       .default("default")
       .optional(),
     streamingMethod: z
-      .enum(["streamVNext", "stream", "auto"]) // allow choosing streaming method
+      .enum(["streamVNext", "stream", "auto"])
       .default("auto")
       .optional(),
   }),
@@ -52,106 +51,54 @@ const askWeatherAgent = createTool({
     
     console.log('[askWeatherAgent] Received request:', { message, format, streamingMethod });
 
-    // Helper function to try regular stream method
-    const tryStreamMethod = async () => {
-      console.log('[askWeatherAgent] Trying regular stream method...');
-      const stream = await weatherAgent.stream([{ role: "user", content: message }]);
-      const fullText = await stream.text;
-      console.log('[askWeatherAgent] stream succeeded, text length:', fullText.length);
+    try {
+      // Start with the most reliable method - text fallback
+      console.log('[askWeatherAgent] Using text method for reliability...');
+      const result = await weatherAgentTestWrapper.text({ 
+        messages: [{ role: "user", content: message }] 
+      });
       
-      return {
-        streamed: true,
-        text: fullText,
-        textStream: stream.textStream ?? null,
-        finishReason: stream.finishReason ?? null,
-        usage: stream.usage ?? null,
-        method: 'stream'
-      };
-    };
-
-    // Helper function to try streamVNext method
-    const tryStreamVNextMethod = async () => {
-      console.log('[askWeatherAgent] Trying streamVNext method...');
-      const stream = await weatherAgent.streamVNext(
-        [{ role: "user", content: message }],
-        format === "aisdk" ? { format: "aisdk" } : undefined as any
-      );
-      const fullText = await stream.text;
-      console.log('[askWeatherAgent] streamVNext succeeded, text length:', fullText.length);
-      
-      return {
-        streamed: true,
-        text: fullText,
-        textStream: (stream as any).textStream ?? null,
-        finishReason: (stream as any).finishReason ?? null,
-        usage: (stream as any).usage ?? null,
-        method: 'streamVNext'
-      };
-    };
-
-    // Helper function to try text fallback
-    const tryTextFallback = async () => {
-      console.log('[askWeatherAgent] Trying text fallback...');
-      const result = await weatherAgentTestWrapper.text({ messages: [{ role: "user", content: message }] });
       const fullText = String(result?.text ?? "");
-      console.log('[askWeatherAgent] text fallback succeeded, text length:', fullText.length);
+      console.log('[askWeatherAgent] Text method succeeded, response length:', fullText.length);
+      console.log('[askWeatherAgent] Response preview:', fullText.substring(0, 200) + '...');
       
-      return {
+      // Return a consistent format
+      const response = {
         streamed: false,
         text: fullText,
         textStream: null,
-        finishReason: null,
+        finishReason: "stop",
         usage: null,
-        method: 'text'
+        method: 'text',
+        timestamp: new Date().toISOString()
       };
-    };
-
-    try {
-      let result;
-
-      if (streamingMethod === "stream") {
-        // Use regular stream method
-        result = await tryStreamMethod();
-      } else if (streamingMethod === "streamVNext") {
-        // Use streamVNext method
-        result = await tryStreamVNextMethod();
-      } else {
-        // Auto mode: try streamVNext first, then stream, then text
-        try {
-          result = await tryStreamVNextMethod();
-        } catch (streamVNextError) {
-          console.warn('[askWeatherAgent] streamVNext failed, trying regular stream:', streamVNextError);
-          try {
-            result = await tryStreamMethod();
-          } catch (streamError) {
-            console.warn('[askWeatherAgent] stream also failed, falling back to text:', streamError);
-            result = await tryTextFallback();
-          }
-        }
-      }
 
       // If AISDK format requested, return a simple compatible shape
       if (format === "aisdk") {
         return {
-          streamed: result.streamed,
-          text: result.text,
-          textStream: result.textStream,
-          method: result.method
+          streamed: response.streamed,
+          text: response.text,
+          textStream: response.textStream,
+          method: response.method
         };
       }
 
-      return result;
+      return response;
 
     } catch (error) {
-      console.error('[askWeatherAgent] All methods failed:', error);
-      return {
+      console.error('[askWeatherAgent] Text method failed:', error);
+      const errorResponse = {
         streamed: false,
         text: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
         textStream: null,
-        finishReason: null,
+        finishReason: "error",
         usage: null,
-        method: 'error'
+        method: 'error',
+        timestamp: new Date().toISOString()
       };
+      
+      console.log('[askWeatherAgent] Returning error response:', errorResponse);
+      return errorResponse;
     }
   },
 });
@@ -338,6 +285,91 @@ const testAgent = createTool({
   },
 });
 
+// Debug tool to help troubleshoot issues
+const debugAgent = createTool({
+  id: "debug_agent",
+  description: "Debug tool to help troubleshoot agent issues. Returns detailed diagnostic information.",
+  inputSchema: z.object({
+    message: z.string().default("96062").optional().describe("Test message to send to agent"),
+    includeEnvCheck: z.boolean().default(true).optional().describe("Include environment variable check"),
+  }),
+  execute: async ({ context }) => {
+    const message = String((context as any)?.message ?? "96062");
+    const includeEnvCheck = (context as any)?.includeEnvCheck ?? true;
+    
+    console.log('[debugAgent] Running diagnostics with message:', message);
+    
+    const debugInfo: any = {
+      timestamp: new Date().toISOString(),
+      testMessage: message,
+      tests: {}
+    };
+    
+    // Environment check
+    if (includeEnvCheck) {
+      debugInfo.environment = {
+        ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
+        ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
+        DEEPGRAM_API_KEY: !!process.env.DEEPGRAM_API_KEY,
+        MUX_TOKEN_ID: !!process.env.MUX_TOKEN_ID,
+        MUX_TOKEN_SECRET: !!process.env.MUX_TOKEN_SECRET,
+        NODE_ENV: process.env.NODE_ENV || 'development'
+      };
+    }
+    
+    // Test agent text method
+    try {
+      const result = await weatherAgentTestWrapper.text({ 
+        messages: [{ role: "user", content: message }] 
+      });
+      debugInfo.tests.textMethod = {
+        success: true,
+        responseLength: result?.text?.length || 0,
+        responsePreview: result?.text?.substring(0, 100) + '...',
+        fullResponse: result?.text || "No response"
+      };
+    } catch (error) {
+      debugInfo.tests.textMethod = {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      };
+    }
+    
+    // Test weather tool directly
+    try {
+      const zipMatch = message.match(/\b(\d{5})\b/);
+      if (zipMatch) {
+        const zipCode = zipMatch[1];
+        const weatherResult = await weatherTool.execute({ 
+          context: { zipCode },
+          runtimeContext: new (await import('@mastra/core/runtime-context')).RuntimeContext()
+        });
+        debugInfo.tests.weatherTool = {
+          success: true,
+          zipCode,
+          hasLocation: !!weatherResult?.location,
+          hasForecast: !!weatherResult?.forecast,
+          forecastLength: Array.isArray(weatherResult?.forecast) ? weatherResult.forecast.length : 0
+        };
+      } else {
+        debugInfo.tests.weatherTool = {
+          success: false,
+          error: "No ZIP code found in message"
+        };
+      }
+    } catch (error) {
+      debugInfo.tests.weatherTool = {
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+    
+    console.log('[debugAgent] Diagnostics complete:', debugInfo);
+    return debugInfo;
+  },
+});
+
 export const weatherMcpServer = new MCPServer({
   id: "weather-mcp-server",
   name: "Weather MCP Server",
@@ -346,10 +378,11 @@ export const weatherMcpServer = new MCPServer({
   // Do not use auto agent-to-tool conversion (non-streaming). We expose streaming tools instead.
   tools: {
     weatherTool,
-    ask_weatherAgent: askWeatherAgent,           // Auto-selects best streaming method
+    ask_weatherAgent: askWeatherAgent,           // Simplified agent tool
     ask_weatherAgent_stream: askWeatherAgentStream, // Regular stream method
     ask_weatherAgent_text: askWeatherAgentText,    // Non-streaming fallback
     test_agent: testAgent,                        // Simple test tool
+    debug_agent: debugAgent,                      // Debug tool
     health,
   },
 });
