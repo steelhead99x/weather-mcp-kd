@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { anthropic } from "@ai-sdk/anthropic";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { pathToFileURL } from 'url';
 
@@ -8,6 +8,7 @@ export type Tone = 'professional' | 'groovy' | 'librarian' | 'sports';
 
 // Use a newer model that's compatible with the current AI SDK
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-20241022';
+const anthropic = createAnthropic();
 
 // Standalone Claude weather prompt generator for testing
 export async function generateWeatherPrompt(
