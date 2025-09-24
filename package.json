@@ -6,7 +6,7 @@
   "description": "Weather agent using Mastra with MCP tools to upload tts audio files to mux.",
   "scripts": {
     "dev": "mastra dev",
-    "build": "NODE_OPTIONS=--max-old-space-size=1024 npm run compile && NODE_OPTIONS=--max-old-space-size=1024 mastra build",
+    "build": "NODE_OPTIONS=--max-old-space-size=1024 npm run compile && NODE_OPTIONS=--max-old-space-size=1024 npm run test:compile && NODE_OPTIONS=--max-old-space-size=1024 mastra build",
     "postbuild": "mkdir -p dist && cp -R files dist/files || true",
     "compile": "NODE_OPTIONS=--max-old-space-size=1024 tsc",
     "clean": "rm -rf dist",
@@ -16,6 +16,7 @@
     "start:production": "NODE_ENV=production NODE_OPTIONS=\"--disable-warning=DEP0169\" node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs",
     "start:custom": "node --max-old-space-size=512 dist/server.js",
     "typecheck": "tsc --noEmit",
+    "test:compile": "tsx --check src/mastra/scripts/test-claude.ts src/mastra/scripts/test-weather-agent.ts",
     "debug:agent": "tsx src/mastra/scripts/test-debug.js",
     "test:claude": "npm run build && tsx src/mastra/scripts/test-claude.ts",
     "test:weather-agent": "npm run build && tsx src/mastra/scripts/test-weather-agent.ts",
