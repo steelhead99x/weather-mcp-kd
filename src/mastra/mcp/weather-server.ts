@@ -19,35 +19,66 @@ const askWeatherAgent = createTool({
   execute: async ({ context }) => {
     const message = String((context as any)?.message ?? "");
     const format = ((context as any)?.format as "default" | "aisdk" | undefined) ?? "default";
+    
+    console.log('[askWeatherAgent] Received request:', { message, format });
 
-    // Use streamVNext to enable incremental text streaming (vNext)
-    const stream = await weatherAgent.streamVNext(
-      [{ role: "user", content: message }],
-      format === "aisdk" ? { format: "aisdk" } : undefined as any
-    );
+    try {
+      // Try streamVNext first (experimental)
+      const stream = await weatherAgent.streamVNext(
+        [{ role: "user", content: message }],
+        format === "aisdk" ? { format: "aisdk" } : undefined as any
+      );
 
-    // Return a shape that MCP + Mastra can stream over SSE when supported
-    // Fallback to full text for clients that don't consume streams
-    const fullText = await stream.text;
+      // Return a shape that MCP + Mastra can stream over SSE when supported
+      // Fallback to full text for clients that don't consume streams
+      const fullText = await stream.text;
+      console.log('[askWeatherAgent] streamVNext succeeded, text length:', fullText.length);
 
-    // If AISDK format requested, return a simple compatible shape
-    if (format === "aisdk") {
+      // If AISDK format requested, return a simple compatible shape
+      if (format === "aisdk") {
+        return {
+          streamed: true,
+          text: fullText,
+          textStream: (stream as any).textStream ?? null,
+        };
+      }
+
       return {
         streamed: true,
         text: fullText,
+        // Some MCP transports can detect and pipe web streams
+        // We include a hint field for streaming UIs.
         textStream: (stream as any).textStream ?? null,
+        finishReason: (stream as any).finishReason ?? null,
+        usage: (stream as any).usage ?? null,
       };
+    } catch (streamError) {
+      console.warn('[askWeatherAgent] streamVNext failed, falling back to text method:', streamError);
+      
+      // Fallback to regular text method
+      try {
+        const result = await weatherAgentTestWrapper.text({ messages: [{ role: "user", content: message }] });
+        const fullText = String(result?.text ?? "");
+        console.log('[askWeatherAgent] text fallback succeeded, text length:', fullText.length);
+        
+        return {
+          streamed: false,
+          text: fullText,
+          textStream: null,
+          finishReason: null,
+          usage: null,
+        };
+      } catch (textError) {
+        console.error('[askWeatherAgent] Both streamVNext and text methods failed:', textError);
+        return {
+          streamed: false,
+          text: `Agent error: ${textError instanceof Error ? textError.message : String(textError)}`,
+          textStream: null,
+          finishReason: null,
+          usage: null,
+        };
+      }
     }
-
-    return {
-      streamed: true,
-      text: fullText,
-      // Some MCP transports can detect and pipe web streams
-      // We include a hint field for streaming UIs.
-      textStream: (stream as any).textStream ?? null,
-      finishReason: (stream as any).finishReason ?? null,
-      usage: (stream as any).usage ?? null,
-    };
   },
 });
 
