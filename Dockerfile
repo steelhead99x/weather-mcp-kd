@@ -8,8 +8,8 @@ WORKDIR /app
 # Copy package files (lockfile optional)
 COPY package*.json ./
 
-# Install dependencies (omit dev in production)
-RUN npm install --omit=dev
+# Install all dependencies (including dev) for build
+RUN npm install
 
 # Copy source code
 COPY . .
@@ -20,6 +20,9 @@ RUN mkdir -p files/images
 
 # Build the application
 RUN npm run build
+
+# Remove dev dependencies to reduce image size
+RUN npm prune --omit=dev
 
 # Create runtime temp directory
 RUN mkdir -p /tmp/tts
