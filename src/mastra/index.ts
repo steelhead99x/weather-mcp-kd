@@ -30,59 +30,7 @@ export const mastra = new Mastra({
         host: process.env.HOST || '0.0.0.0',
         cors: {
             origin: corsOrigins,
-            allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-            allowHeaders: [
-                'Content-Type', 
-                'Authorization', 
-                'x-mastra-client-type',
-                'Accept',
-                'Origin',
-                'X-Requested-With',
-                'Cache-Control',
-                'Accept-Encoding',
-                'Accept-Language',
-                'text/event-stream',
-                'Connection'
-            ],
-            exposeHeaders: ['Content-Length', 'X-Requested-With', 'Content-Type', 'Transfer-Encoding'],
             credentials: true
-        },
-        middleware: [
-            async (c, next) => {
-                // Custom CORS middleware for streamVNext endpoint
-                const origin = c.req.header('Origin');
-                const allowedOrigins = corsOrigins;
-                
-                // Always set CORS headers for allowed origins
-                if (origin && allowedOrigins.includes(origin)) {
-                    c.header('Access-Control-Allow-Origin', origin);
-                    c.header('Access-Control-Allow-Credentials', 'true');
-                    c.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-                    c.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-mastra-client-type,Accept,Origin,X-Requested-With,Cache-Control,Accept-Encoding,Accept-Language,text/event-stream,Connection');
-                    c.header('Access-Control-Expose-Headers', 'Content-Length,X-Requested-With,Content-Type,Transfer-Encoding');
-                }
-                
-                // Handle preflight OPTIONS requests
-                if (c.req.method === 'OPTIONS') {
-                    const corsHeaders: Record<string, string> = {
-                        'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type,Authorization,x-mastra-client-type,Accept,Origin,X-Requested-With,Cache-Control,Accept-Encoding,Accept-Language,text/event-stream,Connection',
-                        'Access-Control-Max-Age': '86400'
-                    };
-                    
-                    if (origin && allowedOrigins.includes(origin)) {
-                        corsHeaders['Access-Control-Allow-Origin'] = origin;
-                        corsHeaders['Access-Control-Allow-Credentials'] = 'true';
-                    }
-                    
-                    return new Response(null, { 
-                        status: 204,
-                        headers: corsHeaders
-                    });
-                }
-                
-                await next();
-            }
-        ]
+        }
     }
 });
