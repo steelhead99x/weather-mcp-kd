@@ -34,5 +34,7 @@ ENV PORT=8080
 ENV HOST=0.0.0.0
 # Ensure temp dir is configurable
 ENV TTS_TMP_DIR=/tmp/tts
+# Enable CORS for production domain
+ENV CORS_ORIGIN=https://weather-mcp-kd.streamingportfolio.com
 
 CMD ["npm", "run", "start:telemetry"]
