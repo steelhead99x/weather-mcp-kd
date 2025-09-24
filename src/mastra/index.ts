@@ -30,7 +30,22 @@ export const mastra = new Mastra({
         host: process.env.HOST || '0.0.0.0',
         cors: {
             origin: corsOrigins,
-            credentials: true
+            credentials: true,
+            allowHeaders: [
+                'Content-Type',
+                'Authorization',
+                'X-Requested-With',
+                'Accept',
+                'Origin',
+                'Access-Control-Request-Method',
+                'Access-Control-Request-Headers',
+                'sec-ch-ua',
+                'sec-ch-ua-mobile',
+                'sec-ch-ua-platform',
+                'User-Agent',
+                'Referer'
+            ],
+            allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH']
         }
     }
 });
