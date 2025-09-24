@@ -35,7 +35,10 @@ export const mastra = new Mastra({
                 'X-Requested-With',
                 'Cache-Control',
                 'Accept-Encoding',
-                'Accept-Language'
+                'Accept-Language',
+                'text/event-stream',
+                'Cache-Control',
+                'Connection'
             ],
             exposeHeaders: ['Content-Length', 'X-Requested-With', 'Content-Type', 'Transfer-Encoding'],
             credentials: true
@@ -57,12 +60,22 @@ export const mastra = new Mastra({
                     c.header('Access-Control-Allow-Origin', origin);
                     c.header('Access-Control-Allow-Credentials', 'true');
                     c.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-                    c.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-mastra-client-type,Accept,Origin,X-Requested-With,Cache-Control,Accept-Encoding,Accept-Language');
+                    c.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-mastra-client-type,Accept,Origin,X-Requested-With,Cache-Control,Accept-Encoding,Accept-Language,text/event-stream,Connection');
                     c.header('Access-Control-Expose-Headers', 'Content-Length,X-Requested-With,Content-Type,Transfer-Encoding');
                 }
                 
+                // Handle preflight OPTIONS requests
                 if (c.req.method === 'OPTIONS') {
-                    return new Response(null, { status: 204 });
+                    return new Response(null, { 
+                        status: 204,
+                        headers: {
+                            'Access-Control-Allow-Origin': origin && allowedOrigins.includes(origin) ? origin : '*',
+                            'Access-Control-Allow-Credentials': 'true',
+                            'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+                            'Access-Control-Allow-Headers': 'Content-Type,Authorization,x-mastra-client-type,Accept,Origin,X-Requested-With,Cache-Control,Accept-Encoding,Accept-Language,text/event-stream,Connection',
+                            'Access-Control-Max-Age': '86400'
+                        }
+                    });
                 }
                 
                 await next();
