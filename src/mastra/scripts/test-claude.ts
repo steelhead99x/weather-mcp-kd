@@ -29,7 +29,7 @@ export async function generateWeatherPrompt(
     const currentWeather = weatherData.forecast[0];
 
     const result = await generateText({
-        model: anthropic(process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307'),
+        model: anthropic(process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307') as any,
         messages: [{
             role: 'user',
             content: `You are a ${toneDescriptions[tone]}. Create a natural, conversational weather report for text-to-speech.
