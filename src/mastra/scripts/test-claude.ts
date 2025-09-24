@@ -53,7 +53,6 @@ REQUIREMENTS:
 
 Generate one flowing paragraph:`
         }],
-        maxTokens: 250,
         temperature: 0.9 // High creativity for varied outputs
     });
 
