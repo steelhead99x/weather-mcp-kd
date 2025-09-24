@@ -602,7 +602,7 @@ export const weatherAgent = new Agent({
     name: 'weatherAgent',
     description: 'Provides agriculture-focused weather info for ZIP codes and generates a clear, natural TTS video uploaded to Mux with a streaming URL.',
     instructions: buildSystemPrompt(),
-    model: anthropic(process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307'),
+    model: anthropic(process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'),
     tools: {
         weatherTool,
         ttsWeatherTool,

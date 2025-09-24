@@ -23,7 +23,7 @@ export const mastra = new Mastra({
                     'http://localhost:8080',
                     'https://weather-mcp-kd.streamingportfolio.com',
                     'https://streamingportfolio.com',
-                    'https://*.streamingportfolio.com'
+                    'https://ai.streamingportfolio.com'
                 ],
             allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
             allowHeaders: [
@@ -32,9 +32,12 @@ export const mastra = new Mastra({
                 'x-mastra-client-type',
                 'Accept',
                 'Origin',
-                'X-Requested-With'
+                'X-Requested-With',
+                'Cache-Control',
+                'Accept-Encoding',
+                'Accept-Language'
             ],
-            exposeHeaders: ['Content-Length', 'X-Requested-With'],
+            exposeHeaders: ['Content-Length', 'X-Requested-With', 'Content-Type', 'Transfer-Encoding'],
             credentials: true
         }
     }
