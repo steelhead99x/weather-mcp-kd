@@ -212,12 +212,130 @@ const askWeatherAgentText = createTool({
   },
 });
 
-// Simple healthcheck tool to validate reachability via MCP
+// Comprehensive healthcheck tool to validate reachability and diagnose issues
 const health = createTool({
   id: "health",
-  description: "Basic healthcheck for the Weather MCP server. Returns ok with timestamp.",
-  inputSchema: z.object({}).optional(),
-  execute: async () => ({ ok: true, timestamp: new Date().toISOString() }),
+  description: "Comprehensive healthcheck for the Weather MCP server. Returns status, environment info, and agent health.",
+  inputSchema: z.object({
+    detailed: z.boolean().default(false).optional().describe("Include detailed diagnostic information")
+  }).optional(),
+  execute: async ({ context }) => {
+    const detailed = (context as any)?.detailed ?? false;
+    const timestamp = new Date().toISOString();
+    
+    const healthInfo: any = {
+      ok: true,
+      timestamp,
+      server: "weather-mcp-server",
+      version: "1.0.0"
+    };
+    
+    if (detailed) {
+      // Check environment variables
+      const envVars = {
+        ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
+        ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
+        DEEPGRAM_API_KEY: !!process.env.DEEPGRAM_API_KEY,
+        MUX_TOKEN_ID: !!process.env.MUX_TOKEN_ID,
+        MUX_TOKEN_SECRET: !!process.env.MUX_TOKEN_SECRET,
+        TTS_TMP_DIR: process.env.TTS_TMP_DIR || '/tmp/tts'
+      };
+      
+      healthInfo.environment = envVars;
+      
+      // Test agent methods
+      const agentTests: any = {};
+      
+      try {
+        // Test text method
+        const textResult = await weatherAgentTestWrapper.text({ 
+          messages: [{ role: "user", content: "96062" }] 
+        });
+        agentTests.textMethod = { 
+          ok: true, 
+          responseLength: textResult?.text?.length || 0 
+        };
+      } catch (error) {
+        agentTests.textMethod = { 
+          ok: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+      
+      try {
+        // Test stream method
+        const stream = await weatherAgent.stream([{ role: "user", content: "96062" }]);
+        const streamText = await stream.text;
+        agentTests.streamMethod = { 
+          ok: true, 
+          responseLength: streamText?.length || 0 
+        };
+      } catch (error) {
+        agentTests.streamMethod = { 
+          ok: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+      
+      try {
+        // Test streamVNext method
+        const streamVNext = await weatherAgent.streamVNext([{ role: "user", content: "96062" }]);
+        const streamVNextText = await streamVNext.text;
+        agentTests.streamVNextMethod = { 
+          ok: true, 
+          responseLength: streamVNextText?.length || 0 
+        };
+      } catch (error) {
+        agentTests.streamVNextMethod = { 
+          ok: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        };
+      }
+      
+      healthInfo.agentTests = agentTests;
+      
+      // Overall health based on tests
+      const allTestsPass = Object.values(agentTests).every((test: any) => test.ok);
+      healthInfo.ok = allTestsPass;
+    }
+    
+    return healthInfo;
+  },
+});
+
+// Simple test tool that bypasses MCP complexity
+const testAgent = createTool({
+  id: "test_agent",
+  description: "Simple test tool to verify agent is working. Bypasses MCP complexity.",
+  inputSchema: z.object({
+    message: z.string().default("96062").optional().describe("Test message to send to agent (use ZIP code for best results)"),
+  }),
+  execute: async ({ context }) => {
+    const message = String((context as any)?.message ?? "96062");
+    console.log('[testAgent] Testing agent with message:', message);
+    
+    try {
+      const result = await weatherAgentTestWrapper.text({ 
+        messages: [{ role: "user", content: message }] 
+      });
+      
+      return {
+        success: true,
+        message: "Agent is working correctly",
+        response: result?.text || "No response text",
+        responseLength: result?.text?.length || 0,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('[testAgent] Agent test failed:', error);
+      return {
+        success: false,
+        message: "Agent test failed",
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      };
+    }
+  },
 });
 
 export const weatherMcpServer = new MCPServer({
@@ -231,6 +349,7 @@ export const weatherMcpServer = new MCPServer({
     ask_weatherAgent: askWeatherAgent,           // Auto-selects best streaming method
     ask_weatherAgent_stream: askWeatherAgentStream, // Regular stream method
     ask_weatherAgent_text: askWeatherAgentText,    // Non-streaming fallback
+    test_agent: testAgent,                        // Simple test tool
     health,
   },
 });
