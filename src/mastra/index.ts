@@ -39,6 +39,34 @@ export const mastra = new Mastra({
             ],
             exposeHeaders: ['Content-Length', 'X-Requested-With', 'Content-Type', 'Transfer-Encoding'],
             credentials: true
-        }
+        },
+        middleware: [
+            async (c, next) => {
+                // Custom CORS middleware for streamVNext endpoint
+                const origin = c.req.header('Origin');
+                const allowedOrigins = [
+                    'http://localhost:3000',
+                    'http://localhost:3001', 
+                    'http://localhost:8080',
+                    'https://weather-mcp-kd.streamingportfolio.com',
+                    'https://streamingportfolio.com',
+                    'https://ai.streamingportfolio.com'
+                ];
+                
+                if (origin && allowedOrigins.includes(origin)) {
+                    c.header('Access-Control-Allow-Origin', origin);
+                    c.header('Access-Control-Allow-Credentials', 'true');
+                    c.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+                    c.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-mastra-client-type,Accept,Origin,X-Requested-With,Cache-Control,Accept-Encoding,Accept-Language');
+                    c.header('Access-Control-Expose-Headers', 'Content-Length,X-Requested-With,Content-Type,Transfer-Encoding');
+                }
+                
+                if (c.req.method === 'OPTIONS') {
+                    return new Response(null, { status: 204 });
+                }
+                
+                await next();
+            }
+        ]
     }
 });
