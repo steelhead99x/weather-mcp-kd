@@ -159,8 +159,8 @@ async function main() {
         if (!Number.isNaN(raw) && raw > 0) {
             // If value looks like ms (> 600), convert to seconds
             let seconds = raw > 600 ? Math.ceil(raw / 1000) : raw;
-            // Clamp to a safe range: 1s - 3600s
-            seconds = Math.max(1, Math.min(3600, seconds));
+            // Clamp to Mux's required range: 60s - 604800s (1 week)
+            seconds = Math.max(60, Math.min(604800, seconds));
             createArgs.timeout = seconds;
         }
     }

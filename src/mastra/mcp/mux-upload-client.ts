@@ -187,7 +187,7 @@ class MuxMCPClient {
      * Provides comprehensive security validation and fallback logic
      */
     private parseMcpArgs(envValue: string | undefined): string[] {
-        const defaultArgs = ["@mux/mcp-latest", "client=claude", "--tools=dynamic", "--resource=video.uploads"];
+        const defaultArgs = ["@mux/mcp", "client=claude", "--tools=dynamic", "--resource=video.uploads"];
 
         // Use default if environment variable is not set
         if (!envValue) {
