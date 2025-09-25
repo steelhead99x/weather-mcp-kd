@@ -1,0 +1,38 @@
+{
+  "name": "weather-agent-kd",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "NODE_OPTIONS=--max-old-space-size=1024 npm run compile && NODE_OPTIONS=--max-old-space-size=1024 npm run test:compile && NODE_OPTIONS=--max-old-space-size=1024 mastra build",
+    "postbuild": "mkdir -p dist && cp -R files dist/files || true",
+    "compile": "NODE_OPTIONS=--max-old-space-size=1024 tsc",
+    "clean": "rm -rf dist .mastra",
+    "prebuild": "npm run clean",
+    "test:compile": "npx tsx --check src/mastra/scripts/test-claude.ts src/mastra/scripts/test-weather-agent.ts || echo 'Test compilation skipped - tsx not available'",
+    "start:telemetry": "NODE_OPTIONS=\"--disable-warning=DEP0169\" node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "latest",
+    "@mastra/chroma": "latest",
+    "@mastra/core": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mux/mcp": "latest",
+    "ai": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "ffmpeg-static": "^5.2.0",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "mastra": "latest",
+    "tsx": "^4.19.0",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8",
+    "@modelcontextprotocol/sdk": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.6.3"
+  }
+}

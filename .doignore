@@ -1,1 +1,2 @@
+# Digital Ocean - Use Docker only, ignore package.json for app detection
 package.json

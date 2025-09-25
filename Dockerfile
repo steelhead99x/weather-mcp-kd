@@ -1,5 +1,5 @@
-# Digital Ocean App Platform - Primary Deployment Method
-# This Dockerfile is the single deployment configuration
+# Digital Ocean App Platform - DOCKER ONLY DEPLOYMENT
+# This is the ONLY deployment configuration - ignore package.json
 FROM node:20-alpine
 
 # Install ffmpeg for video processing (system ffmpeg with musl)
@@ -39,4 +39,5 @@ ENV TTS_TMP_DIR=/tmp/tts
 # Enable CORS for production domain
 ENV CORS_ORIGIN=https://weather-mcp-kd.streamingportfolio.com
 
-CMD ["npm", "run", "start:telemetry"]
+# Use direct node command instead of npm to avoid package.json detection
+CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
