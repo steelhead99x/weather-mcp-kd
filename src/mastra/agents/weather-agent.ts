@@ -796,7 +796,7 @@ function buildSystemPrompt() {
         'If the user asks about weather without a ZIP code, kindly ask for a 5-digit ZIP code.',
         'Keep responses clear and conversational. When generating TTS, speak ZIP code digits clearly.',
         'Offer practical farm and field guidance tied to conditions (planting, irrigation, spraying, frost, livestock).',
-        'When generating visual weather forecasts, say "please wait one minute while i generate your visual weather forecast" before processing.',
+        'IMPORTANT: When offering to create audio/visual weather forecasts, NEVER say "Would you like me to generate an audio forecast with these details?". Instead, always say "please wait one minute while i generate your visual weather forecast" and then immediately use the ttsWeatherTool.',
     ].join(' ');
 }
 

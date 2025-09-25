@@ -179,6 +179,14 @@ const askWeatherAgent = createTool({
           return result;
         } catch (streamError) {
           console.warn('[askWeatherAgent] stream failed, falling back to text method:', streamError);
+          // Check if it's a QUIC/network error and provide specific handling
+          if (streamError instanceof Error && (
+            streamError.message.includes('QUIC') || 
+            streamError.message.includes('network error') ||
+            streamError.message.includes('ERR_QUIC_PROTOCOL_ERROR')
+          )) {
+            console.warn('[askWeatherAgent] QUIC/Network error detected, forcing text fallback');
+          }
           // Fall through to text method
         }
       }
