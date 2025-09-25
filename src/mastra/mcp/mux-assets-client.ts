@@ -134,8 +134,8 @@ class MuxAssetsMCPClient {
                         // Use only ASSET_ID as per Mux API schema
                         const path = idVal ? { ASSET_ID: idVal } : undefined;
                         const attemptArgs = [
-                            // Correct Mux MCP format - endpoint with direct arguments
-                            { endpoint: endpoint, ...ctx },
+                            // Correct Mux MCP format - endpoint_name with nested args
+                            { endpoint_name: endpoint, args: ctx },
                         ] as any[];
                         let lastErr: any;
                         for (const args of attemptArgs) {
