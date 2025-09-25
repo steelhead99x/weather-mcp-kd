@@ -15,6 +15,7 @@ pnpm-debug.log*
 
 # TypeScript / build artifacts
 dist/
+.mastra/
 *.tsbuildinfo
 
 # IDE / Editors
@@ -23,6 +24,5 @@ dist/
 *.iml
 
 # Project-specific
-.mastra/
 weather-agent-memory.db
 /package-lock.json
