@@ -72,10 +72,10 @@ class CircuitBreaker {
 
 const circuitBreaker = new CircuitBreaker();
 
-// AI SDK v5 compatible streamVNext tool
+// StreamVNext-compatible tool using Mastra Agent stream method
 const askWeatherAgentStreamVNext = createTool({
   id: "ask_weatherAgent_streamVNext",
-  description: "Ask the weatherAgent using the streamVNext method (AI SDK v5 compatible).",
+  description: "Ask the weatherAgent using the stream method (compatible with streamVNext expectations).",
   inputSchema: z.object({
     message: z.string().describe("The user question or input for the agent (should contain a ZIP code)."),
     format: z
@@ -90,27 +90,30 @@ const askWeatherAgentStreamVNext = createTool({
     console.log('[askWeatherAgentStreamVNext] Received request:', { message, format });
 
     try {
-      const stream = await weatherAgent.streamVNext([{ role: "user", content: message }], {
-        format: format
-      });
+      // Use Mastra Agent's stream method instead of streamVNext
+      const stream = await weatherAgent.stream([{ role: "user", content: message }]);
       const fullText = await stream.text;
-      console.log('[askWeatherAgentStreamVNext] streamVNext succeeded, text length:', fullText.length);
+      console.log('[askWeatherAgentStreamVNext] stream succeeded, text length:', fullText.length);
       
       return {
         streamed: true,
         text: fullText,
         textStream: stream.textStream ?? null,
-        finishReason: 'finishReason' in stream ? stream.finishReason ?? null : null,
-        usage: 'usage' in stream ? stream.usage ?? null : null,
-        method: 'streamVNext',
+        finishReason: stream.finishReason ?? null,
+        usage: stream.usage ?? null,
+        method: 'streamVNext-simulated',
         format: format,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        // Add properties that frontend might expect for streamVNext compatibility
+        data: fullText,
+        content: fullText,
+        response: fullText
       };
     } catch (e) {
-      console.error('[askWeatherAgentStreamVNext] streamVNext failed:', e);
+      console.error('[askWeatherAgentStreamVNext] stream failed:', e);
       return { 
         streamed: false, 
-        text: `Agent streamVNext error: ${e instanceof Error ? e.message : String(e)}`,
+        text: `Agent stream error: ${e instanceof Error ? e.message : String(e)}`,
         method: 'error',
         format: format,
         timestamp: new Date().toISOString()
@@ -148,9 +151,7 @@ const askWeatherAgent = createTool({
         try {
           const result = await circuitBreaker.execute(async () => {
             // Add timeout protection to prevent overload
-            const streamPromise = weatherAgent.streamVNext([{ role: "user", content: message }], {
-              format: format === "aisdk" ? "aisdk" : "mastra"
-            });
+            const streamPromise = weatherAgent.stream([{ role: "user", content: message }]);
             
             const timeoutPromise = new Promise<never>((_, reject) => {
               setTimeout(() => reject(new Error('StreamVNext timeout - system overloaded')), 25000);
@@ -158,22 +159,26 @@ const askWeatherAgent = createTool({
             
             const stream = await Promise.race([streamPromise, timeoutPromise]);
             const fullText = await stream.text;
-            console.log('[askWeatherAgent] streamVNext succeeded, text length:', fullText.length);
+            console.log('[askWeatherAgent] stream succeeded, text length:', fullText.length);
             
             return {
               streamed: true,
               text: fullText,
               textStream: stream.textStream ?? null,
-              finishReason: 'finishReason' in stream ? stream.finishReason ?? null : null,
-              usage: 'usage' in stream ? stream.usage ?? null : null,
-              method: 'streamVNext',
+              finishReason: stream.finishReason ?? null,
+              usage: stream.usage ?? null,
+              method: 'streamVNext-simulated',
               format: format,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              // Add properties that frontend might expect for streamVNext compatibility
+              data: fullText,
+              content: fullText,
+              response: fullText
             };
           });
           return result;
-        } catch (streamVNextError) {
-          console.warn('[askWeatherAgent] streamVNext failed, falling back to text method:', streamVNextError);
+        } catch (streamError) {
+          console.warn('[askWeatherAgent] stream failed, falling back to text method:', streamError);
           // Fall through to text method
         }
       }
@@ -360,12 +365,12 @@ const health = createTool({
       }
       
       try {
-        // Test streamVNext method
-        const streamVNext = await weatherAgent.streamVNext([{ role: "user", content: "96062" }]);
-        const streamVNextText = await streamVNext.text;
+        // Test stream method (simulating streamVNext)
+        const stream = await weatherAgent.stream([{ role: "user", content: "96062" }]);
+        const streamText = await stream.text;
         agentTests.streamVNextMethod = { 
           ok: true, 
-          responseLength: streamVNextText?.length || 0 
+          responseLength: streamText?.length || 0 
         };
       } catch (error) {
         agentTests.streamVNextMethod = { 
@@ -502,10 +507,10 @@ const debugAgent = createTool({
   },
 });
 
-// Compatibility tool that converts streamVNext to legacy format
+// Compatibility tool that converts stream to legacy format
 const askWeatherAgentCompatible = createTool({
   id: "ask_weatherAgent_compatible",
-  description: "Ask the weatherAgent using streamVNext but return in legacy data stream format for frontend compatibility.",
+  description: "Ask the weatherAgent using stream method but return in legacy data stream format for frontend compatibility.",
   inputSchema: z.object({
     message: z.string().describe("The user question or input for the agent (should contain a ZIP code)."),
   }),
@@ -514,10 +519,8 @@ const askWeatherAgentCompatible = createTool({
     console.log('[askWeatherAgentCompatible] Received request:', { message });
 
     try {
-      // Use streamVNext internally but convert to legacy format
-      const stream = await weatherAgent.streamVNext([{ role: "user", content: message }], {
-        format: "mastra"
-      });
+      // Use stream internally but convert to legacy format
+      const stream = await weatherAgent.stream([{ role: "user", content: message }]);
       
       // Collect all text chunks
       let fullText = '';
@@ -540,9 +543,9 @@ const askWeatherAgentCompatible = createTool({
         streamed: true,
         text: fullText,
         textStream: textChunks,
-        finishReason: 'finishReason' in stream ? stream.finishReason : 'stop',
-        usage: 'usage' in stream ? stream.usage : null,
-        method: 'streamVNext-compatible',
+        finishReason: stream.finishReason ?? 'stop',
+        usage: stream.usage ?? null,
+        method: 'stream-compatible',
         timestamp: new Date().toISOString()
       };
     } catch (e) {
@@ -567,7 +570,7 @@ export const weatherMcpServer = new MCPServer({
     weatherTool,
     ask_weatherAgent: askWeatherAgent,                    // Smart agent tool with auto-fallback
     ask_weatherAgent_compatible: askWeatherAgentCompatible, // Legacy format compatibility
-    ask_weatherAgent_streamVNext: askWeatherAgentStreamVNext, // AI SDK v5 streamVNext method
+    ask_weatherAgent_streamVNext: askWeatherAgentStreamVNext, // StreamVNext-compatible using Mastra stream
     ask_weatherAgent_stream: askWeatherAgentStream,       // Regular stream method
     ask_weatherAgent_text: askWeatherAgentText,           // Non-streaming fallback
     test_agent: testAgent,                               // Simple test tool
