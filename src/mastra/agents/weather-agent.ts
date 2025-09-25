@@ -6,8 +6,8 @@ import { promises as fs } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
-import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
+import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client.js';
+import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client.js';
 
 // Pre-warm MCP on module load (non-blocking, best-effort) - DISABLED to prevent overload
 // (async () => {
