@@ -17,6 +17,7 @@ const corsOrigins = [
 
 console.log('🌐 CORS Origins configured:', corsOrigins);
 console.log('🔧 CORS_ORIGIN env var:', process.env.CORS_ORIGIN || 'not set');
+console.log('🚀 Starting Weather Agent...');
 
 export const mastra = new Mastra({
     agents: {
