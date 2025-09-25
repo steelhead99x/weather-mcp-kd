@@ -26,3 +26,4 @@ dist/
 # Project-specific
 weather-agent-memory.db
 /package-lock.json
+files/tts--deepgram-aura-asteria-en-c00e411e.mp3
