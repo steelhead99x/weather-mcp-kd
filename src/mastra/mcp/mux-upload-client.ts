@@ -482,7 +482,8 @@ class MuxMCPClient {
                             }
 
                             const attemptArgs = [
-                                // Correct Mux MCP format - endpoint with direct arguments
+                                // Try different endpoint name formats
+                                { endpoint: 'video.uploads.create', ...ctx },
                                 { endpoint: endpoint, ...ctx },
                             ] as any[];
 
