@@ -29,7 +29,32 @@ npm run dev
 ```
 ### Environment Variables
 
-Create a `.env` file based on `.env.example` and populate with required values.
+Create a `.env` file with the following required variables:
+
+#### Server Configuration
+- `PORT` - Server port (default: 8080)
+- `HOST` - Server host (default: 0.0.0.0)
+- `NODE_ENV` - Environment (development/production)
+
+#### CORS Configuration
+- `CORS_ORIGIN` - Additional CORS origin URL
+- `LOCALHOST_3000_URL` - Override localhost:3000 URL (default: http://localhost:3000)
+- `LOCALHOST_3001_URL` - Override localhost:3001 URL (default: http://localhost:3001)
+- `LOCALHOST_8080_URL` - Override localhost:8080 URL (default: http://localhost:8080)
+
+#### API Keys
+- `ANTHROPIC_API_KEY` - Required for Claude AI integration
+- `DEEPGRAM_API_KEY` - Required for TTS/STT functionality
+- `MUX_TOKEN_ID` - Required for Mux media handling
+- `MUX_TOKEN_SECRET` - Required for Mux media handling
+
+#### Optional Configuration
+- `MUX_HLS_BASE_URL` - Mux HLS base URL (default: https://stream.mux.com)
+- `STREAMING_PORTFOLIO_BASE_URL` - Base URL for streaming portfolio (default: https://streamingportfolio.com)
+- `VIDEO_MAX_WIDTH` - Maximum video width (default: 1920)
+- `VIDEO_MAX_HEIGHT` - Maximum video height (default: 1080)
+- `FFMPEG_PRESET` - FFmpeg encoding preset (default: fast)
+- `TTS_TMP_DIR` - Temporary directory for TTS files (default: /tmp/tts)
 
 ## Project Structure
 ```
@@ -111,7 +136,32 @@ npm run dev
 ```
 ### Environment Variables
 
-Create a `.env` file based on `.env.example` and populate with required values.
+Create a `.env` file with the following required variables:
+
+#### Server Configuration
+- `PORT` - Server port (default: 8080)
+- `HOST` - Server host (default: 0.0.0.0)
+- `NODE_ENV` - Environment (development/production)
+
+#### CORS Configuration
+- `CORS_ORIGIN` - Additional CORS origin URL
+- `LOCALHOST_3000_URL` - Override localhost:3000 URL (default: http://localhost:3000)
+- `LOCALHOST_3001_URL` - Override localhost:3001 URL (default: http://localhost:3001)
+- `LOCALHOST_8080_URL` - Override localhost:8080 URL (default: http://localhost:8080)
+
+#### API Keys
+- `ANTHROPIC_API_KEY` - Required for Claude AI integration
+- `DEEPGRAM_API_KEY` - Required for TTS/STT functionality
+- `MUX_TOKEN_ID` - Required for Mux media handling
+- `MUX_TOKEN_SECRET` - Required for Mux media handling
+
+#### Optional Configuration
+- `MUX_HLS_BASE_URL` - Mux HLS base URL (default: https://stream.mux.com)
+- `STREAMING_PORTFOLIO_BASE_URL` - Base URL for streaming portfolio (default: https://streamingportfolio.com)
+- `VIDEO_MAX_WIDTH` - Maximum video width (default: 1920)
+- `VIDEO_MAX_HEIGHT` - Maximum video height (default: 1080)
+- `FFMPEG_PRESET` - FFmpeg encoding preset (default: fast)
+- `TTS_TMP_DIR` - Temporary directory for TTS files (default: /tmp/tts)
 
 ## Project Structure
 ```

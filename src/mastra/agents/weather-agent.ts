@@ -689,6 +689,36 @@ function releaseConnection(): void {
     }
 }
 
+// Create a shared memory instance for ZIP code storage with working memory
+const zipMemory = new Memory({
+    storage: new InMemoryStore(),
+    options: {
+        workingMemory: {
+            enabled: true,
+            scope: 'thread', // Use thread-scoped memory (supported by InMemoryStore)
+            template: `# User Weather Preferences
+- ZIP Code: 
+- Last Weather Request:
+- Preferred Format: [text/audio]
+`,
+        },
+    },
+}) as any;
+
+// Initialize the default thread for ZIP code storage
+(async () => {
+    try {
+        await zipMemory.createThread({
+            threadId: "default-thread",
+            resourceId: "default-user",
+            title: "ZIP Code Storage Thread"
+        });
+        console.debug('[zipMemory] Default thread created successfully');
+    } catch (e) {
+        console.debug('[zipMemory] Default thread may already exist:', e instanceof Error ? e.message : String(e));
+    }
+})();
+
 // Memory tool for storing and retrieving ZIP codes
 const zipMemoryTool = createTool({
     id: "zip-memory",
@@ -708,13 +738,16 @@ const zipMemoryTool = createTool({
                 };
             }
             
-            // Store ZIP code in memory - we'll access the memory through the agent instance
+            // Store ZIP code in working memory
             try {
-                // Get the agent instance and access its memory
-                const agentMemory = (weatherAgent as any).memory;
-                if (agentMemory) {
-                    await agentMemory.set("user_zip_code", zipCode);
-                }
+                await zipMemory.updateWorkingMemory({
+                    threadId: "default-thread",
+                    workingMemory: `# User Weather Preferences
+- ZIP Code: ${zipCode}
+- Last Weather Request: ${new Date().toISOString()}
+- Preferred Format: audio
+`,
+                });
                 return {
                     success: true,
                     message: `ZIP code ${zipCode} stored in memory`,
@@ -727,10 +760,22 @@ const zipMemoryTool = createTool({
                 };
             }
         } else if (action === "retrieve") {
-            // Retrieve ZIP code from memory
+            // Retrieve ZIP code from working memory
             try {
-                const agentMemory = (weatherAgent as any).memory;
-                const storedZip = agentMemory ? await agentMemory.get("user_zip_code") : null;
+                const thread = await zipMemory.getThreadById({
+                    threadId: "default-thread",
+                });
+                
+                // Extract ZIP code from working memory content in thread metadata
+                let storedZip = null;
+                if (thread?.metadata?.workingMemory) {
+                    const content = thread.metadata.workingMemory;
+                    const zipMatch = content.match(/- ZIP Code: (\d{5})/);
+                    if (zipMatch) {
+                        storedZip = zipMatch[1];
+                    }
+                }
+                
                 return {
                     success: true,
                     message: storedZip ? `Retrieved ZIP code: ${storedZip}` : "No ZIP code stored in memory",
@@ -1114,7 +1159,12 @@ function buildSystemPrompt() {
         '- After storing a ZIP code, immediately use it for weather requests without asking again',
         '- Keep responses clear and conversational. When generating TTS, speak ZIP code digits clearly.',
         'Offer practical farm and field guidance tied to conditions (planting, irrigation, spraying, frost, livestock).',
-        'IMPORTANT: When offering to create audio/visual weather forecasts, NEVER say "Would you like me to generate an audio forecast with these details?". Instead, always say "please wait one minute while i generate your visual weather forecast" and then immediately use the ttsWeatherTool.',
+        'AUDIO/VISUAL WEATHER RULES:',
+        '- When a user requests audio, TTS, voice, speak, stream, or visual weather forecasts, ALWAYS automatically call the ttsWeatherTool',
+        '- NEVER ask "Would you like me to generate an audio forecast?" - just generate it automatically',
+        '- Always say "please wait one minute while i generate your visual weather forecast" before calling ttsWeatherTool',
+        '- Use the stored ZIP code from memory when calling ttsWeatherTool',
+        '- If no ZIP code is stored, ask for one first, then proceed with audio generation',
     ].join(' ');
 }
 
@@ -1128,9 +1178,7 @@ export const weatherAgent: any = new Agent({
         ttsWeatherTool,
         zipMemoryTool,
     },
-    memory: new Memory({
-        storage: new InMemoryStore(),
-    }) as any,
+    memory: zipMemory,
 });
 
 // Extract a 5-digit ZIP and optional quoted text
@@ -1168,11 +1216,16 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
     // If no ZIP in current messages, try to retrieve from memory
     if (!currentZipCode) {
         try {
-            const agentMemory = (weatherAgent as any).memory;
-            if (agentMemory) {
-                const storedZip = await agentMemory.get("user_zip_code");
-                if (storedZip) {
-                    currentZipCode = storedZip;
+            const thread = await zipMemory.getThreadById({
+                threadId: "default-thread",
+            });
+            
+            // Extract ZIP code from working memory content in thread metadata
+            if (thread?.metadata?.workingMemory) {
+                const content = thread.metadata.workingMemory;
+                const zipMatch = content.match(/- ZIP Code: (\d{5})/);
+                if (zipMatch) {
+                    currentZipCode = zipMatch[1];
                     console.debug(`[textShim] Retrieved ZIP from memory: ${currentZipCode}`);
                 }
             }
@@ -1182,11 +1235,15 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
     } else {
         // Store the ZIP code in memory for future use
         try {
-            const agentMemory = (weatherAgent as any).memory;
-            if (agentMemory) {
-                await agentMemory.set("user_zip_code", currentZipCode);
-                console.debug(`[textShim] Stored ZIP in memory: ${currentZipCode}`);
-            }
+            await zipMemory.updateWorkingMemory({
+                threadId: "default-thread",
+                workingMemory: `# User Weather Preferences
+- ZIP Code: ${currentZipCode}
+- Last Weather Request: ${new Date().toISOString()}
+- Preferred Format: audio
+`,
+            });
+            console.debug(`[textShim] Stored ZIP in memory: ${currentZipCode}`);
         } catch (e) {
             console.warn('[textShim] Failed to store ZIP in memory:', e);
         }
