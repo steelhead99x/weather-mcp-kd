@@ -90,10 +90,20 @@ const askWeatherAgentStreamVNext = createTool({
     console.debug('[askWeatherAgentStreamVNext] Received request:', { message, format });
 
     try {
-      // Use Mastra Agent's stream method instead of streamVNext
-      const stream = await weatherAgent.stream([{ role: "user", content: message }]);
+      // Use Mastra Agent's streamVNext method for proper vstream format
+      const stream = await weatherAgent.streamVNext([{ role: "user", content: message }]);
       const fullText = await stream.text;
-      console.debug('[askWeatherAgentStreamVNext] stream succeeded, text length:', fullText.length);
+      console.debug('[askWeatherAgentStreamVNext] streamVNext succeeded, text length:', fullText.length);
+      
+      // Collect vstream chunks for proper format
+      const chunks: any[] = [];
+      try {
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
+        }
+      } catch (streamError) {
+        console.warn('[askWeatherAgentStreamVNext] Stream reading error:', streamError);
+      }
       
       return {
         streamed: true,
@@ -101,13 +111,15 @@ const askWeatherAgentStreamVNext = createTool({
         textStream: stream.textStream ?? null,
         finishReason: stream.finishReason ?? null,
         usage: stream.usage ?? null,
-        method: 'streamVNext-simulated',
+        method: 'streamVNext',
         format: format,
         timestamp: new Date().toISOString(),
-        // Add properties that frontend might expect for streamVNext compatibility
+        // Add vstream format properties
         data: fullText,
         content: fullText,
-        response: fullText
+        response: fullText,
+        chunks: chunks,
+        vstream: true
       };
     } catch (e) {
       console.error('[askWeatherAgentStreamVNext] stream failed:', e);
@@ -151,7 +163,7 @@ const askWeatherAgent = createTool({
         try {
           const result = await circuitBreaker.execute(async () => {
             // Add timeout protection to prevent overload
-            const streamPromise = weatherAgent.stream([{ role: "user", content: message }]);
+            const streamPromise = weatherAgent.streamVNext([{ role: "user", content: message }]);
             
             const timeoutPromise = new Promise<never>((_, reject) => {
               setTimeout(() => reject(new Error('StreamVNext timeout - system overloaded')), 25000);
@@ -159,7 +171,17 @@ const askWeatherAgent = createTool({
             
             const stream = await Promise.race([streamPromise, timeoutPromise]);
             const fullText = await stream.text;
-            console.debug('[askWeatherAgent] stream succeeded, text length:', fullText.length);
+            console.debug('[askWeatherAgent] streamVNext succeeded, text length:', fullText.length);
+            
+            // Collect vstream chunks for proper format
+            const chunks: any[] = [];
+            try {
+              for await (const chunk of stream.fullStream) {
+                chunks.push(chunk);
+              }
+            } catch (streamError) {
+              console.warn('[askWeatherAgent] Stream reading error:', streamError);
+            }
             
             return {
               streamed: true,
@@ -167,13 +189,15 @@ const askWeatherAgent = createTool({
               textStream: stream.textStream ?? null,
               finishReason: stream.finishReason ?? null,
               usage: stream.usage ?? null,
-              method: 'streamVNext-simulated',
+              method: 'streamVNext',
               format: format,
               timestamp: new Date().toISOString(),
-              // Add properties that frontend might expect for streamVNext compatibility
+              // Add vstream format properties
               data: fullText,
               content: fullText,
-              response: fullText
+              response: fullText,
+              chunks: chunks,
+              vstream: true
             };
           });
           return result;
@@ -373,8 +397,8 @@ const health = createTool({
       }
       
       try {
-        // Test stream method (simulating streamVNext)
-        const stream = await weatherAgent.stream([{ role: "user", content: "96062" }]);
+        // Test streamVNext method
+        const stream = await weatherAgent.streamVNext([{ role: "user", content: "96062" }]);
         const streamText = await stream.text;
         agentTests.streamVNextMethod = { 
           ok: true, 
@@ -527,34 +551,44 @@ const askWeatherAgentCompatible = createTool({
     console.debug('[askWeatherAgentCompatible] Received request:', { message });
 
     try {
-      // Use stream internally but convert to legacy format
-      const stream = await weatherAgent.stream([{ role: "user", content: message }]);
+      // Use streamVNext internally but convert to legacy format for compatibility
+      const stream = await weatherAgent.streamVNext([{ role: "user", content: message }]);
       
-      // Collect all text chunks
+      // Collect all text chunks and vstream chunks
       let fullText = '';
       const textChunks: string[] = [];
+      const vstreamChunks: any[] = [];
       
       try {
+        // Collect text chunks
         for await (const chunk of stream.textStream) {
           textChunks.push(chunk);
           fullText += chunk;
+        }
+        
+        // Collect vstream chunks
+        for await (const chunk of stream.fullStream) {
+          vstreamChunks.push(chunk);
         }
       } catch (streamError) {
         console.warn('[askWeatherAgentCompatible] Stream reading error:', streamError);
         // Continue with whatever text we have
       }
       
-      console.debug('[askWeatherAgentCompatible] Stream completed, text length:', fullText.length);
+      console.debug('[askWeatherAgentCompatible] StreamVNext completed, text length:', fullText.length);
       
-      // Return in legacy format that frontend expects
+      // Return in legacy format that frontend expects, but with vstream data available
       return {
         streamed: true,
         text: fullText,
         textStream: textChunks,
         finishReason: stream.finishReason ?? 'stop',
         usage: stream.usage ?? null,
-        method: 'stream-compatible',
-        timestamp: new Date().toISOString()
+        method: 'streamVNext-compatible',
+        timestamp: new Date().toISOString(),
+        // Add vstream format properties for advanced clients
+        chunks: vstreamChunks,
+        vstream: true
       };
     } catch (e) {
       console.error('[askWeatherAgentCompatible] Error:', e);
