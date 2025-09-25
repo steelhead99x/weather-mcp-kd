@@ -74,7 +74,7 @@ class MuxAssetsMCPClient {
 
     private parseMcpArgs(envValue: string | undefined): string[] {
         // Default to assets resource
-        const defaultArgs = ["@mux/mcp", "client=openai-agents", "--tools=dynamic", "--resource=video.assets"]; 
+        const defaultArgs = ["@mux/mcp", "client=claude", "--tools=dynamic", "--resource=video.assets"]; 
         const value = (envValue || '').trim();
         if (!value) return defaultArgs;
         if (value.length > 1000) return defaultArgs;
