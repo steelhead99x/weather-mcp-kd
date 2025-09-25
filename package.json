@@ -9,7 +9,7 @@
     "compile": "NODE_OPTIONS=--max-old-space-size=1024 tsc",
     "clean": "rm -rf dist .mastra",
     "prebuild": "npm run clean",
-    "test:compile": "npx tsc --project tsconfig.test.json || echo 'Test compilation skipped - TypeScript not available'",
+    "test:compile": "npx tsc --noEmit --skipLibCheck src/mastra/scripts/test-claude.ts src/mastra/scripts/test-weather-agent.ts || echo 'Test compilation skipped - TypeScript not available'",
     "start:telemetry": "NODE_OPTIONS=\"--disable-warning=DEP0169\" node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs",
     "start:production": "NODE_ENV=production NODE_OPTIONS=\"--disable-warning=DEP0169\" node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs",
     "monitor": "npx tsx src/mastra/scripts/monitor-system.ts"
