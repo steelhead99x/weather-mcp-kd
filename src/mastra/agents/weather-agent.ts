@@ -542,7 +542,7 @@ function releaseConnection(): void {
 // Weather-to-tts-and-upload tool
 const ttsWeatherTool = createTool({
     id: "tts-weather-upload",
-    description: "Convert weather report to agriculture-focused audio, create a simple video, upload to Mux, and return a streaming URL.",
+    description: "Convert weather report to agriculture-focused audio, create a simple video, upload to Mux, and return a streaming URL. When using this tool, say 'please wait one minute while i generate your visual weather forecast' before processing.",
     inputSchema: z.object({
         zipCode: z.string().describe("5-digit ZIP code"),
         text: z.string().optional().describe("Optional custom text. If omitted, a natural agriculture forecast will be generated."),
@@ -796,6 +796,7 @@ function buildSystemPrompt() {
         'If the user asks about weather without a ZIP code, kindly ask for a 5-digit ZIP code.',
         'Keep responses clear and conversational. When generating TTS, speak ZIP code digits clearly.',
         'Offer practical farm and field guidance tied to conditions (planting, irrigation, spraying, frost, livestock).',
+        'When generating visual weather forecasts, say "please wait one minute while i generate your visual weather forecast" before processing.',
     ].join(' ');
 }
 
