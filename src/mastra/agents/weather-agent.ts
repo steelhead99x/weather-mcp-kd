@@ -430,6 +430,12 @@ async function performAssetPolling(assetId: string, {
                 consecutiveErrors++;
             }
             
+            // Type guard to check if lastPayload is a valid MuxAssetResponse
+            if ('raw' in lastPayload) {
+                // Skip raw responses that couldn't be parsed
+                continue;
+            }
+            
             const status = lastPayload?.status as string | undefined;
             if (status === 'ready' && 'playback_ids' in lastPayload) {
                 const playbackId = Array.isArray(lastPayload.playback_ids) && lastPayload.playback_ids.length > 0
