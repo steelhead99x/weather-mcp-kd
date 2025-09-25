@@ -432,7 +432,7 @@ class MuxMCPClient {
                 }
             }
 
-            // If MCP only exposes generic invoke_api_endpoint, synthesize concrete tools for video.uploads
+            // If MCP exposes generic invoke_api_endpoint, synthesize concrete tools for video.uploads
             const hasInvoke = !!tools['invoke_api_endpoint'];
             console.debug(`Has invoke_api_endpoint: ${hasInvoke}`);
 

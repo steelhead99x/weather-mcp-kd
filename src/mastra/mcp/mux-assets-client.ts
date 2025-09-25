@@ -112,7 +112,7 @@ class MuxAssetsMCPClient {
             }
         }
 
-        // If only generic invoke_api_endpoint is provided, add convenient wrappers for assets endpoints
+        // If MCP exposes generic invoke_api_endpoint, add convenient wrappers for assets endpoints
         if (tools['invoke_api_endpoint']) {
             const addWrapper = (id: string, endpoint: string, description: string, schema?: z.ZodSchema) => {
                 // Do not overwrite real Mux MCP tools; only add wrapper if missing
