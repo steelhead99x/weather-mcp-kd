@@ -876,7 +876,6 @@ const ttsWeatherTool = createTool({
                 // Simplified argument structure - use only essential args
                 const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
                 const createArgs = {
-                    cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
                     new_asset_settings: { 
                         playback_policies: [playbackPolicy] 
                     }
