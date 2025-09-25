@@ -11,6 +11,7 @@ const corsOrigins = [
     'https://weather-mcp-kd.streamingportfolio.com',
     'https://streamingportfolio.com',
     'https://ai.streamingportfolio.com',
+    'https://stage-ai.streamingportfolio.com',
     ...(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : [])
 ];
 
