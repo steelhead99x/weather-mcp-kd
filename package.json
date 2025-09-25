@@ -19,9 +19,8 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@mastra/chroma": "latest",
     "@mastra/core": "latest",
-    "@mastra/mcp": "0.13.1",
     "@mastra/memory": "latest",
-    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@modelcontextprotocol/sdk": "1.11.5",
     "@mux/mcp": "latest",
     "ai": "^5.0.0",
     "dotenv": "^16.4.5",
@@ -40,6 +39,6 @@
     "typescript": "^5.6.3"
   },
   "overrides": {
-    "@modelcontextprotocol/sdk": "^1.17.5"
+    "@modelcontextprotocol/sdk": "1.11.5"
   }
 }
