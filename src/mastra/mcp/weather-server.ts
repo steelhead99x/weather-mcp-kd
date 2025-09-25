@@ -341,10 +341,7 @@ const debugAgent = createTool({
       const zipMatch = message.match(/\b(\d{5})\b/);
       if (zipMatch) {
         const zipCode = zipMatch[1];
-        const weatherResult = await weatherTool.execute({ 
-          context: { zipCode },
-          runtimeContext: new (await import('@mastra/core/runtime-context')).RuntimeContext()
-        });
+        const weatherResult = await weatherTool.execute({ context: { zipCode } } as any);
         debugInfo.tests.weatherTool = {
           success: true,
           zipCode,
