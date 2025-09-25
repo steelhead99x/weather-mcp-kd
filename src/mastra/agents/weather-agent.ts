@@ -539,6 +539,69 @@ function releaseConnection(): void {
     }
 }
 
+// Memory tool for storing and retrieving ZIP codes
+const zipMemoryTool = createTool({
+    id: "zip-memory",
+    description: "Store or retrieve ZIP codes in memory for weather requests",
+    inputSchema: z.object({
+        action: z.enum(["store", "retrieve"]).describe("Action to perform: store a ZIP code or retrieve the stored ZIP code"),
+        zipCode: z.string().optional().describe("ZIP code to store (required for store action)"),
+    }),
+    execute: async ({ context }): Promise<{ success: boolean; message: string; zipCode?: string | null }> => {
+        const { action, zipCode } = context as { action: string; zipCode?: string };
+        
+        if (action === "store") {
+            if (!zipCode || !/^\d{5}$/.test(zipCode)) {
+                return {
+                    success: false,
+                    message: "Invalid ZIP code provided for storage"
+                };
+            }
+            
+            // Store ZIP code in memory - we'll access the memory through the agent instance
+            try {
+                // Get the agent instance and access its memory
+                const agentMemory = (weatherAgent as any).memory;
+                if (agentMemory) {
+                    await agentMemory.set("user_zip_code", zipCode);
+                }
+                return {
+                    success: true,
+                    message: `ZIP code ${zipCode} stored in memory`,
+                    zipCode
+                };
+            } catch (e) {
+                return {
+                    success: false,
+                    message: `Failed to store ZIP code: ${e instanceof Error ? e.message : String(e)}`
+                };
+            }
+        } else if (action === "retrieve") {
+            // Retrieve ZIP code from memory
+            try {
+                const agentMemory = (weatherAgent as any).memory;
+                const storedZip = agentMemory ? await agentMemory.get("user_zip_code") : null;
+                return {
+                    success: true,
+                    message: storedZip ? `Retrieved ZIP code: ${storedZip}` : "No ZIP code stored in memory",
+                    zipCode: storedZip || null
+                };
+            } catch (e) {
+                return {
+                    success: false,
+                    message: `Failed to retrieve ZIP code: ${e instanceof Error ? e.message : String(e)}`,
+                    zipCode: null
+                };
+            }
+        }
+        
+        return {
+            success: false,
+            message: "Invalid action. Use 'store' or 'retrieve'"
+        };
+    },
+});
+
 // Weather-to-tts-and-upload tool
 const ttsWeatherTool = createTool({
     id: "tts-weather-upload",
@@ -816,14 +879,18 @@ const ttsWeatherTool = createTool({
 function buildSystemPrompt() {
     return [
         'You are a helpful, natural-sounding, agriculture-focused weather assistant.',
-        'If the user asks about weather without a ZIP code, kindly ask for a 5-digit ZIP code.',
-        'Keep responses clear and conversational. When generating TTS, speak ZIP code digits clearly.',
+        'IMPORTANT MEMORY RULES:',
+        '- Always remember ZIP codes that users provide in previous messages',
+        '- If a user provides a ZIP code, store it in memory for future reference',
+        '- When a user asks about weather without providing a ZIP code, check your memory first for previously provided ZIP codes',
+        '- Only ask for a ZIP code if you have no ZIP code stored in memory',
+        '- Keep responses clear and conversational. When generating TTS, speak ZIP code digits clearly.',
         'Offer practical farm and field guidance tied to conditions (planting, irrigation, spraying, frost, livestock).',
         'IMPORTANT: When offering to create audio/visual weather forecasts, NEVER say "Would you like me to generate an audio forecast with these details?". Instead, always say "please wait one minute while i generate your visual weather forecast" and then immediately use the ttsWeatherTool.',
     ].join(' ');
 }
 
-export const weatherAgent = new Agent({
+export const weatherAgent: any = new Agent({
     name: 'weatherAgent',
     description: 'Provides agriculture-focused weather info for ZIP codes and generates a clear, natural TTS video uploaded to Mux with a streaming URL.',
     instructions: buildSystemPrompt(),
@@ -831,6 +898,7 @@ export const weatherAgent = new Agent({
     tools: {
         weatherTool,
         ttsWeatherTool,
+        zipMemoryTool,
     },
     memory: new Memory({
         storage: new InMemoryStore(),
@@ -866,7 +934,37 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
     const lastContent = lastUser?.content || '';
     const { zipCode, quotedText } = extractZipAndQuotedText(messages);
 
-    if (!zipCode) {
+    // Check if we have a ZIP code in the current messages
+    let currentZipCode = zipCode;
+    
+    // If no ZIP in current messages, try to retrieve from memory
+    if (!currentZipCode) {
+        try {
+            const agentMemory = (weatherAgent as any).memory;
+            if (agentMemory) {
+                const storedZip = await agentMemory.get("user_zip_code");
+                if (storedZip) {
+                    currentZipCode = storedZip;
+                    console.log(`[textShim] Retrieved ZIP from memory: ${currentZipCode}`);
+                }
+            }
+        } catch (e) {
+            console.warn('[textShim] Failed to retrieve ZIP from memory:', e);
+        }
+    } else {
+        // Store the ZIP code in memory for future use
+        try {
+            const agentMemory = (weatherAgent as any).memory;
+            if (agentMemory) {
+                await agentMemory.set("user_zip_code", currentZipCode);
+                console.log(`[textShim] Stored ZIP in memory: ${currentZipCode}`);
+            }
+        } catch (e) {
+            console.warn('[textShim] Failed to store ZIP in memory:', e);
+        }
+    }
+
+    if (!currentZipCode) {
         return {
             text: 'Please share a 5-digit ZIP code so I can fetch your local agriculture weather.'
         };
@@ -875,7 +973,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
     // If audio/stream requested, run the TTS+upload tool and return URLs clearly
     if (/\b(audio|tts|voice|speak|stream)\b/i.test(lastContent)) {
         try {
-            const res = await (ttsWeatherTool.execute as any)({ context: { zipCode, text: quotedText } });
+            const res = await (ttsWeatherTool.execute as any)({ context: { zipCode: currentZipCode, text: quotedText } });
             if ((res as any)?.success) {
                 const r: any = res;
 
@@ -893,11 +991,11 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
                     r?.mux?.playerUrl ||
                     (assetId ? `${STREAMING_PORTFOLIO_BASE_URL}/player?assetId=${assetId}` : undefined);
 
-                const summary = r.summaryText || quotedText || `Agriculture weather for ZIP ${zipCode}`;
+                const summary = r.summaryText || quotedText || `Agriculture weather for ZIP ${currentZipCode}`;
 
                 // Build concise end-user message with clear playback links
                 const lines: string[] = [];
-                lines.push(`Agricultural Weather Insights for ${zipCode}:`);
+                lines.push(`Agricultural Weather Insights for ${currentZipCode}:`);
                 lines.push(summary);
 
                 // Always show player URL if we have an assetId, even while HLS readies
@@ -914,11 +1012,11 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
             }
             
             // If TTS failed, fall back to regular weather response with explanation
-            console.log(`[textShim] TTS failed for ZIP ${zipCode}, falling back to regular weather response`);
+            console.log(`[textShim] TTS failed for ZIP ${currentZipCode}, falling back to regular weather response`);
             const errorMsg = (res as any)?.message || (res as any)?.error || 'unknown error';
             
             // Get regular weather data as fallback
-            const weatherData: any = await weatherTool.execute({ context: { zipCode } } as any);
+            const weatherData: any = await weatherTool.execute({ context: { zipCode: currentZipCode } } as any);
             const loc = weatherData?.location?.displayName || 'your area';
             const fc = Array.isArray(weatherData?.forecast) ? weatherData.forecast : [];
             const p0 = fc[0];
@@ -926,7 +1024,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
             const p2 = fc[2];
 
             const parts: string[] = [];
-            parts.push(`Agriculture weather for ${loc} (${zipCode}).`);
+            parts.push(`Agriculture weather for ${loc} (${currentZipCode}).`);
             if (p0) parts.push(`${p0.name}: ${p0.shortForecast}, ${p0.temperature}°${p0.temperatureUnit}. Winds ${p0.windSpeed} ${p0.windDirection}.`);
             if (p1) parts.push(`${p1.name}: ${p1.shortForecast}, ${p1.temperature}°${p1.temperatureUnit}.`);
             if (p2) parts.push(`Then ${p2.name.toLowerCase()}: ${p2.shortForecast.toLowerCase()}, around ${p2.temperature}°${p2.temperatureUnit}.`);
@@ -945,10 +1043,10 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
             parts.push(`\n\nNote: Audio generation is currently unavailable (${errorMsg}). Here's the text version above.`);
             return { text: parts.join(' ') };
         } catch (e) {
-            console.log(`[textShim] TTS request failed for ZIP ${zipCode}, falling back to regular weather response:`, e);
+            console.log(`[textShim] TTS request failed for ZIP ${currentZipCode}, falling back to regular weather response:`, e);
             
             // Fall back to regular weather response
-            const weatherData: any = await weatherTool.execute({ context: { zipCode } } as any);
+            const weatherData: any = await weatherTool.execute({ context: { zipCode: currentZipCode } } as any);
             const loc = weatherData?.location?.displayName || 'your area';
             const fc = Array.isArray(weatherData?.forecast) ? weatherData.forecast : [];
             const p0 = fc[0];
@@ -956,7 +1054,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
             const p2 = fc[2];
 
             const parts: string[] = [];
-            parts.push(`Agriculture weather for ${loc} (${zipCode}).`);
+            parts.push(`Agriculture weather for ${loc} (${currentZipCode}).`);
             if (p0) parts.push(`${p0.name}: ${p0.shortForecast}, ${p0.temperature}°${p0.temperatureUnit}. Winds ${p0.windSpeed} ${p0.windDirection}.`);
             if (p1) parts.push(`${p1.name}: ${p1.shortForecast}, ${p1.temperature}°${p1.temperatureUnit}.`);
             if (p2) parts.push(`Then ${p2.name.toLowerCase()}: ${p2.shortForecast.toLowerCase()}, around ${p2.temperature}°${p2.temperatureUnit}.`);
@@ -979,7 +1077,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
 
     // Otherwise, return a concise agriculture-focused weather summary
     try {
-        const data: any = await weatherTool.execute({ context: { zipCode } } as any);
+        const data: any = await weatherTool.execute({ context: { zipCode: currentZipCode } } as any);
         const loc = data?.location?.displayName || 'your area';
         const fc = Array.isArray(data?.forecast) ? data.forecast : [];
         const p0 = fc[0];
@@ -987,7 +1085,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
         const p2 = fc[2];
 
         const parts: string[] = [];
-        parts.push(`Agriculture weather for ${loc} (${zipCode}).`);
+        parts.push(`Agriculture weather for ${loc} (${currentZipCode}).`);
         if (p0) parts.push(`${p0.name}: ${p0.shortForecast}, ${p0.temperature}°${p0.temperatureUnit}. Winds ${p0.windSpeed} ${p0.windDirection}.`);
         if (p1) parts.push(`${p1.name}: ${p1.shortForecast}, ${p1.temperature}°${p1.temperatureUnit}.`);
         if (p2) parts.push(`Then ${p2.name.toLowerCase()}: ${p2.shortForecast.toLowerCase()}, around ${p2.temperature}°${p2.temperatureUnit}.`);
@@ -1005,7 +1103,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
 
         return { text: parts.join(' ') };
     } catch (e) {
-        return { text: `Sorry, I couldn't fetch the weather for ZIP ${zipCode}: ${e instanceof Error ? e.message : String(e)}.` };
+        return { text: `Sorry, I couldn't fetch the weather for ZIP ${currentZipCode}: ${e instanceof Error ? e.message : String(e)}.` };
     }
 }
 
