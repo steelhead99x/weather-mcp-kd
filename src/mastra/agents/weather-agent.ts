@@ -28,15 +28,90 @@ import { existsSync } from 'fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
+// Type definitions for better type safety
+interface WeatherForecast {
+    name: string;
+    temperature: number;
+    temperatureUnit: string;
+    windSpeed: string;
+    windDirection: string;
+    shortForecast: string;
+    detailedForecast: string;
+}
+
+interface WeatherLocation {
+    displayName: string;
+    latitude: number;
+    longitude: number;
+}
+
+interface WeatherData {
+    location: WeatherLocation;
+    forecast: WeatherForecast[];
+}
+
+interface MuxUploadResponse {
+    upload_id?: string;
+    id?: string;
+    upload?: { id: string };
+    url?: string;
+    asset_id?: string;
+    asset?: { id: string };
+}
+
+interface MuxAssetResponse {
+    status: string;
+    playback_ids?: Array<{ id: string }>;
+}
+
+interface MuxResult {
+    assetId?: string;
+    playbackId?: string;
+    hlsUrl?: string;
+    playerUrl?: string;
+    error?: string;
+}
+
+interface TTSWeatherResult {
+    success: boolean;
+    zipCode: string;
+    summaryText?: string;
+    localAudioFile?: string;
+    localVideoFile?: string;
+    mux?: MuxResult;
+    playbackUrl?: string;
+    playerUrl?: string;
+    assetId?: string;
+    playbackId?: string;
+    error?: string;
+    message?: string;
+}
+
 const execFileAsync = promisify(execFile);
+
+// Configurable URLs with environment variable support
+const MUX_HLS_BASE_URL = process.env.MUX_HLS_BASE_URL || 'https://stream.mux.com';
+const STREAMING_PORTFOLIO_BASE_URL = process.env.STREAMING_PORTFOLIO_BASE_URL || 'https://streamingportfolio.com';
 
 // Configure FFmpeg path: prefer system ffmpeg in container (/usr/bin/ffmpeg) to avoid glibc mismatch
 (function configureFfmpeg() {
     const candidates = [
         '/usr/bin/ffmpeg',
         '/usr/local/bin/ffmpeg',
+        '/opt/homebrew/bin/ffmpeg',  // Homebrew on Apple Silicon
         '/bin/ffmpeg',
     ].filter(Boolean) as string[];
+
+    // Also check for Homebrew Intel installations
+    try {
+        const { execSync } = require('child_process');
+        const homebrewPrefix = execSync('brew --prefix', { encoding: 'utf8', timeout: 5000 }).trim();
+        if (homebrewPrefix) {
+            candidates.push(`${homebrewPrefix}/bin/ffmpeg`);
+        }
+    } catch {
+        // Ignore if brew command fails
+    }
 
     const found = candidates.find(p => {
         try { return existsSync(p); } catch { return false; }
@@ -47,6 +122,7 @@ const execFileAsync = promisify(execFile);
         console.log(`[ffmpeg] Using ffmpeg at: ${found}`);
     } else {
         console.warn('[ffmpeg] No ffmpeg binary found in expected locations. Video features may fail.');
+        console.warn('[ffmpeg] Searched paths:', candidates);
     }
 })();
 
@@ -179,7 +255,7 @@ function speakZip(zip: string): string {
 }
 
 // Build agriculture-focused, clear speech from forecast
-function buildAgriSpeechFromForecast(zip: string, weatherData: any): string {
+function buildAgriSpeechFromForecast(zip: string, weatherData: WeatherData): string {
     const loc = weatherData?.location?.displayName || 'your area';
     const fc = Array.isArray(weatherData?.forecast) ? weatherData.forecast : [];
     const today = fc[0];
@@ -189,7 +265,7 @@ function buildAgriSpeechFromForecast(zip: string, weatherData: any): string {
     const sayZip = speakZip(zip);
 
     // Helper to simplify wind
-    const windPhrase = (p: any) => {
+    const windPhrase = (p: WeatherForecast) => {
         if (!p?.windSpeed) return '';
         return `Winds ${String(p.windSpeed).replace(/\s+/g, ' ')} ${p.windDirection || ''}`.trim() + '.';
     };
@@ -290,11 +366,45 @@ async function putFileToMux(uploadUrl: string, filePath: string): Promise<void> 
     throw new Error(lastErr instanceof Error ? lastErr.message : String(lastErr));
 }
 
+// Asset polling mutex to prevent race conditions
+const assetPollingMutex = new Map<string, Promise<any>>();
+
 // Poll Mux asset until ready, return HLS and player URLs
 async function waitForMuxAssetReady(assetId: string, {
     pollMs = Math.max(1000, parseInt(process.env.MUX_VERIFY_POLL_MS || '5000', 10) || 5000),
     timeoutMs = Math.min(30 * 60 * 1000, Math.max(10_000, parseInt(process.env.MUX_VERIFY_TIMEOUT_MS || '300000', 10) || 300000)),
 }: { pollMs?: number; timeoutMs?: number } = {}) {
+    
+    // Check if this asset is already being polled
+    if (assetPollingMutex.has(assetId)) {
+        console.log(`[waitForMuxAssetReady] Asset ${assetId} already being polled, waiting for existing poll...`);
+        return await assetPollingMutex.get(assetId);
+    }
+    
+    // Create new polling promise
+    const pollingPromise = performAssetPolling(assetId, { pollMs, timeoutMs });
+    assetPollingMutex.set(assetId, pollingPromise);
+    
+    try {
+        const result = await pollingPromise;
+        return result;
+    } finally {
+        // Clean up mutex entry
+        assetPollingMutex.delete(assetId);
+    }
+}
+
+async function performAssetPolling(assetId: string, {
+    pollMs,
+    timeoutMs,
+}: { pollMs: number; timeoutMs: number }): Promise<{
+    status: string;
+    playbackId?: string;
+    hlsUrl?: string;
+    playerUrl: string;
+    asset: MuxAssetResponse;
+    assetId: string;
+}> {
     const tools = await assetsClient.getTools();
     const getAsset =
         tools['get_video_assets'] ||
@@ -304,22 +414,32 @@ async function waitForMuxAssetReady(assetId: string, {
     if (!getAsset) throw new Error('Mux assets client has no retrieval tool');
 
     const start = Date.now();
-    let lastPayload: any;
+    let lastPayload: MuxAssetResponse | { raw: string };
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 5;
+    
     while (Date.now() - start < timeoutMs) {
         try {
             const res = await getAsset.execute({ context: { ASSET_ID: assetId } });
             const text = Array.isArray(res) ? (res[0] as any)?.text ?? '' : String(res ?? '');
-            try { lastPayload = JSON.parse(text); } catch { lastPayload = { raw: text }; }
+            try { 
+                lastPayload = JSON.parse(text) as MuxAssetResponse; 
+                consecutiveErrors = 0; // Reset error counter on successful parse
+            } catch { 
+                lastPayload = { raw: text }; 
+                consecutiveErrors++;
+            }
+            
             const status = lastPayload?.status as string | undefined;
-            if (status === 'ready') {
-                const playbackId = Array.isArray(lastPayload?.playback_ids) && lastPayload.playback_ids.length > 0
+            if (status === 'ready' && 'playback_ids' in lastPayload) {
+                const playbackId = Array.isArray(lastPayload.playback_ids) && lastPayload.playback_ids.length > 0
                     ? (lastPayload.playback_ids[0]?.id as string | undefined)
                     : undefined;
                 return {
                     status,
                     playbackId,
-                    hlsUrl: playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : undefined,
-                    playerUrl: `https://streamingportfolio.com/player?assetId=${assetId}`,
+                    hlsUrl: playbackId ? `${MUX_HLS_BASE_URL}/${playbackId}.m3u8` : undefined,
+                    playerUrl: `${STREAMING_PORTFOLIO_BASE_URL}/player?assetId=${assetId}`,
                     asset: lastPayload,
                     assetId,
                 };
@@ -327,13 +447,27 @@ async function waitForMuxAssetReady(assetId: string, {
             if (status === 'errored') {
                 throw new Error(`Mux asset errored: ${JSON.stringify(lastPayload)}`);
             }
+            
+            // If we have too many consecutive errors, fail fast
+            if (consecutiveErrors >= maxConsecutiveErrors) {
+                throw new Error(`Too many consecutive errors (${consecutiveErrors}) polling asset ${assetId}`);
+            }
+            
         } catch (e) {
+            consecutiveErrors++;
+            console.warn(`[performAssetPolling] Error polling asset ${assetId} (attempt ${consecutiveErrors}):`, e instanceof Error ? e.message : String(e));
+            
+            // If we have too many consecutive errors, fail fast
+            if (consecutiveErrors >= maxConsecutiveErrors) {
+                throw new Error(`Too many consecutive errors (${consecutiveErrors}) polling asset ${assetId}: ${e instanceof Error ? e.message : String(e)}`);
+            }
+            
             // transient errors: jitter then continue
             await new Promise(r => setTimeout(r, Math.min(2000, pollMs)));
         }
         await new Promise(r => setTimeout(r, pollMs));
     }
-    throw new Error('Timeout waiting for Mux asset to be ready');
+    throw new Error(`Timeout waiting for Mux asset ${assetId} to be ready after ${timeoutMs}ms`);
 }
 
 // Connection management and rate limiting
@@ -344,29 +478,58 @@ const CONNECTION_TIMEOUT = 30000; // 30 seconds timeout
 
 async function acquireConnection(): Promise<void> {
     return new Promise((resolve, reject) => {
-        if (activeConnections < MAX_CONCURRENT_CONNECTIONS) {
-            activeConnections++;
-            resolve();
-        } else {
+        let timeoutId: NodeJS.Timeout | null = null;
+        
+        try {
+            if (activeConnections < MAX_CONCURRENT_CONNECTIONS) {
+                activeConnections++;
+                resolve();
+                return;
+            }
+            
             // Add timeout to prevent hanging
-            const timeoutId = setTimeout(() => {
+            timeoutId = setTimeout(() => {
                 reject(new Error('Connection acquisition timeout - system overloaded'));
             }, CONNECTION_TIMEOUT);
             
             connectionQueue.push(() => {
-                clearTimeout(timeoutId);
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
                 activeConnections++;
                 resolve();
             });
+        } catch (error) {
+            // Cleanup on error
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            reject(error);
         }
     });
 }
 
 function releaseConnection(): void {
-    activeConnections--;
-    if (connectionQueue.length > 0) {
-        const next = connectionQueue.shift();
-        if (next) next();
+    try {
+        activeConnections--;
+        if (connectionQueue.length > 0) {
+            const next = connectionQueue.shift();
+            if (next) {
+                try {
+                    next();
+                } catch (error) {
+                    console.error('[releaseConnection] Error executing queued connection:', error);
+                    // Continue processing other queued connections
+                    if (connectionQueue.length > 0) {
+                        const nextNext = connectionQueue.shift();
+                        if (nextNext) nextNext();
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('[releaseConnection] Error releasing connection:', error);
     }
 }
 
@@ -470,7 +633,9 @@ const ttsWeatherTool = createTool({
                             uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
                             uploadUrl = uploadUrl || payload.url || payload.upload?.url;
                             assetId = assetId || payload.asset_id || payload.asset?.id;
-                        } catch {}
+                        } catch (parseError) {
+                            console.warn('[tts-weather-upload] Failed to parse Mux response:', parseError instanceof Error ? parseError.message : String(parseError));
+                        }
                     }
                     if (!uploadUrl) throw new Error('No upload URL from Mux');
 
@@ -487,9 +652,6 @@ const ttsWeatherTool = createTool({
                                     const r = await retrieve.execute({
                                         context: {
                                             UPLOAD_ID: uploadId,
-                                            // keep aliases for safety
-                                            upload_id: uploadId,
-                                            id: uploadId,
                                         }
                                     });
                                     const rb = Array.isArray(r) ? r : [r];
@@ -502,9 +664,13 @@ const ttsWeatherTool = createTool({
                                             const up = (data && typeof data === 'object' && 'upload' in data) ? (data as any).upload : data;
                                             assetId = assetId || up.asset_id || up.assetId || up.asset?.id;
                                             if (assetId) break;
-                                        } catch {}
+                                        } catch (parseError) {
+                                            console.warn('[tts-weather-upload] Failed to parse asset retrieval response:', parseError instanceof Error ? parseError.message : String(parseError));
+                                        }
                                     }
-                                } catch {}
+                                } catch (retrieveError) {
+                                    console.warn('[tts-weather-upload] Asset retrieval attempt failed:', retrieveError instanceof Error ? retrieveError.message : String(retrieveError));
+                                }
                                 if (!assetId) {
                                     const delay = base * Math.pow(1.5, i - 1);
                                     await new Promise(r => setTimeout(r, delay));
@@ -520,23 +686,25 @@ const ttsWeatherTool = createTool({
                                         const r = await retrieve.execute({
                                             context: {
                                                 UPLOAD_ID: uploadId,
-                                                upload_id: uploadId,
-                                                id: uploadId,
                                             }
                                         });
                                         const rb = Array.isArray(r) ? r : [r];
                                         for (const b of rb as any[]) {
                                             const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
                                             if (!t) continue;
-                                            try {
-                                                const payload = JSON.parse(t);
-                                                const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
-                                                const up = (data && typeof data === 'object' && 'upload' in data) ? (data as any).upload : data;
-                                                assetId = assetId || up.asset_id || up.assetId || up.asset?.id;
-                                                if (assetId) break;
-                                            } catch {}
+                                        try {
+                                            const payload = JSON.parse(t);
+                                            const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
+                                            const up = (data && typeof data === 'object' && 'upload' in data) ? (data as any).upload : data;
+                                            assetId = assetId || up.asset_id || up.assetId || up.asset?.id;
+                                            if (assetId) break;
+                                        } catch (parseError) {
+                                            console.warn('[tts-weather-upload] Failed to parse secondary asset retrieval response:', parseError instanceof Error ? parseError.message : String(parseError));
                                         }
-                                    } catch {}
+                                    }
+                                } catch (retrieveError) {
+                                    console.warn('[tts-weather-upload] Secondary asset retrieval attempt failed:', retrieveError instanceof Error ? retrieveError.message : String(retrieveError));
+                                }
                                     if (!assetId) await new Promise(r => setTimeout(r, pollMs));
                                 }
                             }
@@ -546,7 +714,7 @@ const ttsWeatherTool = createTool({
                     if (!assetId) throw new Error('No asset_id after upload');
 
                     // Build player URL immediately from assetId (always provide)
-                    playerUrl = `https://streamingportfolio.com/player?assetId=${assetId}`;
+                    playerUrl = `${STREAMING_PORTFOLIO_BASE_URL}/player?assetId=${assetId}`;
 
                     // Poll until ready for HLS URL
                     const ready = await waitForMuxAssetReady(assetId);
@@ -569,14 +737,24 @@ const ttsWeatherTool = createTool({
 
             // Cleanup
             if (process.env.TTS_CLEANUP === 'true') {
-                try { await fs.unlink(resolve(audioPath)); } catch {}
-                try { await fs.unlink(resolve(videoPath)); } catch {}
-                console.log('[tts-weather-upload] Cleaned up temp files');
+                try { 
+                    await fs.unlink(resolve(audioPath)); 
+                    console.log('[tts-weather-upload] Cleaned up audio file:', audioPath);
+                } catch (cleanupError) {
+                    console.warn('[tts-weather-upload] Failed to cleanup audio file:', cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
+                }
+                try { 
+                    await fs.unlink(resolve(videoPath)); 
+                    console.log('[tts-weather-upload] Cleaned up video file:', videoPath);
+                } catch (cleanupError) {
+                    console.warn('[tts-weather-upload] Failed to cleanup video file:', cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
+                }
+                console.log('[tts-weather-upload] Cleanup completed');
             }
 
             // Always include playerUrl if we know assetId
             if (!playerUrl && assetId) {
-                playerUrl = `https://streamingportfolio.com/player?assetId=${assetId}`;
+                playerUrl = `${STREAMING_PORTFOLIO_BASE_URL}/player?assetId=${assetId}`;
             }
 
             return {
@@ -675,7 +853,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
                 const playbackUrl =
                     r.playbackUrl ||
                     r?.mux?.hlsUrl ||
-                    (r?.playbackId ? `https://stream.mux.com/${r.playbackId}.m3u8` : undefined);
+                    (r?.playbackId ? `${MUX_HLS_BASE_URL}/${r.playbackId}.m3u8` : undefined);
 
                 const assetId = r.assetId || r?.mux?.assetId;
                 const playbackId = r.playbackId || r?.mux?.playbackId;
@@ -683,7 +861,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
                 const playerUrl =
                     r.playerUrl ||
                     r?.mux?.playerUrl ||
-                    (assetId ? `https://streamingportfolio.com/player?assetId=${assetId}` : undefined);
+                    (assetId ? `${STREAMING_PORTFOLIO_BASE_URL}/player?assetId=${assetId}` : undefined);
 
                 const summary = r.summaryText || quotedText || `Agriculture weather for ZIP ${zipCode}`;
 

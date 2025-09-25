@@ -16,6 +16,7 @@
  *   CARTESIA_API_KEY + CARTESIA_VOICE (or DEEPGRAM_API_KEY)
  *   MUX_TOKEN_ID + MUX_TOKEN_SECRET
  */
+import 'dotenv/config';
 import { weatherAgentTestWrapper as weatherAgent } from '../agents/weather-agent.js';
 import { promises as fs } from 'fs';
 import { resolve } from 'path';

@@ -131,7 +131,8 @@ class MuxAssetsMCPClient {
                         if (direct && direct !== tools[id]) return direct.execute({ context });
                         const ctx = context || {};
                         const idVal = (ctx as any).ASSET_ID || (ctx as any).asset_id || (ctx as any).id;
-                        const path = idVal ? { ASSET_ID: idVal, asset_id: idVal, id: idVal } : undefined;
+                        // Use only ASSET_ID as per Mux API schema
+                        const path = idVal ? { ASSET_ID: idVal } : undefined;
                         const attemptArgs = [
                             { endpoint, args: ctx },
                             { endpoint_name: endpoint, args: ctx },

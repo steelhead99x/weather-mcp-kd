@@ -208,23 +208,29 @@ class MuxMCPClient {
         }
 
         try {
-            const rawArgs = trimmedValue.split(',');
+            // Use more secure splitting that handles edge cases
+            const rawArgs = trimmedValue.split(',').map(arg => arg.trim()).filter(arg => arg.length > 0);
             const processedArgs: string[] = [];
 
             for (const rawArg of rawArgs) {
-                const trimmedArg = rawArg.trim();
-
-                if (!trimmedArg) {
-                    Logger.debug("Skipping empty MCP argument");
+                // Additional length check per argument
+                if (rawArg.length > 200) {
+                    Logger.warn(`MCP argument too long (${rawArg.length} chars), skipping: ${rawArg.slice(0, 50)}...`);
                     continue;
                 }
 
-                if (!this.isValidMcpArgument(trimmedArg)) {
-                    Logger.warn(`Skipping invalid MCP argument: ${trimmedArg}`);
+                // Check for suspicious patterns
+                if (this.containsSuspiciousPatterns(rawArg)) {
+                    Logger.warn(`MCP argument contains suspicious patterns, skipping: ${rawArg}`);
                     continue;
                 }
 
-                processedArgs.push(trimmedArg);
+                if (!this.isValidMcpArgument(rawArg)) {
+                    Logger.warn(`Skipping invalid MCP argument: ${rawArg}`);
+                    continue;
+                }
+
+                processedArgs.push(rawArg);
             }
 
             if (processedArgs.length === 0) {
@@ -245,6 +251,36 @@ class MuxMCPClient {
             Logger.info("Falling back to default MCP arguments");
             return defaultArgs;
         }
+    }
+
+    /**
+     * Check for suspicious patterns that might indicate injection attempts
+     */
+    private containsSuspiciousPatterns(arg: string): boolean {
+        const suspiciousPatterns = [
+            /\.\./,                    // Path traversal
+            /\/\//,                    // Double slashes
+            /[<>]/,                    // HTML/XML injection
+            /javascript:/i,            // JavaScript injection
+            /data:/i,                  // Data URI injection
+            /vbscript:/i,              // VBScript injection
+            /on\w+\s*=/i,              // Event handler injection
+            /eval\s*\(/i,              // Code execution
+            /exec\s*\(/i,              // Code execution
+            /system\s*\(/i,            // System call
+            /cmd\s*\(/i,               // Command execution
+            /shell\s*\(/i,             // Shell execution
+            /\$\{.*\}/,                // Variable substitution
+            /\$\$/,                    // Double dollar signs
+            /`.*`/,                    // Backtick execution
+            /\|\|/,                    // Logical OR injection
+            /&&/,                      // Logical AND injection
+            /;.*;/,                    // Multiple semicolons
+            /\|\s*[a-z]/i,             // Pipe to command
+            /&&\s*[a-z]/i,             // AND with command
+        ];
+        
+        return suspiciousPatterns.some(pattern => pattern.test(arg));
     }
 
     /**
@@ -430,11 +466,26 @@ class MuxMCPClient {
                             // Build canonical path/body wrappers for common endpoints
                             const idVal = (ctx as any).UPLOAD_ID || (ctx as any).upload_id || (ctx as any).id;
                             const assetVal = (ctx as any).ASSET_ID || (ctx as any).asset_id || (ctx as any).id;
-                            const pathForUploads = idVal ? { UPLOAD_ID: idVal, upload_id: idVal, id: idVal } : undefined;
-                            const pathForAssets = assetVal ? { ASSET_ID: assetVal, asset_id: assetVal, id: assetVal } : undefined;
-                            const path = endpoint.includes('uploads') ? pathForUploads : (endpoint.includes('assets') ? pathForAssets : undefined);
+                            
+                            // Use correct parameter names based on endpoint type
+                            let path: any = undefined;
+                            if (endpoint.includes('uploads')) {
+                                if (idVal) {
+                                    // For uploads endpoints, use only UPLOAD_ID as per Mux API schema
+                                    path = { UPLOAD_ID: idVal };
+                                }
+                            } else if (endpoint.includes('assets')) {
+                                if (assetVal) {
+                                    // For assets endpoints, use only ASSET_ID as per Mux API schema
+                                    path = { ASSET_ID: assetVal };
+                                }
+                            }
 
                             const attemptArgs = [
+                                // Mux MCP format - arguments passed directly to endpoint
+                                { endpoint, ...ctx },
+                                { endpoint_name: endpoint, ...ctx },
+                                
                                 // Standard simple args
                                 { endpoint, args: ctx },
                                 { endpoint_name: endpoint, args: ctx },
@@ -448,7 +499,6 @@ class MuxMCPClient {
                                 { endpoint_name: endpoint, args: { body: ctx } },
 
                                 // Legacy formats (keep as fallback)
-                                { endpoint, ...ctx },
                                 { endpoint, body: ctx },
                                 { endpoint, params: ctx },
                                 { endpoint, data: ctx },
