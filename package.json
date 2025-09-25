@@ -9,7 +9,7 @@
     "compile": "NODE_OPTIONS=--max-old-space-size=1024 tsc",
     "clean": "rm -rf dist .mastra",
     "prebuild": "npm run clean",
-    "test:compile": "npx tsx --check src/mastra/scripts/test-claude.ts src/mastra/scripts/test-weather-agent.ts || echo 'Test compilation skipped - tsx not available'",
+    "test:compile": "npx tsc --project tsconfig.test.json || echo 'Test compilation skipped - TypeScript not available'",
     "start:telemetry": "NODE_OPTIONS=\"--disable-warning=DEP0169\" node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs",
     "start:production": "NODE_ENV=production NODE_OPTIONS=\"--disable-warning=DEP0169\" node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs",
     "monitor": "npx tsx src/mastra/scripts/monitor-system.ts"
@@ -20,7 +20,7 @@
     "@mastra/chroma": "latest",
     "@mastra/core": "latest",
     "@mastra/memory": "latest",
-    "@modelcontextprotocol/sdk": "1.11.5",
+    "@modelcontextprotocol/sdk": "1.18.1",
     "@mux/mcp": "latest",
     "ai": "^5.0.0",
     "dotenv": "^16.4.5",
@@ -39,6 +39,6 @@
     "typescript": "^5.6.3"
   },
   "overrides": {
-    "@modelcontextprotocol/sdk": "1.11.5"
+    "@modelcontextprotocol/sdk": "1.18.1"
   }
 }
