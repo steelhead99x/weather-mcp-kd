@@ -1,0 +1,11 @@
+name: weather-agent-kd
+services:
+- name: weather-agent
+  source_dir: /
+  github:
+    repo: your-username/weather-mcp-kd
+    branch: main
+  dockerfile_path: Dockerfile
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 8080

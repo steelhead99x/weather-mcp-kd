@@ -1,3 +1,5 @@
+# Digital Ocean App Platform - Primary Deployment Method
+# This Dockerfile is the single deployment configuration
 FROM node:20-alpine
 
 # Install ffmpeg for video processing (system ffmpeg with musl)
