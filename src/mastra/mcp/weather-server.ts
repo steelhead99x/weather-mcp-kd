@@ -29,6 +29,49 @@ import { weatherTool } from "../tools/weather.js";
  *    - Returns server status and timestamp
  */
 
+// Circuit breaker pattern to prevent system overload
+class CircuitBreaker {
+  private failures = 0;
+  private lastFailureTime = 0;
+  private state: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED';
+  private readonly failureThreshold = 3;
+  private readonly timeout = 30000; // 30 seconds
+
+  async execute<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.state === 'OPEN') {
+      if (Date.now() - this.lastFailureTime > this.timeout) {
+        this.state = 'HALF_OPEN';
+      } else {
+        throw new Error('Circuit breaker is OPEN - system overloaded');
+      }
+    }
+
+    try {
+      const result = await operation();
+      this.onSuccess();
+      return result;
+    } catch (error) {
+      this.onFailure();
+      throw error;
+    }
+  }
+
+  private onSuccess() {
+    this.failures = 0;
+    this.state = 'CLOSED';
+  }
+
+  private onFailure() {
+    this.failures++;
+    this.lastFailureTime = Date.now();
+    if (this.failures >= this.failureThreshold) {
+      this.state = 'OPEN';
+    }
+  }
+}
+
+const circuitBreaker = new CircuitBreaker();
+
 // AI SDK v5 compatible streamVNext tool
 const askWeatherAgentStreamVNext = createTool({
   id: "ask_weatherAgent_streamVNext",
@@ -99,36 +142,48 @@ const askWeatherAgent = createTool({
     console.log('[askWeatherAgent] Received request:', { message, format, streamingMethod });
 
     try {
-      // Try streamVNext first if requested or auto
+      // Try streamVNext first if requested or auto (with circuit breaker protection)
       if (streamingMethod === "streamVNext" || (streamingMethod === "auto" && format === "aisdk")) {
         console.log('[askWeatherAgent] Attempting streamVNext method...');
         try {
-          const stream = await weatherAgent.streamVNext([{ role: "user", content: message }], {
-            format: format === "aisdk" ? "aisdk" : "mastra"
+          const result = await circuitBreaker.execute(async () => {
+            // Add timeout protection to prevent overload
+            const streamPromise = weatherAgent.streamVNext([{ role: "user", content: message }], {
+              format: format === "aisdk" ? "aisdk" : "mastra"
+            });
+            
+            const timeoutPromise = new Promise<never>((_, reject) => {
+              setTimeout(() => reject(new Error('StreamVNext timeout - system overloaded')), 25000);
+            });
+            
+            const stream = await Promise.race([streamPromise, timeoutPromise]);
+            const fullText = await stream.text;
+            console.log('[askWeatherAgent] streamVNext succeeded, text length:', fullText.length);
+            
+            return {
+              streamed: true,
+              text: fullText,
+              textStream: stream.textStream ?? null,
+              finishReason: 'finishReason' in stream ? stream.finishReason ?? null : null,
+              usage: 'usage' in stream ? stream.usage ?? null : null,
+              method: 'streamVNext',
+              format: format,
+              timestamp: new Date().toISOString()
+            };
           });
-          const fullText = await stream.text;
-          console.log('[askWeatherAgent] streamVNext succeeded, text length:', fullText.length);
-          
-          return {
-            streamed: true,
-            text: fullText,
-            textStream: stream.textStream ?? null,
-            finishReason: 'finishReason' in stream ? stream.finishReason ?? null : null,
-            usage: 'usage' in stream ? stream.usage ?? null : null,
-            method: 'streamVNext',
-            format: format,
-            timestamp: new Date().toISOString()
-          };
+          return result;
         } catch (streamVNextError) {
           console.warn('[askWeatherAgent] streamVNext failed, falling back to text method:', streamVNextError);
           // Fall through to text method
         }
       }
 
-      // Fallback to text method for reliability
+      // Fallback to text method for reliability (with circuit breaker protection)
       console.log('[askWeatherAgent] Using text method for reliability...');
-      const result = await weatherAgentTestWrapper.text({ 
-        messages: [{ role: "user", content: message }] 
+      const result = await circuitBreaker.execute(async () => {
+        return await weatherAgentTestWrapper.text({ 
+          messages: [{ role: "user", content: message }] 
+        });
       });
       
       const fullText = String(result?.text ?? "");
@@ -188,7 +243,13 @@ const askWeatherAgentStream = createTool({
     console.log('[askWeatherAgentStream] Received request:', { message });
     
     try {
-      const stream = await weatherAgent.stream([{ role: "user", content: message }]);
+      // Add timeout protection to prevent overload
+      const streamPromise = weatherAgent.stream([{ role: "user", content: message }]);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Stream timeout - system overloaded')), 25000);
+      });
+      
+      const stream = await Promise.race([streamPromise, timeoutPromise]);
       const fullText = await stream.text;
       console.log('[askWeatherAgentStream] stream succeeded, text length:', fullText.length);
       
@@ -247,7 +308,8 @@ const health = createTool({
       ok: true,
       timestamp,
       server: "weather-mcp-server",
-      version: "1.0.0"
+      version: "1.0.0",
+      circuitBreakerState: circuitBreaker['state']
     };
     
     if (detailed) {

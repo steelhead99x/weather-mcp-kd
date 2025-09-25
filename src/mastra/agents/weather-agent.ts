@@ -9,18 +9,18 @@ import { z } from "zod";
 import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client';
 import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client';
 
-// Pre-warm MCP on module load (non-blocking, best-effort)
-(async () => {
-    try {
-        await Promise.race([
-            Promise.allSettled([uploadClient.getTools(), assetsClient.getTools()]),
-            new Promise((_, rej) => {
-    const ms = Math.max(5000, parseInt(process.env.MUX_PREWARM_TIMEOUT_MS || '8000', 10) || 8000);
-    setTimeout(() => rej(new Error('prewarm-timeout')), ms);
-  })
-        ]);
-    } catch { /* ignore */ }
-})();
+// Pre-warm MCP on module load (non-blocking, best-effort) - DISABLED to prevent overload
+// (async () => {
+//     try {
+//         await Promise.race([
+//             Promise.allSettled([uploadClient.getTools(), assetsClient.getTools()]),
+//             new Promise((_, rej) => {
+//     const ms = Math.max(5000, parseInt(process.env.MUX_PREWARM_TIMEOUT_MS || '8000', 10) || 8000);
+//     setTimeout(() => rej(new Error('prewarm-timeout')), ms);
+//   })
+//         ]);
+//     } catch { /* ignore */ }
+// })();
 import { Memory } from "@mastra/memory";
 import { InMemoryStore } from "@mastra/core/storage";
 import ffmpeg from 'fluent-ffmpeg';
@@ -336,6 +336,40 @@ async function waitForMuxAssetReady(assetId: string, {
     throw new Error('Timeout waiting for Mux asset to be ready');
 }
 
+// Connection management and rate limiting
+let activeConnections = 0;
+const MAX_CONCURRENT_CONNECTIONS = 2; // Reduced to prevent overload
+const connectionQueue: Array<() => void> = [];
+const CONNECTION_TIMEOUT = 30000; // 30 seconds timeout
+
+async function acquireConnection(): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (activeConnections < MAX_CONCURRENT_CONNECTIONS) {
+            activeConnections++;
+            resolve();
+        } else {
+            // Add timeout to prevent hanging
+            const timeoutId = setTimeout(() => {
+                reject(new Error('Connection acquisition timeout - system overloaded'));
+            }, CONNECTION_TIMEOUT);
+            
+            connectionQueue.push(() => {
+                clearTimeout(timeoutId);
+                activeConnections++;
+                resolve();
+            });
+        }
+    });
+}
+
+function releaseConnection(): void {
+    activeConnections--;
+    if (connectionQueue.length > 0) {
+        const next = connectionQueue.shift();
+        if (next) next();
+    }
+}
+
 // Weather-to-tts-and-upload tool
 const ttsWeatherTool = createTool({
     id: "tts-weather-upload",
@@ -345,6 +379,8 @@ const ttsWeatherTool = createTool({
         text: z.string().optional().describe("Optional custom text. If omitted, a natural agriculture forecast will be generated."),
     }),
     execute: async ({ context }) => {
+        await acquireConnection();
+        try {
         let { zipCode, text } = context as { zipCode?: string; text?: string };
 
         const zip = String(zipCode || '').trim();
@@ -410,13 +446,7 @@ const ttsWeatherTool = createTool({
             try {
                 if (process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET) {
 
-                    // Pre-warm MCP clients (one-time best-effort)
-                    try {
-                        await Promise.allSettled([
-                            uploadClient.getTools(),
-                            assetsClient.getTools(),
-                        ]);
-                    } catch { /* best-effort */ }
+                    // Skip pre-warming to prevent connection overload
 
                     const uploadTools = await uploadClient.getTools();
                     let create = uploadTools['create_video_uploads'] || uploadTools['video.uploads.create'];
@@ -550,12 +580,6 @@ const ttsWeatherTool = createTool({
                 playerUrl = `https://streamingportfolio.com/player?assetId=${assetId}`;
             }
 
-            try {
-                await Promise.allSettled([
-                    uploadClient.disconnect(),
-                    assetsClient.disconnect(),
-                ]);
-            } catch {}
             return {
                 success: true,
                 zipCode: zip,
@@ -571,18 +595,14 @@ const ttsWeatherTool = createTool({
 
         } catch (error) {
             console.error(`[tts-weather-upload] Error:`, error);
-            try {
-                await Promise.allSettled([
-                    uploadClient.disconnect(),
-                    assetsClient.disconnect(),
-                ]);
-            } catch {}
             return {
                 success: false,
                 zipCode: zip,
                 error: error instanceof Error ? error.message : String(error),
                 message: `Failed to create audio for ZIP ${zip}`,
             };
+        } finally {
+            releaseConnection();
         }
     },
 });
