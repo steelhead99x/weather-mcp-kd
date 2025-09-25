@@ -29,6 +29,53 @@ import { weatherTool } from "../tools/weather.js";
  *    - Returns server status and timestamp
  */
 
+// AI SDK v5 compatible streamVNext tool
+const askWeatherAgentStreamVNext = createTool({
+  id: "ask_weatherAgent_streamVNext",
+  description: "Ask the weatherAgent using the streamVNext method (AI SDK v5 compatible).",
+  inputSchema: z.object({
+    message: z.string().describe("The user question or input for the agent (should contain a ZIP code)."),
+    format: z
+      .enum(["mastra", "aisdk"])
+      .default("mastra")
+      .optional(),
+  }),
+  execute: async ({ context }) => {
+    const message = String((context as any)?.message ?? "");
+    const format = ((context as any)?.format as "mastra" | "aisdk" | undefined) ?? "mastra";
+    
+    console.log('[askWeatherAgentStreamVNext] Received request:', { message, format });
+
+    try {
+      const stream = await weatherAgent.streamVNext([{ role: "user", content: message }], {
+        format: format
+      });
+      const fullText = await stream.text;
+      console.log('[askWeatherAgentStreamVNext] streamVNext succeeded, text length:', fullText.length);
+      
+      return {
+        streamed: true,
+        text: fullText,
+        textStream: stream.textStream ?? null,
+        finishReason: 'finishReason' in stream ? stream.finishReason ?? null : null,
+        usage: 'usage' in stream ? stream.usage ?? null : null,
+        method: 'streamVNext',
+        format: format,
+        timestamp: new Date().toISOString()
+      };
+    } catch (e) {
+      console.error('[askWeatherAgentStreamVNext] streamVNext failed:', e);
+      return { 
+        streamed: false, 
+        text: `Agent streamVNext error: ${e instanceof Error ? e.message : String(e)}`,
+        method: 'error',
+        format: format,
+        timestamp: new Date().toISOString()
+      };
+    }
+  },
+});
+
 // Simplified agent tool that focuses on getting responses working
 const askWeatherAgent = createTool({
   id: "ask_weatherAgent",
@@ -52,7 +99,33 @@ const askWeatherAgent = createTool({
     console.log('[askWeatherAgent] Received request:', { message, format, streamingMethod });
 
     try {
-      // Start with the most reliable method - text fallback
+      // Try streamVNext first if requested or auto
+      if (streamingMethod === "streamVNext" || (streamingMethod === "auto" && format === "aisdk")) {
+        console.log('[askWeatherAgent] Attempting streamVNext method...');
+        try {
+          const stream = await weatherAgent.streamVNext([{ role: "user", content: message }], {
+            format: format === "aisdk" ? "aisdk" : "mastra"
+          });
+          const fullText = await stream.text;
+          console.log('[askWeatherAgent] streamVNext succeeded, text length:', fullText.length);
+          
+          return {
+            streamed: true,
+            text: fullText,
+            textStream: stream.textStream ?? null,
+            finishReason: 'finishReason' in stream ? stream.finishReason ?? null : null,
+            usage: 'usage' in stream ? stream.usage ?? null : null,
+            method: 'streamVNext',
+            format: format,
+            timestamp: new Date().toISOString()
+          };
+        } catch (streamVNextError) {
+          console.warn('[askWeatherAgent] streamVNext failed, falling back to text method:', streamVNextError);
+          // Fall through to text method
+        }
+      }
+
+      // Fallback to text method for reliability
       console.log('[askWeatherAgent] Using text method for reliability...');
       const result = await weatherAgentTestWrapper.text({ 
         messages: [{ role: "user", content: message }] 
@@ -86,7 +159,7 @@ const askWeatherAgent = createTool({
       return response;
 
     } catch (error) {
-      console.error('[askWeatherAgent] Text method failed:', error);
+      console.error('[askWeatherAgent] All methods failed:', error);
       const errorResponse = {
         streamed: false,
         text: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
@@ -375,11 +448,12 @@ export const weatherMcpServer = new MCPServer({
   // Do not use auto agent-to-tool conversion (non-streaming). We expose streaming tools instead.
   tools: {
     weatherTool,
-    ask_weatherAgent: askWeatherAgent,           // Simplified agent tool
-    ask_weatherAgent_stream: askWeatherAgentStream, // Regular stream method
-    ask_weatherAgent_text: askWeatherAgentText,    // Non-streaming fallback
-    test_agent: testAgent,                        // Simple test tool
-    debug_agent: debugAgent,                      // Debug tool
+    ask_weatherAgent: askWeatherAgent,                    // Smart agent tool with auto-fallback
+    ask_weatherAgent_streamVNext: askWeatherAgentStreamVNext, // AI SDK v5 streamVNext method
+    ask_weatherAgent_stream: askWeatherAgentStream,       // Regular stream method
+    ask_weatherAgent_text: askWeatherAgentText,           // Non-streaming fallback
+    test_agent: testAgent,                               // Simple test tool
+    debug_agent: debugAgent,                             // Debug tool
     health,
   },
 });

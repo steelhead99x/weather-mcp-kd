@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { Agent } from "@mastra/core";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "@ai-sdk/anthropic";
 import { weatherTool } from "../tools/weather";
 import { promises as fs } from 'fs';
 import { resolve, dirname, join } from 'path';
@@ -595,8 +595,6 @@ function buildSystemPrompt() {
         'Offer practical farm and field guidance tied to conditions (planting, irrigation, spraying, frost, livestock).',
     ].join(' ');
 }
-
-const anthropic = createAnthropic();
 
 export const weatherAgent = new Agent({
     name: 'weatherAgent',
