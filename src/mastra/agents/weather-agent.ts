@@ -646,7 +646,6 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
     }
 
     // If audio/stream requested, run the TTS+upload tool and return URLs clearly
-    // If audio/stream requested, run the TTS+upload tool and return URLs clearly
     if (/\b(audio|tts|voice|speak|stream)\b/i.test(lastContent)) {
         try {
             const res = await (ttsWeatherTool.execute as any)({ context: { zipCode, text: quotedText } });
@@ -686,13 +685,68 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
 
                 return { text: lines.join(' ') };
             }
-            return {
-                text: `TTS for ZIP ${zipCode} failed: ${(res as any)?.message || (res as any)?.error || 'unknown error'}.`
-            };
+            
+            // If TTS failed, fall back to regular weather response with explanation
+            console.log(`[textShim] TTS failed for ZIP ${zipCode}, falling back to regular weather response`);
+            const errorMsg = (res as any)?.message || (res as any)?.error || 'unknown error';
+            
+            // Get regular weather data as fallback
+            const weatherData: any = await weatherTool.execute({ context: { zipCode } } as any);
+            const loc = weatherData?.location?.displayName || 'your area';
+            const fc = Array.isArray(weatherData?.forecast) ? weatherData.forecast : [];
+            const p0 = fc[0];
+            const p1 = fc[1];
+            const p2 = fc[2];
+
+            const parts: string[] = [];
+            parts.push(`Agriculture weather for ${loc} (${zipCode}).`);
+            if (p0) parts.push(`${p0.name}: ${p0.shortForecast}, ${p0.temperature}°${p0.temperatureUnit}. Winds ${p0.windSpeed} ${p0.windDirection}.`);
+            if (p1) parts.push(`${p1.name}: ${p1.shortForecast}, ${p1.temperature}°${p1.temperatureUnit}.`);
+            if (p2) parts.push(`Then ${p2.name.toLowerCase()}: ${p2.shortForecast.toLowerCase()}, around ${p2.temperature}°${p2.temperatureUnit}.`);
+
+            // Brief advice
+            const ref = p0 || p1 || p2;
+            if (ref && typeof ref.temperature === 'number') {
+                const t = ref.temperature;
+                if (t >= 90) parts.push('Advice: Consider irrigation and avoid mid-day transplanting.');
+                else if (t >= 80) parts.push('Advice: Monitor water needs; provide shade for tender plants.');
+                else if (t >= 60) parts.push('Advice: Good window for planting and field work if winds are calm.');
+                else if (t >= 40) parts.push('Advice: Protect sensitive seedlings overnight.');
+                else parts.push('Advice: Frost risk—protect sensitive crops and ensure livestock shelter.');
+            }
+
+            parts.push(`\n\nNote: Audio generation is currently unavailable (${errorMsg}). Here's the text version above.`);
+            return { text: parts.join(' ') };
         } catch (e) {
-            return {
-                text: `TTS request for ZIP ${zipCode} failed: ${e instanceof Error ? e.message : String(e)}.`
-            };
+            console.log(`[textShim] TTS request failed for ZIP ${zipCode}, falling back to regular weather response:`, e);
+            
+            // Fall back to regular weather response
+            const weatherData: any = await weatherTool.execute({ context: { zipCode } } as any);
+            const loc = weatherData?.location?.displayName || 'your area';
+            const fc = Array.isArray(weatherData?.forecast) ? weatherData.forecast : [];
+            const p0 = fc[0];
+            const p1 = fc[1];
+            const p2 = fc[2];
+
+            const parts: string[] = [];
+            parts.push(`Agriculture weather for ${loc} (${zipCode}).`);
+            if (p0) parts.push(`${p0.name}: ${p0.shortForecast}, ${p0.temperature}°${p0.temperatureUnit}. Winds ${p0.windSpeed} ${p0.windDirection}.`);
+            if (p1) parts.push(`${p1.name}: ${p1.shortForecast}, ${p1.temperature}°${p1.temperatureUnit}.`);
+            if (p2) parts.push(`Then ${p2.name.toLowerCase()}: ${p2.shortForecast.toLowerCase()}, around ${p2.temperature}°${p2.temperatureUnit}.`);
+
+            // Brief advice
+            const ref = p0 || p1 || p2;
+            if (ref && typeof ref.temperature === 'number') {
+                const t = ref.temperature;
+                if (t >= 90) parts.push('Advice: Consider irrigation and avoid mid-day transplanting.');
+                else if (t >= 80) parts.push('Advice: Monitor water needs; provide shade for tender plants.');
+                else if (t >= 60) parts.push('Advice: Good window for planting and field work if winds are calm.');
+                else if (t >= 40) parts.push('Advice: Protect sensitive seedlings overnight.');
+                else parts.push('Advice: Frost risk—protect sensitive crops and ensure livestock shelter.');
+            }
+
+            parts.push(`\n\nNote: Audio generation is currently unavailable. Here's the text version above.`);
+            return { text: parts.join(' ') };
         }
     }
 
