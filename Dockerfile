@@ -39,5 +39,15 @@ ENV TTS_TMP_DIR=/tmp/tts
 # Enable CORS for production domain
 ENV CORS_ORIGIN=https://weather-mcp-kd.streamingportfolio.com
 
+# Memory optimization for ffmpeg
+ENV VIDEO_MAX_WIDTH=1920
+ENV VIDEO_MAX_HEIGHT=1080
+ENV FFMPEG_PRESET=fast
+ENV FFMPEG_CRF=23
+ENV FFMPEG_THREADS=0
+
+# Enable garbage collection for memory optimization
+ENV NODE_OPTIONS="--expose-gc --max-old-space-size=1024"
+
 # Use direct node command instead of npm to avoid package.json detection
 CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]

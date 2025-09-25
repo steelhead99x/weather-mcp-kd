@@ -93,6 +93,73 @@ const execFileAsync = promisify(execFile);
 const MUX_HLS_BASE_URL = process.env.MUX_HLS_BASE_URL || 'https://stream.mux.com';
 const STREAMING_PORTFOLIO_BASE_URL = process.env.STREAMING_PORTFOLIO_BASE_URL || 'https://streamingportfolio.com';
 
+// Memory optimization configuration
+const VIDEO_MAX_WIDTH = parseInt(process.env.VIDEO_MAX_WIDTH || '1920');
+const VIDEO_MAX_HEIGHT = parseInt(process.env.VIDEO_MAX_HEIGHT || '1080');
+const FFMPEG_PRESET = process.env.FFMPEG_PRESET || 'fast'; // ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
+const FFMPEG_CRF = parseInt(process.env.FFMPEG_CRF || '23'); // 0-51, lower = better quality
+const FFMPEG_THREADS = process.env.FFMPEG_THREADS || '0'; // 0 = auto-detect
+
+// Memory monitoring utilities
+function logMemoryUsage(context: string) {
+    const memUsage = process.memoryUsage();
+    console.debug(`[${context}] Memory usage: RSS=${Math.round(memUsage.rss / 1024 / 1024)}MB, Heap=${Math.round(memUsage.heapUsed / 1024 / 1024)}MB/${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`);
+}
+
+// Force garbage collection if available
+function forceGC() {
+    if (global.gc) {
+        global.gc();
+        console.debug('[memory] Forced garbage collection');
+    }
+}
+
+// Alternative streaming approach for very large files
+async function createVideoFromAudioAndImageStreaming(
+    audioPath: string,
+    imagePath: string,
+    outputPath: string
+): Promise<void> {
+    logMemoryUsage('createVideo-streaming-start');
+    
+    return new Promise((resolvePromise, reject) => {
+        ffmpeg()
+            .input(imagePath)
+            .inputOptions(['-loop 1'])
+            .input(audioPath)
+            .audioCodec('aac')
+            .videoCodec('libx264')
+            .outputOptions([
+                '-b:a 128k',
+                '-pix_fmt yuv420p',
+                '-shortest',
+                '-movflags +faststart',
+                // Streaming-optimized options
+                `-threads ${FFMPEG_THREADS}`,
+                `-preset ${FFMPEG_PRESET}`,
+                `-crf ${FFMPEG_CRF}`,
+                '-max_muxing_queue_size 512', // Smaller buffer for streaming
+                '-avoid_negative_ts make_zero',
+                '-fflags +genpts', // Generate presentation timestamps
+                '-vsync cfr', // Constant frame rate
+                '-r 30', // Limit frame rate to reduce memory
+            ])
+            .output(outputPath)
+            .on('start', (cmd: string) => console.debug(`[createVideo-streaming] FFmpeg: ${cmd}`))
+            .on('stderr', (line: string) => console.debug(`[createVideo-streaming][stderr] ${line}`))
+            .on('end', () => {
+                logMemoryUsage('createVideo-streaming-end');
+                forceGC();
+                resolvePromise();
+            })
+            .on('error', (err: Error) => {
+                console.error(`[createVideo-streaming] Error: ${err.message}`);
+                reject(new Error(`FFmpeg streaming failed: ${err.message}`));
+            })
+            .run();
+    });
+}
+
 // Configure FFmpeg path: prefer system ffmpeg in container (/usr/bin/ffmpeg) to avoid glibc mismatch
 (function configureFfmpeg() {
     const candidates = [
@@ -136,35 +203,89 @@ const STREAMING_PORTFOLIO_BASE_URL = process.env.STREAMING_PORTFOLIO_BASE_URL ||
     }
 })();
 
-// Create video from audio and image
+// Resize image to reduce memory usage
+async function resizeImageForVideo(inputPath: string, outputPath: string, maxWidth: number = VIDEO_MAX_WIDTH, maxHeight: number = VIDEO_MAX_HEIGHT): Promise<void> {
+    return new Promise((resolvePromise, reject) => {
+        ffmpeg()
+            .input(inputPath)
+            .outputOptions([
+                '-vf', `scale='min(${maxWidth},iw)':'min(${maxHeight},ih)':force_original_aspect_ratio=decrease`,
+                '-q:v', '2', // High quality but compressed
+                '-f', 'image2'
+            ])
+            .output(outputPath)
+            .on('start', (cmd: string) => console.debug(`[resizeImage] FFmpeg: ${cmd}`))
+            .on('stderr', (line: string) => console.debug(`[resizeImage][stderr] ${line}`))
+            .on('end', () => resolvePromise())
+            .on('error', (err: Error) => {
+                console.error(`[resizeImage] Error: ${err.message}`);
+                reject(new Error(`Image resize failed: ${err.message}`));
+            })
+            .run();
+    });
+}
+
+// Create video from audio and image with memory optimization
 async function createVideoFromAudioAndImage(
     audioPath: string,
     imagePath: string,
     outputPath: string
 ): Promise<void> {
-    return new Promise((resolvePromise, reject) => {
-        ffmpeg()
-            .input(imagePath)
-            .inputOptions(['-loop 1'])
-            .input(audioPath)
-            .audioCodec('aac')
-            .videoCodec('libx264')
-            .outputOptions([
-                '-b:a 128k',
-                '-pix_fmt yuv420p',
-                '-shortest',
-                '-movflags +faststart',
-            ])
-            .output(outputPath)
-            .on('start', (cmd: string) => console.debug(`[createVideo] FFmpeg: ${cmd}`))
-            .on('stderr', (line: string) => console.debug(`[createVideo][stderr] ${line}`))
-            .on('end', () => resolvePromise())
-            .on('error', (err: Error) => {
-                console.error(`[createVideo] Error: ${err.message}`);
-                reject(new Error(`FFmpeg failed: ${err.message}`));
-            })
-            .run();
-    });
+    logMemoryUsage('createVideo-start');
+    
+    // Create a temporary resized image to reduce memory usage
+    const tempImagePath = `${imagePath}.resized.jpg`;
+    
+    try {
+        // Resize image first to reduce memory footprint
+        await resizeImageForVideo(imagePath, tempImagePath);
+        console.debug(`[createVideo] Resized image: ${imagePath} -> ${tempImagePath}`);
+        logMemoryUsage('createVideo-after-resize');
+        
+        return new Promise((resolvePromise, reject) => {
+            ffmpeg()
+                .input(tempImagePath)
+                .inputOptions(['-loop 1'])
+                .input(audioPath)
+                .audioCodec('aac')
+                .videoCodec('libx264')
+                .outputOptions([
+                    '-b:a 128k',
+                    '-pix_fmt yuv420p',
+                    '-shortest',
+                    '-movflags +faststart',
+                    // Memory optimization options
+                    `-threads ${FFMPEG_THREADS}`, // Use configured thread count
+                    `-preset ${FFMPEG_PRESET}`, // Configurable encoding preset
+                    `-crf ${FFMPEG_CRF}`, // Configurable quality/size balance
+                    '-max_muxing_queue_size 1024', // Limit buffer size
+                    '-avoid_negative_ts make_zero', // Avoid timestamp issues
+                ])
+                .output(outputPath)
+                .on('start', (cmd: string) => console.debug(`[createVideo] FFmpeg: ${cmd}`))
+                .on('stderr', (line: string) => console.debug(`[createVideo][stderr] ${line}`))
+                .on('end', () => {
+                    // Clean up temporary file
+                    fs.unlink(tempImagePath).catch(err => 
+                        console.warn(`[createVideo] Failed to cleanup temp image: ${err.message}`)
+                    );
+                    logMemoryUsage('createVideo-end');
+                    forceGC(); // Force garbage collection after processing
+                    resolvePromise();
+                })
+                .on('error', (err: Error) => {
+                    // Clean up temporary file on error
+                    fs.unlink(tempImagePath).catch(() => {});
+                    console.error(`[createVideo] Error: ${err.message}`);
+                    reject(new Error(`FFmpeg failed: ${err.message}`));
+                })
+                .run();
+        });
+    } catch (error) {
+        // Clean up temporary file on error
+        fs.unlink(tempImagePath).catch(() => {});
+        throw error;
+    }
 }
 
 // Generate TTS with Deepgram (fixed format parameters)
@@ -690,11 +811,30 @@ const ttsWeatherTool = createTool({
             }
 
             console.debug(`[tts-weather-upload] Creating video...`);
-            await createVideoFromAudioAndImage(
-                resolve(audioPath),
-                finalImagePath,
-                resolve(videoPath)
-            );
+            
+            // Choose processing method based on image size
+            const imageStats = await fs.stat(finalImagePath);
+            const imageSizeMB = imageStats.size / (1024 * 1024);
+            const audioSizeMB = audioBuffer.length / (1024 * 1024);
+            
+            console.debug(`[tts-weather-upload] Image size: ${imageSizeMB.toFixed(2)}MB, Audio size: ${audioSizeMB.toFixed(2)}MB`);
+            
+            // Use streaming mode for large files (>5MB total)
+            if (imageSizeMB + audioSizeMB > 5) {
+                console.debug(`[tts-weather-upload] Using streaming mode for large files`);
+                await createVideoFromAudioAndImageStreaming(
+                    resolve(audioPath),
+                    finalImagePath,
+                    resolve(videoPath)
+                );
+            } else {
+                console.debug(`[tts-weather-upload] Using optimized mode for smaller files`);
+                await createVideoFromAudioAndImage(
+                    resolve(audioPath),
+                    finalImagePath,
+                    resolve(videoPath)
+                );
+            }
             console.debug(`[tts-weather-upload] Video created: ${videoPath}`);
 
             // Upload to Mux and get streaming URLs
