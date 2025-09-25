@@ -47,12 +47,6 @@ export const mastra = new Mastra({
                 'Referer'
             ],
             allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH']
-        },
-        // Add timeout and keep-alive settings to help with QUIC/HTTP3 issues
-        timeout: 30000,
-        keepAlive: true,
-        keepAliveTimeout: 5000,
-        // Disable HTTP/3 (QUIC) to avoid protocol errors
-        httpVersion: '1.1'
+        }
     }
 });

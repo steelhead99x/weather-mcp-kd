@@ -627,7 +627,30 @@ const ttsWeatherTool = createTool({
                     };
                     if (process.env.MUX_UPLOAD_TEST === 'true') createArgs.test = true;
 
-                    const createRes = await create.execute({ context: createArgs });
+                    console.log('[tts-weather-upload] Calling Mux MCP with args:', JSON.stringify(createArgs, null, 2));
+                    
+                    let createRes;
+                    try {
+                        createRes = await create.execute({ context: createArgs });
+                    } catch (mcpError) {
+                        console.error('[tts-weather-upload] First MCP call failed:', mcpError);
+                        
+                        // Try alternative argument format - direct args without context wrapper
+                        console.log('[tts-weather-upload] Trying alternative argument format...');
+                        try {
+                            createRes = await create.execute(createArgs);
+                        } catch (mcpError2) {
+                            console.error('[tts-weather-upload] Second MCP call failed:', mcpError2);
+                            
+                            // Try with simplified args
+                            console.log('[tts-weather-upload] Trying simplified argument format...');
+                            const simplifiedArgs = {
+                                cors_origin: 'http://localhost',
+                                new_asset_settings: { playback_policies: ['public'] }
+                            };
+                            createRes = await create.execute({ context: simplifiedArgs });
+                        }
+                    }
                     const blocks = Array.isArray(createRes) ? createRes : [createRes];
                     let uploadId: string | undefined;
                     let uploadUrl: string | undefined;
