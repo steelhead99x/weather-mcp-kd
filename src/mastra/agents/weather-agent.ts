@@ -482,6 +482,35 @@ const MAX_CONCURRENT_CONNECTIONS = 2; // Reduced to prevent overload
 const connectionQueue: Array<() => void> = [];
 const CONNECTION_TIMEOUT = 30000; // 30 seconds timeout
 
+// Mux MCP health check
+async function checkMuxMCPHealth(): Promise<{ healthy: boolean; error?: string }> {
+    try {
+        // Check environment variables first
+        if (!process.env.MUX_TOKEN_ID || !process.env.MUX_TOKEN_SECRET) {
+            return { healthy: false, error: 'Missing MUX_TOKEN_ID or MUX_TOKEN_SECRET' };
+        }
+
+        // Try to get tools from upload client
+        const uploadTools = await uploadClient.getTools();
+        if (!uploadTools || Object.keys(uploadTools).length === 0) {
+            return { healthy: false, error: 'No Mux MCP tools available' };
+        }
+
+        // Check for essential tools
+        const hasCreateTool = uploadTools['create_video_uploads'] || uploadTools['video.uploads.create'];
+        if (!hasCreateTool) {
+            return { healthy: false, error: 'Missing Mux upload creation tool' };
+        }
+
+        return { healthy: true };
+    } catch (error) {
+        return { 
+            healthy: false, 
+            error: `Mux MCP health check failed: ${error instanceof Error ? error.message : String(error)}` 
+        };
+    }
+}
+
 async function acquireConnection(): Promise<void> {
     return new Promise((resolve, reject) => {
         let timeoutId: NodeJS.Timeout | null = null;
@@ -624,6 +653,7 @@ const ttsWeatherTool = createTool({
                     message: 'Please provide a valid 5-digit ZIP code.'
                 };
             }
+            
             // Build agriculture-focused speech if custom text not provided
             let finalText = (text || '').trim();
             let weatherData: any = null;
@@ -675,156 +705,203 @@ const ttsWeatherTool = createTool({
             let playbackId: string | undefined;
 
             try {
-                if (process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET) {
-
-                    // Skip pre-warming to prevent connection overload
-
-                    const uploadTools = await uploadClient.getTools();
-                    let create = uploadTools['create_video_uploads'] || uploadTools['video.uploads.create'];
-                    if (!create) throw new Error('Mux MCP missing upload tool');
-
-                    const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
-                    const createArgs: any = {
-                        cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
-                        new_asset_settings: { playback_policies: [playbackPolicy] },
-                    };
-                    if (process.env.MUX_UPLOAD_TEST === 'true') createArgs.test = true;
-
-                    console.log('[tts-weather-upload] Calling Mux MCP with args:', JSON.stringify(createArgs, null, 2));
-                    
-                    let createRes;
-                    try {
-                        createRes = await create.execute({ context: createArgs });
-                    } catch (mcpError) {
-                        console.error('[tts-weather-upload] First MCP call failed:', mcpError);
-                        
-                        // Try alternative argument format - direct args without context wrapper
-                        console.log('[tts-weather-upload] Trying alternative argument format...');
-                        try {
-                            createRes = await create.execute(createArgs);
-                        } catch (mcpError2) {
-                            console.error('[tts-weather-upload] Second MCP call failed:', mcpError2);
-                            
-                            // Try with simplified args
-                            console.log('[tts-weather-upload] Trying simplified argument format...');
-                            const simplifiedArgs = {
-                                cors_origin: 'http://localhost',
-                                new_asset_settings: { playback_policies: ['public'] }
-                            };
-                            createRes = await create.execute({ context: simplifiedArgs });
-                        }
-                    }
-                    const blocks = Array.isArray(createRes) ? createRes : [createRes];
-                    let uploadId: string | undefined;
-                    let uploadUrl: string | undefined;
-                    for (const b of blocks as any[]) {
-                        const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
-                        if (!t) continue;
-                        try {
-                            const payload = JSON.parse(t);
-                            uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
-                            uploadUrl = uploadUrl || payload.url || payload.upload?.url;
-                            assetId = assetId || payload.asset_id || payload.asset?.id;
-                        } catch (parseError) {
-                            console.warn('[tts-weather-upload] Failed to parse Mux response:', parseError instanceof Error ? parseError.message : String(parseError));
-                        }
-                    }
-                    if (!uploadUrl) throw new Error('No upload URL from Mux');
-
-                    await putFileToMux(uploadUrl, resolve(videoPath));
-
-                    // Robustly retrieve assetId by polling the upload record if missing
-                    if (!assetId && uploadId) {
-                        const retrieve = uploadTools['retrieve_video_uploads'] || uploadTools['video.uploads.get'];
-                        if (retrieve) {
-                            const attempts = Math.max(5, parseInt(process.env.MUX_RETRIEVE_RETRY_ATTEMPTS || '8', 10) || 8);
-                            const base = Math.max(500, parseInt(process.env.MUX_RETRIEVE_RETRY_BASE_MS || '1000', 10) || 1000);
-                            for (let i = 1; i <= attempts && !assetId; i++) {
-                                try {
-                                    const r = await retrieve.execute({
-                                        context: {
-                                            UPLOAD_ID: uploadId,
-                                        }
-                                    });
-                                    const rb = Array.isArray(r) ? r : [r];
-                                    for (const b of rb as any[]) {
-                                        const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
-                                        if (!t) continue;
-                                        try {
-                                            const payload = JSON.parse(t);
-                                            const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
-                                            const up = (data && typeof data === 'object' && 'upload' in data) ? (data as any).upload : data;
-                                            assetId = assetId || up.asset_id || up.assetId || up.asset?.id;
-                                            if (assetId) break;
-                                        } catch (parseError) {
-                                            console.warn('[tts-weather-upload] Failed to parse asset retrieval response:', parseError instanceof Error ? parseError.message : String(parseError));
-                                        }
-                                    }
-                                } catch (retrieveError) {
-                                    console.warn('[tts-weather-upload] Asset retrieval attempt failed:', retrieveError instanceof Error ? retrieveError.message : String(retrieveError));
-                                }
-                                if (!assetId) {
-                                    const delay = base * Math.pow(1.5, i - 1);
-                                    await new Promise(r => setTimeout(r, delay));
-                                }
-                            }
-                            // Secondary timed poll (ensures we don't stop early)
-                            if (!assetId) {
-                                const pollMs = Math.max(2000, parseInt(process.env.MUX_RETRIEVE_POLL_MS || '5000', 10) || 5000);
-                                const timeoutMs = Math.min(10 * 60 * 1000, Math.max(20_000, parseInt(process.env.MUX_RETRIEVE_TIMEOUT_MS || '180000', 10) || 180000));
-                                const start = Date.now();
-                                while (!assetId && (Date.now() - start) < timeoutMs) {
-                                    try {
-                                        const r = await retrieve.execute({
-                                            context: {
-                                                UPLOAD_ID: uploadId,
-                                            }
-                                        });
-                                        const rb = Array.isArray(r) ? r : [r];
-                                        for (const b of rb as any[]) {
-                                            const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
-                                            if (!t) continue;
-                                        try {
-                                            const payload = JSON.parse(t);
-                                            const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
-                                            const up = (data && typeof data === 'object' && 'upload' in data) ? (data as any).upload : data;
-                                            assetId = assetId || up.asset_id || up.assetId || up.asset?.id;
-                                            if (assetId) break;
-                                        } catch (parseError) {
-                                            console.warn('[tts-weather-upload] Failed to parse secondary asset retrieval response:', parseError instanceof Error ? parseError.message : String(parseError));
-                                        }
-                                    }
-                                } catch (retrieveError) {
-                                    console.warn('[tts-weather-upload] Secondary asset retrieval attempt failed:', retrieveError instanceof Error ? retrieveError.message : String(retrieveError));
-                                }
-                                    if (!assetId) await new Promise(r => setTimeout(r, pollMs));
-                                }
-                            }
-                        }
-                    }
-
-                    if (!assetId) throw new Error('No asset_id after upload');
-
-                    // Build player URL immediately from assetId (always provide)
-                    playerUrl = `${STREAMING_PORTFOLIO_BASE_URL}/player?assetId=${assetId}`;
-
-                    // Poll until ready for HLS URL
-                    const ready = await waitForMuxAssetReady(assetId);
-                    playbackUrl = ready.hlsUrl;
-                    playbackId = ready.playbackId || undefined;
-
-                    mux = {
-                        assetId,
-                        playbackId,
-                        hlsUrl: playbackUrl,
-                        playerUrl,
-                    };
-                } else {
-                    mux = { error: 'Mux credentials missing. Set MUX_TOKEN_ID and MUX_TOKEN_SECRET.' };
+                // Check Mux MCP health first
+                const healthCheck = await checkMuxMCPHealth();
+                if (!healthCheck.healthy) {
+                    console.warn('[tts-weather-upload] Mux MCP not healthy:', healthCheck.error);
+                    throw new Error(`Mux MCP not available: ${healthCheck.error}`);
                 }
+
+                console.log('[tts-weather-upload] Starting Mux upload process...');
+
+                // Get tools after health check
+                const uploadTools = await uploadClient.getTools();
+
+                // Find the create upload tool with better error handling
+                const createToolNames = ['create_video_uploads', 'video.uploads.create'];
+                let create = null;
+                for (const toolName of createToolNames) {
+                    if (uploadTools[toolName]) {
+                        create = uploadTools[toolName];
+                        console.log(`[tts-weather-upload] Using Mux tool: ${toolName}`);
+                        break;
+                    }
+                }
+                
+                if (!create) {
+                    const availableTools = Object.keys(uploadTools);
+                    throw new Error(`Mux MCP missing upload tool. Available tools: ${availableTools.join(', ')}`);
+                }
+
+                // Simplified argument structure - use only essential args
+                const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
+                const createArgs = {
+                    cors_origin: process.env.MUX_CORS_ORIGIN || 'http://localhost',
+                    new_asset_settings: { 
+                        playback_policies: [playbackPolicy] 
+                    }
+                };
+                
+                // Add test flag if specified
+                if (process.env.MUX_UPLOAD_TEST === 'true') {
+                    (createArgs as any).test = true;
+                }
+
+                console.log('[tts-weather-upload] Creating Mux upload with simplified args');
+                
+                // Single attempt with proper error handling
+                let createRes;
+                try {
+                    createRes = await create.execute({ context: createArgs });
+                    console.log('[tts-weather-upload] Mux upload creation successful');
+                } catch (mcpError) {
+                    console.error('[tts-weather-upload] Mux upload creation failed:', mcpError instanceof Error ? mcpError.message : String(mcpError));
+                    throw new Error(`Mux upload creation failed: ${mcpError instanceof Error ? mcpError.message : String(mcpError)}`);
+                }
+                
+                // Parse Mux response with better error handling
+                const blocks = Array.isArray(createRes) ? createRes : [createRes];
+                let uploadId: string | undefined;
+                let uploadUrl: string | undefined;
+                let parseSuccess = false;
+                
+                for (const b of blocks as any[]) {
+                    const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
+                    if (!t) continue;
+                    
+                    try {
+                        const payload = JSON.parse(t);
+                        console.log('[tts-weather-upload] Parsed Mux response:', JSON.stringify(payload, null, 2));
+                        
+                        // Extract IDs with better fallback logic
+                        uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
+                        uploadUrl = uploadUrl || payload.url || payload.upload?.url;
+                        assetId = assetId || payload.asset_id || payload.asset?.id;
+                        
+                        if (uploadId || uploadUrl || assetId) {
+                            parseSuccess = true;
+                        }
+                    } catch (parseError) {
+                        console.warn('[tts-weather-upload] Failed to parse Mux response block:', parseError instanceof Error ? parseError.message : String(parseError));
+                        console.warn('[tts-weather-upload] Raw response:', t);
+                    }
+                }
+                
+                if (!parseSuccess) {
+                    throw new Error('Failed to parse any meaningful data from Mux response');
+                }
+                
+                if (!uploadUrl) {
+                    throw new Error('No upload URL received from Mux - cannot proceed with file upload');
+                }
+                
+                console.log(`[tts-weather-upload] Upload URL: ${uploadUrl}`);
+                if (uploadId) console.log(`[tts-weather-upload] Upload ID: ${uploadId}`);
+                if (assetId) console.log(`[tts-weather-upload] Asset ID: ${assetId}`);
+
+                console.log('[tts-weather-upload] Uploading file to Mux...');
+                await putFileToMux(uploadUrl, resolve(videoPath));
+                console.log('[tts-weather-upload] File upload completed');
+
+                // Simplified asset retrieval - only if we don't already have assetId
+                if (!assetId && uploadId) {
+                    console.log('[tts-weather-upload] Retrieving asset ID from upload...');
+                    const retrieveToolNames = ['retrieve_video_uploads', 'video.uploads.get'];
+                    let retrieve = null;
+                    
+                    for (const toolName of retrieveToolNames) {
+                        if (uploadTools[toolName]) {
+                            retrieve = uploadTools[toolName];
+                            break;
+                        }
+                    }
+                    
+                    if (retrieve) {
+                        try {
+                            const retrieveRes = await retrieve.execute({
+                                context: { UPLOAD_ID: uploadId }
+                            });
+                            
+                            const retrieveBlocks = Array.isArray(retrieveRes) ? retrieveRes : [retrieveRes];
+                            for (const b of retrieveBlocks as any[]) {
+                                const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
+                                if (!t) continue;
+                                
+                                try {
+                                    const payload = JSON.parse(t);
+                                    console.log('[tts-weather-upload] Asset retrieval response:', JSON.stringify(payload, null, 2));
+                                    
+                                    // Extract asset ID from various possible response structures
+                                    const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
+                                    const upload = (data && typeof data === 'object' && 'upload' in data) ? (data as any).upload : data;
+                                    assetId = assetId || upload?.asset_id || upload?.assetId || upload?.asset?.id;
+                                    
+                                    if (assetId) {
+                                        console.log(`[tts-weather-upload] Retrieved asset ID: ${assetId}`);
+                                        break;
+                                    }
+                                } catch (parseError) {
+                                    console.warn('[tts-weather-upload] Failed to parse asset retrieval response:', parseError instanceof Error ? parseError.message : String(parseError));
+                                }
+                            }
+                        } catch (retrieveError) {
+                            console.warn('[tts-weather-upload] Asset retrieval failed:', retrieveError instanceof Error ? retrieveError.message : String(retrieveError));
+                        }
+                    }
+                }
+
+                if (!assetId) {
+                    console.warn('[tts-weather-upload] No asset ID available - will use upload ID for player URL');
+                    assetId = uploadId; // Fallback to upload ID
+                }
+
+                // Build player URL immediately from assetId (always provide)
+                playerUrl = `${STREAMING_PORTFOLIO_BASE_URL}/player?assetId=${assetId}`;
+                console.log(`[tts-weather-upload] Player URL: ${playerUrl}`);
+
+                // Try to get HLS URL with improved error handling
+                try {
+                    if (assetId) {
+                        console.log('[tts-weather-upload] Waiting for asset to be ready...');
+                        const ready = await waitForMuxAssetReady(assetId);
+                        playbackUrl = ready.hlsUrl;
+                        playbackId = ready.playbackId || undefined;
+                    } else {
+                        console.warn('[tts-weather-upload] No asset ID available for polling');
+                    }
+                    
+                    if (playbackUrl) {
+                        console.log(`[tts-weather-upload] HLS URL: ${playbackUrl}`);
+                    }
+                    if (playbackId) {
+                        console.log(`[tts-weather-upload] Playback ID: ${playbackId}`);
+                    }
+                } catch (pollError) {
+                    console.warn('[tts-weather-upload] Asset polling failed:', pollError instanceof Error ? pollError.message : String(pollError));
+                    console.warn('[tts-weather-upload] Continuing without HLS URL - player URL is still available');
+                    // Don't throw - we still have the player URL
+                }
+
+                mux = {
+                    assetId,
+                    playbackId,
+                    hlsUrl: playbackUrl,
+                    playerUrl,
+                };
             } catch (e) {
-                console.warn('[tts-weather-upload] Mux upload failed/skipped:', e instanceof Error ? e.message : String(e));
-                mux = { error: e instanceof Error ? e.message : String(e) };
+                const errorMsg = e instanceof Error ? e.message : String(e);
+                console.error('[tts-weather-upload] Mux upload failed:', errorMsg);
+                
+                // Provide more specific error information
+                if (errorMsg.includes('connection')) {
+                    mux = { error: 'Mux MCP connection failed. Please check your MUX_TOKEN_ID and MUX_TOKEN_SECRET.' };
+                } else if (errorMsg.includes('parse')) {
+                    mux = { error: 'Failed to parse Mux response. The Mux service may be experiencing issues.' };
+                } else if (errorMsg.includes('upload')) {
+                    mux = { error: 'File upload to Mux failed. Please try again.' };
+                } else {
+                    mux = { error: `Mux upload failed: ${errorMsg}` };
+                }
             }
 
             // Cleanup
@@ -849,8 +926,15 @@ const ttsWeatherTool = createTool({
                 playerUrl = `${STREAMING_PORTFOLIO_BASE_URL}/player?assetId=${assetId}`;
             }
 
+            // Determine success based on what we achieved
+            const hasPlayerUrl = !!playerUrl;
+            const hasHlsUrl = !!playbackUrl;
+            const hasMuxError = mux && 'error' in mux;
+            
+            const success = hasPlayerUrl || hasHlsUrl || !hasMuxError;
+
             return {
-                success: true,
+                success,
                 zipCode: zip,
                 summaryText: finalText,
                 localAudioFile: audioPath,
@@ -860,6 +944,9 @@ const ttsWeatherTool = createTool({
                 playerUrl,
                 assetId,
                 playbackId,
+                message: success 
+                    ? 'Audio weather report generated successfully'
+                    : 'Audio generated but Mux upload failed - check local files'
             };
 
         } catch (error) {
@@ -1108,4 +1195,5 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
 }
 
 export const weatherAgentTestWrapper: any = weatherAgent as any;
+(weatherAgentTestWrapper as any).text = textShim;
 (weatherAgentTestWrapper as any).text = textShim;
