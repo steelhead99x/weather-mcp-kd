@@ -134,18 +134,12 @@ class MuxAssetsMCPClient {
                         // Use only ASSET_ID as per Mux API schema
                         const path = idVal ? { ASSET_ID: idVal } : undefined;
                         const attemptArgs = [
-                            { endpoint, args: ctx },
-                            { endpoint_name: endpoint, args: ctx },
-                            path ? { endpoint, args: { path, ...ctx } } : null,
-                            path ? { endpoint_name: endpoint, args: { path, ...ctx } } : null,
-                            { endpoint, args: { body: ctx } },
-                            { endpoint_name: endpoint, args: { body: ctx } },
+                            // Correct Mux MCP format - endpoint_name with direct arguments
+                            { endpoint_name: endpoint, ...ctx },
+                            
+                            // Fallback format - endpoint with direct arguments  
                             { endpoint, ...ctx },
-                            { endpoint, body: ctx },
-                            { endpoint, params: ctx },
-                            { endpoint, arguments: ctx },
-                            { name: endpoint, arguments: ctx },
-                        ].filter(Boolean) as any[];
+                        ] as any[];
                         let lastErr: any;
                         for (const args of attemptArgs) {
                             try { return (await this.client.callTool({ name: 'invoke_api_endpoint', arguments: args })).content; }

@@ -482,33 +482,12 @@ class MuxMCPClient {
                             }
 
                             const attemptArgs = [
-                                // Mux MCP format - arguments passed directly to endpoint
-                                { endpoint, ...ctx },
+                                // Correct Mux MCP format - endpoint_name with direct arguments
                                 { endpoint_name: endpoint, ...ctx },
                                 
-                                // Standard simple args
-                                { endpoint, args: ctx },
-                                { endpoint_name: endpoint, args: ctx },
-
-                                // Path-wrapped args (common for REST-style invoke wrappers)
-                                path ? { endpoint, args: { path, ...ctx } } : null,
-                                path ? { endpoint_name: endpoint, args: { path, ...ctx } } : null,
-
-                                // Body-wrapped variants (especially for create endpoints)
-                                { endpoint, args: { body: ctx } },
-                                { endpoint_name: endpoint, args: { body: ctx } },
-
-                                // Legacy formats (keep as fallback)
-                                { endpoint, body: ctx },
-                                { endpoint, params: ctx },
-                                { endpoint, data: ctx },
-                                { endpoint, arguments: ctx },
-                                { name: endpoint, arguments: ctx },
-                                { id: endpoint, arguments: ctx },
-                                { tool: endpoint, arguments: ctx },
-                                { endpoint, input: ctx },
-                                { endpoint, payload: ctx },
-                            ].filter(Boolean) as any[];
+                                // Fallback format - endpoint with direct arguments  
+                                { endpoint, ...ctx },
+                            ] as any[];
 
                             let lastErr: any;
                             for (const args of attemptArgs) {
