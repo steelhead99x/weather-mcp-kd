@@ -87,7 +87,7 @@ class MuxMCPClient {
             return MuxMCPClient.MAX_CONNECTION_TIMEOUT;
         }
 
-        Logger.debug(`Using connection timeout: ${parsedTimeout}ms`);
+        console.debug(`Using connection timeout: ${parsedTimeout}ms`);
         return parsedTimeout;
     }
 
@@ -126,9 +126,9 @@ class MuxMCPClient {
             const mcpArgs = this.parseMcpArgs(process.env.MUX_MCP_UPLOAD_ARGS);
 
             Logger.info("Connecting to Mux MCP server...");
-            Logger.debug("MUX_TOKEN_ID: [CONFIGURED]");
-            Logger.debug("MUX_TOKEN_SECRET: [CONFIGURED]");
-            Logger.debug(`MCP Args: ${mcpArgs.join(' ')}`);
+            console.debug("MUX_TOKEN_ID: [CONFIGURED]");
+            console.debug("MUX_TOKEN_SECRET: [CONFIGURED]");
+            console.debug(`MCP Args: ${mcpArgs.join(' ')}`);
 
             this.transport = new StdioClientTransport({
                 command: "npx",
@@ -172,7 +172,7 @@ class MuxMCPClient {
                 try {
                     await this.transport.close();
                 } catch (closeError) {
-                    Logger.debug("Error during transport cleanup:", closeError);
+                    console.debug("Error during transport cleanup:", closeError);
                 }
                 this.transport = null;
             }
@@ -191,7 +191,7 @@ class MuxMCPClient {
 
         // Use default if environment variable is not set
         if (!envValue) {
-            Logger.debug("Using default MCP args (MUX_MCP_UPLOAD_ARGS not set)");
+            console.debug("Using default MCP args (MUX_MCP_UPLOAD_ARGS not set)");
             return defaultArgs;
         }
 
@@ -243,7 +243,7 @@ class MuxMCPClient {
                 return defaultArgs;
             }
 
-            Logger.debug(`Successfully parsed ${processedArgs.length} MCP arguments`);
+            console.debug(`Successfully parsed ${processedArgs.length} MCP arguments`);
             return processedArgs;
 
         } catch (error) {
@@ -403,7 +403,7 @@ class MuxMCPClient {
             const result = await this.client.listTools();
             const tools: Record<string, any> = {};
 
-            Logger.debug("Available MCP tools:", result?.tools?.map(t => t.name) || []);
+            console.debug("Available MCP tools:", result?.tools?.map(t => t.name) || []);
 
             if (result?.tools) {
                 for (const tool of result.tools) {
@@ -418,7 +418,7 @@ class MuxMCPClient {
                                     throw new Error("Client not connected");
                                 }
 
-                                Logger.debug(`Calling MCP tool: ${tool.name}`, context);
+                                console.debug(`Calling MCP tool: ${tool.name}`, context);
 
                                 return (await this.client.callTool({
                                     name: tool.name,
@@ -434,13 +434,13 @@ class MuxMCPClient {
 
             // If MCP only exposes generic invoke_api_endpoint, synthesize concrete tools for video.uploads
             const hasInvoke = !!tools['invoke_api_endpoint'];
-            Logger.debug(`Has invoke_api_endpoint: ${hasInvoke}`);
+            console.debug(`Has invoke_api_endpoint: ${hasInvoke}`);
 
             if (hasInvoke) {
                 const addWrapper = (id: string, endpoint: string, description: string) => {
                     // Do not overwrite real Mux MCP tools; only add wrapper if missing
                     if (tools[id]) {
-                        Logger.debug(`Skipping wrapper for ${id}; direct MCP tool already exists.`);
+                        console.debug(`Skipping wrapper for ${id}; direct MCP tool already exists.`);
                         return;
                     }
                     tools[id] = createTool({
@@ -455,11 +455,11 @@ class MuxMCPClient {
                             // Try direct tool call first (best case - the MCP exposes the endpoint directly)
                             const directTool = tools[endpoint];
                             if (directTool && directTool !== tools[id]) {
-                                Logger.debug(`Using direct tool: ${endpoint}`);
+                                console.debug(`Using direct tool: ${endpoint}`);
                                 return directTool.execute({ context });
                             }
 
-                            Logger.debug(`Using invoke_api_endpoint wrapper for: ${endpoint}`);
+                            console.debug(`Using invoke_api_endpoint wrapper for: ${endpoint}`);
 
                             const ctx = context || {};
 
@@ -513,7 +513,7 @@ class MuxMCPClient {
                             let lastErr: any;
                             for (const args of attemptArgs) {
                                 try {
-                                    Logger.debug(`Invoking endpoint via wrapper: ${endpoint}`, args);
+                                    console.debug(`Invoking endpoint via wrapper: ${endpoint}`, args);
                                     const res = await this.client.callTool({ name: 'invoke_api_endpoint', arguments: args });
                                     return res.content;
                                 } catch (e) {
@@ -523,7 +523,7 @@ class MuxMCPClient {
 
                                     // Log the specific argument structure that failed for debugging
                                     if (process.env.DEBUG) {
-                                        Logger.debug('Failed args structure:', JSON.stringify(args, null, 2));
+                                        console.debug('Failed args structure:', JSON.stringify(args, null, 2));
                                     }
                                 }
                             }
@@ -546,7 +546,7 @@ class MuxMCPClient {
             }
 
             Logger.info(`Successfully created ${Object.keys(tools).length} Mastra tools from MCP`);
-            Logger.debug("Final tool names:", Object.keys(tools));
+            console.debug("Final tool names:", Object.keys(tools));
             return tools;
         } catch (error) {
             Logger.error("Failed to get tools:", error);
@@ -626,7 +626,7 @@ class MuxMCPClient {
             try {
                 await this.transport.close();
             } catch (error) {
-                Logger.debug("Warning during transport close:", error);
+                console.debug("Warning during transport close:", error);
             }
             this.transport = null;
         }

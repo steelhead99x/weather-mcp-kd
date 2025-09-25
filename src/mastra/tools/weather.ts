@@ -31,8 +31,8 @@ export const weatherTool = createTool({
         // In Mastra tools, parameters come in the context object
         const { zipCode } = context;
 
-        console.log('Full context received:', context);
-        console.log('Received zipCode:', zipCode, 'Type:', typeof zipCode);
+        console.debug('Full context received:', context);
+        console.debug('Received zipCode:', zipCode, 'Type:', typeof zipCode);
 
         if (!zipCode || typeof zipCode !== 'string' || !/^\d{5}$/.test(zipCode)) {
             throw new Error(`Please provide a valid 5-digit ZIP code. Received: ${zipCode} (type: ${typeof zipCode})`);

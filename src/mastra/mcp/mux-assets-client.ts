@@ -50,7 +50,7 @@ class MuxAssetsMCPClient {
         }
         const mcpArgs = this.parseMcpArgs(process.env.MUX_MCP_ASSETS_ARGS);
         Logger.info("Connecting to Mux MCP (assets)...");
-        Logger.debug(`MCP Args: ${mcpArgs.join(' ')}`);
+        console.debug(`MCP Args: ${mcpArgs.join(' ')}`);
 
         this.transport = new StdioClientTransport({
             command: "npx",
@@ -117,7 +117,7 @@ class MuxAssetsMCPClient {
             const addWrapper = (id: string, endpoint: string, description: string, schema?: z.ZodSchema) => {
                 // Do not overwrite real Mux MCP tools; only add wrapper if missing
                 if (tools[id]) {
-                    Logger.debug(`Skipping wrapper for ${id}; direct MCP tool already exists.`);
+                    console.debug(`Skipping wrapper for ${id}; direct MCP tool already exists.`);
                     return;
                 }
                 tools[id] = createTool({

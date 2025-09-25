@@ -119,7 +119,7 @@ const STREAMING_PORTFOLIO_BASE_URL = process.env.STREAMING_PORTFOLIO_BASE_URL ||
 
     if (found) {
         ffmpeg.setFfmpegPath(found);
-        console.log(`[ffmpeg] Using ffmpeg at: ${found}`);
+        console.debug(`[ffmpeg] Using ffmpeg at: ${found}`);
     } else {
         console.warn('[ffmpeg] No ffmpeg binary found in expected locations. Video features may fail.');
         console.warn('[ffmpeg] Searched paths:', candidates);
@@ -130,7 +130,7 @@ const STREAMING_PORTFOLIO_BASE_URL = process.env.STREAMING_PORTFOLIO_BASE_URL ||
 (async () => {
     try {
         const { stdout } = await execFileAsync('ffmpeg', ['-version']);
-        console.log('[ffmpeg] Version:\n' + stdout.split('\n').slice(0, 3).join('\n'));
+        console.debug('[ffmpeg] Version:\n' + stdout.split('\n').slice(0, 3).join('\n'));
     } catch (e) {
         console.warn('[ffmpeg] Unable to run ffmpeg -version:', e instanceof Error ? e.message : String(e));
     }
@@ -156,8 +156,8 @@ async function createVideoFromAudioAndImage(
                 '-movflags +faststart',
             ])
             .output(outputPath)
-            .on('start', (cmd: string) => console.log(`[createVideo] FFmpeg: ${cmd}`))
-            .on('stderr', (line: string) => console.log(`[createVideo][stderr] ${line}`))
+            .on('start', (cmd: string) => console.debug(`[createVideo] FFmpeg: ${cmd}`))
+            .on('stderr', (line: string) => console.debug(`[createVideo][stderr] ${line}`))
             .on('end', () => resolvePromise())
             .on('error', (err: Error) => {
                 console.error(`[createVideo] Error: ${err.message}`);
@@ -377,7 +377,7 @@ async function waitForMuxAssetReady(assetId: string, {
     
     // Check if this asset is already being polled
     if (assetPollingMutex.has(assetId)) {
-        console.log(`[waitForMuxAssetReady] Asset ${assetId} already being polled, waiting for existing poll...`);
+        console.debug(`[waitForMuxAssetReady] Asset ${assetId} already being polled, waiting for existing poll...`);
         return await assetPollingMutex.get(assetId);
     }
     
@@ -677,25 +677,25 @@ const ttsWeatherTool = createTool({
 
             await fs.mkdir(dirname(resolve(audioPath)), { recursive: true });
             await fs.writeFile(resolve(audioPath), audioBuffer);
-            console.log(`[tts-weather-upload] Audio saved: ${audioPath} (${audioBuffer.length} bytes)`);
+            console.debug(`[tts-weather-upload] Audio saved: ${audioPath} (${audioBuffer.length} bytes)`);
 
             // Background image or fallback
             let finalImagePath: string;
             try {
                 finalImagePath = await getRandomBackgroundImage();
-                console.log(`[tts-weather-upload] Using background image: ${finalImagePath}`);
+                console.debug(`[tts-weather-upload] Using background image: ${finalImagePath}`);
             } catch {
                 finalImagePath = await getFallbackBackgroundPng();
-                console.log(`[tts-weather-upload] Using fallback background: ${finalImagePath}`);
+                console.debug(`[tts-weather-upload] Using fallback background: ${finalImagePath}`);
             }
 
-            console.log(`[tts-weather-upload] Creating video...`);
+            console.debug(`[tts-weather-upload] Creating video...`);
             await createVideoFromAudioAndImage(
                 resolve(audioPath),
                 finalImagePath,
                 resolve(videoPath)
             );
-            console.log(`[tts-weather-upload] Video created: ${videoPath}`);
+            console.debug(`[tts-weather-upload] Video created: ${videoPath}`);
 
             // Upload to Mux and get streaming URLs
             let mux: any = null;
@@ -712,7 +712,7 @@ const ttsWeatherTool = createTool({
                     throw new Error(`Mux MCP not available: ${healthCheck.error}`);
                 }
 
-                console.log('[tts-weather-upload] Starting Mux upload process...');
+                console.debug('[tts-weather-upload] Starting Mux upload process...');
 
                 // Get tools after health check
                 const uploadTools = await uploadClient.getTools();
@@ -723,7 +723,7 @@ const ttsWeatherTool = createTool({
                 for (const toolName of createToolNames) {
                     if (uploadTools[toolName]) {
                         create = uploadTools[toolName];
-                        console.log(`[tts-weather-upload] Using Mux tool: ${toolName}`);
+                        console.debug(`[tts-weather-upload] Using Mux tool: ${toolName}`);
                         break;
                     }
                 }
@@ -747,13 +747,13 @@ const ttsWeatherTool = createTool({
                     (createArgs as any).test = true;
                 }
 
-                console.log('[tts-weather-upload] Creating Mux upload with simplified args');
+                console.debug('[tts-weather-upload] Creating Mux upload with simplified args');
                 
                 // Single attempt with proper error handling
                 let createRes;
                 try {
                     createRes = await create.execute({ context: createArgs });
-                    console.log('[tts-weather-upload] Mux upload creation successful');
+                    console.debug('[tts-weather-upload] Mux upload creation successful');
                 } catch (mcpError) {
                     console.error('[tts-weather-upload] Mux upload creation failed:', mcpError instanceof Error ? mcpError.message : String(mcpError));
                     throw new Error(`Mux upload creation failed: ${mcpError instanceof Error ? mcpError.message : String(mcpError)}`);
@@ -771,7 +771,7 @@ const ttsWeatherTool = createTool({
                     
                     try {
                         const payload = JSON.parse(t);
-                        console.log('[tts-weather-upload] Parsed Mux response:', JSON.stringify(payload, null, 2));
+                        console.debug('[tts-weather-upload] Parsed Mux response:', JSON.stringify(payload, null, 2));
                         
                         // Extract IDs with better fallback logic
                         uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
@@ -795,17 +795,17 @@ const ttsWeatherTool = createTool({
                     throw new Error('No upload URL received from Mux - cannot proceed with file upload');
                 }
                 
-                console.log(`[tts-weather-upload] Upload URL: ${uploadUrl}`);
-                if (uploadId) console.log(`[tts-weather-upload] Upload ID: ${uploadId}`);
-                if (assetId) console.log(`[tts-weather-upload] Asset ID: ${assetId}`);
+                console.debug(`[tts-weather-upload] Upload URL: ${uploadUrl}`);
+                if (uploadId) console.debug(`[tts-weather-upload] Upload ID: ${uploadId}`);
+                if (assetId) console.debug(`[tts-weather-upload] Asset ID: ${assetId}`);
 
-                console.log('[tts-weather-upload] Uploading file to Mux...');
+                console.debug('[tts-weather-upload] Uploading file to Mux...');
                 await putFileToMux(uploadUrl, resolve(videoPath));
-                console.log('[tts-weather-upload] File upload completed');
+                console.debug('[tts-weather-upload] File upload completed');
 
                 // Simplified asset retrieval - only if we don't already have assetId
                 if (!assetId && uploadId) {
-                    console.log('[tts-weather-upload] Retrieving asset ID from upload...');
+                    console.debug('[tts-weather-upload] Retrieving asset ID from upload...');
                     const retrieveToolNames = ['retrieve_video_uploads', 'video.uploads.get'];
                     let retrieve = null;
                     
@@ -829,7 +829,7 @@ const ttsWeatherTool = createTool({
                                 
                                 try {
                                     const payload = JSON.parse(t);
-                                    console.log('[tts-weather-upload] Asset retrieval response:', JSON.stringify(payload, null, 2));
+                                    console.debug('[tts-weather-upload] Asset retrieval response:', JSON.stringify(payload, null, 2));
                                     
                                     // Extract asset ID from various possible response structures
                                     const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
@@ -837,7 +837,7 @@ const ttsWeatherTool = createTool({
                                     assetId = assetId || upload?.asset_id || upload?.assetId || upload?.asset?.id;
                                     
                                     if (assetId) {
-                                        console.log(`[tts-weather-upload] Retrieved asset ID: ${assetId}`);
+                                        console.debug(`[tts-weather-upload] Retrieved asset ID: ${assetId}`);
                                         break;
                                     }
                                 } catch (parseError) {
@@ -857,12 +857,12 @@ const ttsWeatherTool = createTool({
 
                 // Build player URL immediately from assetId (always provide)
                 playerUrl = `${STREAMING_PORTFOLIO_BASE_URL}/player?assetId=${assetId}`;
-                console.log(`[tts-weather-upload] Player URL: ${playerUrl}`);
+                console.debug(`[tts-weather-upload] Player URL: ${playerUrl}`);
 
                 // Try to get HLS URL with improved error handling
                 try {
                     if (assetId) {
-                        console.log('[tts-weather-upload] Waiting for asset to be ready...');
+                        console.debug('[tts-weather-upload] Waiting for asset to be ready...');
                         const ready = await waitForMuxAssetReady(assetId);
                         playbackUrl = ready.hlsUrl;
                         playbackId = ready.playbackId || undefined;
@@ -871,10 +871,10 @@ const ttsWeatherTool = createTool({
                     }
                     
                     if (playbackUrl) {
-                        console.log(`[tts-weather-upload] HLS URL: ${playbackUrl}`);
+                        console.debug(`[tts-weather-upload] HLS URL: ${playbackUrl}`);
                     }
                     if (playbackId) {
-                        console.log(`[tts-weather-upload] Playback ID: ${playbackId}`);
+                        console.debug(`[tts-weather-upload] Playback ID: ${playbackId}`);
                     }
                 } catch (pollError) {
                     console.warn('[tts-weather-upload] Asset polling failed:', pollError instanceof Error ? pollError.message : String(pollError));
@@ -908,17 +908,17 @@ const ttsWeatherTool = createTool({
             if (process.env.TTS_CLEANUP === 'true') {
                 try { 
                     await fs.unlink(resolve(audioPath)); 
-                    console.log('[tts-weather-upload] Cleaned up audio file:', audioPath);
+                    console.debug('[tts-weather-upload] Cleaned up audio file:', audioPath);
                 } catch (cleanupError) {
                     console.warn('[tts-weather-upload] Failed to cleanup audio file:', cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
                 }
                 try { 
                     await fs.unlink(resolve(videoPath)); 
-                    console.log('[tts-weather-upload] Cleaned up video file:', videoPath);
+                    console.debug('[tts-weather-upload] Cleaned up video file:', videoPath);
                 } catch (cleanupError) {
                     console.warn('[tts-weather-upload] Failed to cleanup video file:', cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
                 }
-                console.log('[tts-weather-upload] Cleanup completed');
+                console.debug('[tts-weather-upload] Cleanup completed');
             }
 
             // Always include playerUrl if we know assetId
@@ -1032,7 +1032,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
                 const storedZip = await agentMemory.get("user_zip_code");
                 if (storedZip) {
                     currentZipCode = storedZip;
-                    console.log(`[textShim] Retrieved ZIP from memory: ${currentZipCode}`);
+                    console.debug(`[textShim] Retrieved ZIP from memory: ${currentZipCode}`);
                 }
             }
         } catch (e) {
@@ -1044,7 +1044,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
             const agentMemory = (weatherAgent as any).memory;
             if (agentMemory) {
                 await agentMemory.set("user_zip_code", currentZipCode);
-                console.log(`[textShim] Stored ZIP in memory: ${currentZipCode}`);
+                console.debug(`[textShim] Stored ZIP in memory: ${currentZipCode}`);
             }
         } catch (e) {
             console.warn('[textShim] Failed to store ZIP in memory:', e);
@@ -1099,7 +1099,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
             }
             
             // If TTS failed, fall back to regular weather response with explanation
-            console.log(`[textShim] TTS failed for ZIP ${currentZipCode}, falling back to regular weather response`);
+            console.debug(`[textShim] TTS failed for ZIP ${currentZipCode}, falling back to regular weather response`);
             const errorMsg = (res as any)?.message || (res as any)?.error || 'unknown error';
             
             // Get regular weather data as fallback
@@ -1130,7 +1130,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
             parts.push(`\n\nNote: Audio generation is currently unavailable (${errorMsg}). Here's the text version above.`);
             return { text: parts.join(' ') };
         } catch (e) {
-            console.log(`[textShim] TTS request failed for ZIP ${currentZipCode}, falling back to regular weather response:`, e);
+            console.debug(`[textShim] TTS request failed for ZIP ${currentZipCode}, falling back to regular weather response:`, e);
             
             // Fall back to regular weather response
             const weatherData: any = await weatherTool.execute({ context: { zipCode: currentZipCode } } as any);

@@ -87,13 +87,13 @@ const askWeatherAgentStreamVNext = createTool({
     const message = String((context as any)?.message ?? "");
     const format = ((context as any)?.format as "mastra" | "aisdk" | undefined) ?? "mastra";
     
-    console.log('[askWeatherAgentStreamVNext] Received request:', { message, format });
+    console.debug('[askWeatherAgentStreamVNext] Received request:', { message, format });
 
     try {
       // Use Mastra Agent's stream method instead of streamVNext
       const stream = await weatherAgent.stream([{ role: "user", content: message }]);
       const fullText = await stream.text;
-      console.log('[askWeatherAgentStreamVNext] stream succeeded, text length:', fullText.length);
+      console.debug('[askWeatherAgentStreamVNext] stream succeeded, text length:', fullText.length);
       
       return {
         streamed: true,
@@ -142,12 +142,12 @@ const askWeatherAgent = createTool({
     const format = ((context as any)?.format as "default" | "aisdk" | undefined) ?? "default";
     const streamingMethod = ((context as any)?.streamingMethod as "streamVNext" | "stream" | "auto" | undefined) ?? "auto";
     
-    console.log('[askWeatherAgent] Received request:', { message, format, streamingMethod });
+    console.debug('[askWeatherAgent] Received request:', { message, format, streamingMethod });
 
     try {
       // Try streamVNext first if requested or auto (with circuit breaker protection)
       if (streamingMethod === "streamVNext" || (streamingMethod === "auto" && format === "aisdk")) {
-        console.log('[askWeatherAgent] Attempting streamVNext method...');
+        console.debug('[askWeatherAgent] Attempting streamVNext method...');
         try {
           const result = await circuitBreaker.execute(async () => {
             // Add timeout protection to prevent overload
@@ -159,7 +159,7 @@ const askWeatherAgent = createTool({
             
             const stream = await Promise.race([streamPromise, timeoutPromise]);
             const fullText = await stream.text;
-            console.log('[askWeatherAgent] stream succeeded, text length:', fullText.length);
+            console.debug('[askWeatherAgent] stream succeeded, text length:', fullText.length);
             
             return {
               streamed: true,
@@ -192,7 +192,7 @@ const askWeatherAgent = createTool({
       }
 
       // Fallback to text method for reliability (with circuit breaker protection)
-      console.log('[askWeatherAgent] Using text method for reliability...');
+      console.debug('[askWeatherAgent] Using text method for reliability...');
       const result = await circuitBreaker.execute(async () => {
         return await weatherAgentTestWrapper.text({ 
           messages: [{ role: "user", content: message }] 
@@ -200,8 +200,8 @@ const askWeatherAgent = createTool({
       });
       
       const fullText = String(result?.text ?? "");
-      console.log('[askWeatherAgent] Text method succeeded, response length:', fullText.length);
-      console.log('[askWeatherAgent] Response preview:', fullText.substring(0, 200) + '...');
+      console.debug('[askWeatherAgent] Text method succeeded, response length:', fullText.length);
+      console.debug('[askWeatherAgent] Response preview:', fullText.substring(0, 200) + '...');
       
       // Return a consistent format
       const response = {
@@ -238,7 +238,7 @@ const askWeatherAgent = createTool({
         timestamp: new Date().toISOString()
       };
       
-      console.log('[askWeatherAgent] Returning error response:', errorResponse);
+      console.debug('[askWeatherAgent] Returning error response:', errorResponse);
       return errorResponse;
     }
   },
@@ -253,7 +253,7 @@ const askWeatherAgentStream = createTool({
   }),
   execute: async ({ context }) => {
     const message = String((context as any)?.message ?? "");
-    console.log('[askWeatherAgentStream] Received request:', { message });
+    console.debug('[askWeatherAgentStream] Received request:', { message });
     
     try {
       // Add timeout protection to prevent overload
@@ -264,7 +264,7 @@ const askWeatherAgentStream = createTool({
       
       const stream = await Promise.race([streamPromise, timeoutPromise]);
       const fullText = await stream.text;
-      console.log('[askWeatherAgentStream] stream succeeded, text length:', fullText.length);
+      console.debug('[askWeatherAgentStream] stream succeeded, text length:', fullText.length);
       
       return {
         streamed: true,
@@ -294,7 +294,7 @@ const askWeatherAgentText = createTool({
   }),
   execute: async ({ context }) => {
     const message = String((context as any)?.message ?? "");
-    console.log('[askWeatherAgentText] Received request:', { message });
+    console.debug('[askWeatherAgentText] Received request:', { message });
     
     try {
       const res = await (weatherAgentTestWrapper as any).text({ messages: [{ role: "user", content: message }] });
@@ -407,7 +407,7 @@ const testAgent = createTool({
   }),
   execute: async ({ context }) => {
     const message = String((context as any)?.message ?? "96062");
-    console.log('[testAgent] Testing agent with message:', message);
+    console.debug('[testAgent] Testing agent with message:', message);
     
     try {
       const result = await weatherAgentTestWrapper.text({ 
@@ -445,7 +445,7 @@ const debugAgent = createTool({
     const message = String((context as any)?.message ?? "96062");
     const includeEnvCheck = (context as any)?.includeEnvCheck ?? true;
     
-    console.log('[debugAgent] Running diagnostics with message:', message);
+    console.debug('[debugAgent] Running diagnostics with message:', message);
     
     const debugInfo: any = {
       timestamp: new Date().toISOString(),
@@ -510,7 +510,7 @@ const debugAgent = createTool({
       };
     }
     
-    console.log('[debugAgent] Diagnostics complete:', debugInfo);
+    console.debug('[debugAgent] Diagnostics complete:', debugInfo);
     return debugInfo;
   },
 });
@@ -524,7 +524,7 @@ const askWeatherAgentCompatible = createTool({
   }),
   execute: async ({ context }) => {
     const message = String((context as any)?.message ?? "");
-    console.log('[askWeatherAgentCompatible] Received request:', { message });
+    console.debug('[askWeatherAgentCompatible] Received request:', { message });
 
     try {
       // Use stream internally but convert to legacy format
@@ -544,7 +544,7 @@ const askWeatherAgentCompatible = createTool({
         // Continue with whatever text we have
       }
       
-      console.log('[askWeatherAgentCompatible] Stream completed, text length:', fullText.length);
+      console.debug('[askWeatherAgentCompatible] Stream completed, text length:', fullText.length);
       
       // Return in legacy format that frontend expects
       return {
