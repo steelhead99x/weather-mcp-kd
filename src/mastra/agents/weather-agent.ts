@@ -380,19 +380,18 @@ const ttsWeatherTool = createTool({
     }),
     execute: async ({ context }) => {
         await acquireConnection();
+        let zip = '';
         try {
-        let { zipCode, text } = context as { zipCode?: string; text?: string };
+            let { zipCode, text } = context as { zipCode?: string; text?: string };
 
-        const zip = String(zipCode || '').trim();
-        if (!/^\d{5}$/.test(zip)) {
-            return {
-                success: false,
-                zipCode: zip,
-                message: 'Please provide a valid 5-digit ZIP code.'
-            };
-        }
-
-        try {
+            zip = String(zipCode || '').trim();
+            if (!/^\d{5}$/.test(zip)) {
+                return {
+                    success: false,
+                    zipCode: zip,
+                    message: 'Please provide a valid 5-digit ZIP code.'
+                };
+            }
             // Build agriculture-focused speech if custom text not provided
             let finalText = (text || '').trim();
             let weatherData: any = null;
