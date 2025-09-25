@@ -440,6 +440,61 @@ const debugAgent = createTool({
   },
 });
 
+// Compatibility tool that converts streamVNext to legacy format
+const askWeatherAgentCompatible = createTool({
+  id: "ask_weatherAgent_compatible",
+  description: "Ask the weatherAgent using streamVNext but return in legacy data stream format for frontend compatibility.",
+  inputSchema: z.object({
+    message: z.string().describe("The user question or input for the agent (should contain a ZIP code)."),
+  }),
+  execute: async ({ context }) => {
+    const message = String((context as any)?.message ?? "");
+    console.log('[askWeatherAgentCompatible] Received request:', { message });
+
+    try {
+      // Use streamVNext internally but convert to legacy format
+      const stream = await weatherAgent.streamVNext([{ role: "user", content: message }], {
+        format: "mastra"
+      });
+      
+      // Collect all text chunks
+      let fullText = '';
+      const textChunks: string[] = [];
+      
+      try {
+        for await (const chunk of stream.textStream) {
+          textChunks.push(chunk);
+          fullText += chunk;
+        }
+      } catch (streamError) {
+        console.warn('[askWeatherAgentCompatible] Stream reading error:', streamError);
+        // Continue with whatever text we have
+      }
+      
+      console.log('[askWeatherAgentCompatible] Stream completed, text length:', fullText.length);
+      
+      // Return in legacy format that frontend expects
+      return {
+        streamed: true,
+        text: fullText,
+        textStream: textChunks,
+        finishReason: 'finishReason' in stream ? stream.finishReason : 'stop',
+        usage: 'usage' in stream ? stream.usage : null,
+        method: 'streamVNext-compatible',
+        timestamp: new Date().toISOString()
+      };
+    } catch (e) {
+      console.error('[askWeatherAgentCompatible] Error:', e);
+      return { 
+        streamed: false, 
+        text: `Agent error: ${e instanceof Error ? e.message : String(e)}`,
+        method: 'error',
+        timestamp: new Date().toISOString()
+      };
+    }
+  },
+});
+
 export const weatherMcpServer = new MCPServer({
   id: "weather-mcp-server",
   name: "Weather MCP Server",
@@ -449,6 +504,7 @@ export const weatherMcpServer = new MCPServer({
   tools: {
     weatherTool,
     ask_weatherAgent: askWeatherAgent,                    // Smart agent tool with auto-fallback
+    ask_weatherAgent_compatible: askWeatherAgentCompatible, // Legacy format compatibility
     ask_weatherAgent_streamVNext: askWeatherAgentStreamVNext, // AI SDK v5 streamVNext method
     ask_weatherAgent_stream: askWeatherAgentStream,       // Regular stream method
     ask_weatherAgent_text: askWeatherAgentText,           // Non-streaming fallback
