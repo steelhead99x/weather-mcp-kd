@@ -484,9 +484,6 @@ class MuxMCPClient {
                             const attemptArgs = [
                                 // Correct Mux MCP format - endpoint_name with direct arguments
                                 { endpoint_name: endpoint, ...ctx },
-                                
-                                // Fallback format - endpoint with direct arguments  
-                                { endpoint, ...ctx },
                             ] as any[];
 
                             let lastErr: any;
