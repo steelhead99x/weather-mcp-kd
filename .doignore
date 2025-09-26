@@ -1,2 +1,37 @@
-# Digital Ocean - Use Docker only, ignore package.json for app detection
-package.json
+# Digital Ocean App Platform - Ignore buildpack detection
+# This forces Digital Ocean to use Dockerfile instead of buildpack
+
+# Ignore package.json files that trigger buildpack detection
+backend/package.json
+frontend/package.json
+shared/package.json
+
+# Ignore node_modules
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+shared/node_modules/
+
+# Ignore build outputs
+dist/
+backend/dist/
+frontend/dist/
+shared/dist/
+
+# Ignore development files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Ignore git files
+.git/
+.gitignore
+
+# Ignore documentation
+*.md
+docs/
+
+# Ignore scripts
+scripts/
