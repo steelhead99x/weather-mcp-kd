@@ -254,13 +254,25 @@ export default function WeatherChat() {
     enableMetrics: true
   })
 
-  const agent = useMemo((): WeatherAgent | null => {
-    try {
-      const agentId = getWeatherAgentId()
-      return mastra.getAgent(agentId) as WeatherAgent
-    } catch (e) {
-      return null
+  const [agent, setAgent] = useState<WeatherAgent | null>(null)
+  const [agentError, setAgentError] = useState<string | null>(null)
+
+  // Load agent asynchronously
+  useEffect(() => {
+    const loadAgent = async () => {
+      try {
+        const agentId = getWeatherAgentId()
+        const loadedAgent = await mastra.getAgent(agentId)
+        setAgent(loadedAgent as WeatherAgent)
+        setAgentError(null)
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        setAgentError(`Failed to load weather agent: ${errorMessage}`)
+        setAgent(null)
+      }
     }
+    
+    loadAgent()
   }, [])
 
   /**
@@ -370,7 +382,7 @@ export default function WeatherChat() {
       </div>
 
       {/* Enhanced Error Display */}
-      {streamState.error && (
+      {(streamState.error || agentError) && (
         <div
           aria-live="assertive"
           className="text-sm p-3 rounded-lg border"
@@ -384,7 +396,9 @@ export default function WeatherChat() {
         >
           <div className="flex items-center gap-2">
             <span>⚠️</span>
-            <span>{typeof streamState.error === 'string' ? streamState.error : String(streamState.error || 'Unknown error')}</span>
+            <span>
+              {agentError || (typeof streamState.error === 'string' ? streamState.error : String(streamState.error || 'Unknown error'))}
+            </span>
           </div>
           {streamState.retryCount > 0 && (
             <button
@@ -428,7 +442,7 @@ export default function WeatherChat() {
           aria-label="Send message"
           className="btn whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={onSend}
-          disabled={streamState.isLoading || !input.trim() || (!hasAssistantResponded && !/^\d{5}$/.test(input.trim()))}
+          disabled={!agent || streamState.isLoading || !input.trim() || (!hasAssistantResponded && !/^\d{5}$/.test(input.trim()))}
         >
           {streamState.isLoading ? (
             <span className="flex items-center gap-2">
