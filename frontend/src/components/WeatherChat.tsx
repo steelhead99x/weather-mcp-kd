@@ -56,38 +56,129 @@ interface WeatherAgent {
 }
 
 /**
- * Memoized message component to prevent unnecessary re-renders
- * @param message - The message to display
+ * Tool display component with collapsible interface
  */
-const MessageComponent = memo(({ message }: { message: Message }) => (
-  <div className={message.role === 'user' ? 'text-right' : 'text-left'}>
-    <div
-      className="inline-block px-3 py-2 rounded-2xl max-w-full break-words border"
-      style={{
-        background: message.role === 'user' 
-          ? 'var(--accent-muted)' 
-          : 'var(--overlay)',
-        borderColor: message.role === 'user' 
-          ? 'var(--accent)' 
-          : 'var(--border)',
-        color: 'var(--fg)'
-      }}
-    >
-      <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
-        {message.content}
-      </span>
+const ToolCallDisplay = memo(({ toolCall }: { toolCall: ToolCallDebug }) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'called': return '⏳'
+      case 'result': return '✅'
+      case 'error': return '❌'
+      default: return '🔧'
+    }
+  }
+
+  const formatToolData = (data: unknown): string => {
+    if (data === null || data === undefined) return 'N/A'
+    if (typeof data === 'string') return data
+    if (typeof data === 'number' || typeof data === 'boolean') return String(data)
+    
+    try {
+      return JSON.stringify(data, null, 2)
+    } catch (error) {
+      return '[Could not serialize data]'
+    }
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-md mb-2">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full text-left p-2 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between"
+      >
+        <div className="flex items-center gap-2">
+          <span>{getStatusIcon(toolCall.status)}</span>
+          <span className="font-medium text-sm">{toolCall.toolName}</span>
+          <span className="text-xs text-gray-500">({toolCall.status})</span>
+        </div>
+        <span className="text-xs text-gray-400">
+          {isExpanded ? '▼' : '▶'}
+        </span>
+      </button>
       
-      {/* Tool Calls Debug Info */}
-      {message.debugInfo?.toolCalls && message.debugInfo.toolCalls.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-gray-200">
-          <div className="text-xs text-gray-600">
-            🔧 Used {message.debugInfo.toolCalls.length} tool{message.debugInfo.toolCalls.length > 1 ? 's' : ''}
-          </div>
+      {isExpanded && (
+        <div className="p-3 border-t border-gray-200 bg-white">
+          {toolCall.args && Object.keys(toolCall.args).length > 0 && (
+            <div className="mb-3">
+              <div className="text-xs font-semibold text-gray-700 mb-1">Arguments:</div>
+              <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+                {formatToolData(toolCall.args)}
+              </pre>
+            </div>
+          )}
+          
+          {toolCall.result !== undefined && (
+            <div className="mb-3">
+              <div className="text-xs font-semibold text-gray-700 mb-1">Result:</div>
+              <pre className="text-xs bg-green-50 p-2 rounded overflow-x-auto border border-green-200">
+                {formatToolData(toolCall.result)}
+              </pre>
+            </div>
+          )}
         </div>
       )}
     </div>
-  </div>
-))
+  )
+})
+
+ToolCallDisplay.displayName = 'ToolCallDisplay'
+
+/**
+ * Memoized message component to prevent unnecessary re-renders
+ * @param message - The message to display
+ */
+const MessageComponent = memo(({ message }: { message: Message }) => {
+  const [toolsExpanded, setToolsExpanded] = useState(false)
+  
+  return (
+    <div className={message.role === 'user' ? 'text-right' : 'text-left'}>
+      <div
+        className="inline-block px-3 py-2 rounded-2xl max-w-full break-words border"
+        style={{
+          background: message.role === 'user' 
+            ? 'var(--accent-muted)' 
+            : 'var(--overlay)',
+          borderColor: message.role === 'user' 
+            ? 'var(--accent)' 
+            : 'var(--border)',
+          color: 'var(--fg)'
+        }}
+      >
+        <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
+          {message.content}
+        </span>
+        
+        {/* Enhanced Tool Calls Debug Info */}
+        {message.debugInfo?.toolCalls && message.debugInfo.toolCalls.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <button
+              onClick={() => setToolsExpanded(!toolsExpanded)}
+              className="flex items-center gap-2 text-xs text-gray-600 hover:text-gray-800 transition-colors mb-2"
+            >
+              <span>🔧</span>
+              <span>
+                Used {message.debugInfo.toolCalls.length} tool{message.debugInfo.toolCalls.length > 1 ? 's' : ''}
+              </span>
+              <span className="text-gray-400">
+                {toolsExpanded ? '▼' : '▶'}
+              </span>
+            </button>
+            
+            {toolsExpanded && (
+              <div className="mt-2 space-y-2">
+                {message.debugInfo.toolCalls.map((toolCall) => (
+                  <ToolCallDisplay key={toolCall.id} toolCall={toolCall} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
 
 MessageComponent.displayName = 'MessageComponent'
 
