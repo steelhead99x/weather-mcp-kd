@@ -50,42 +50,42 @@ interface WeatherData {
     forecast: WeatherForecast[];
 }
 
-interface MuxUploadResponse {
-    upload_id?: string;
-    id?: string;
-    upload?: { id: string };
-    url?: string;
-    asset_id?: string;
-    asset?: { id: string };
-}
+// interface MuxUploadResponse {
+//     upload_id?: string;
+//     id?: string;
+//     upload?: { id: string };
+//     url?: string;
+//     asset_id?: string;
+//     asset?: { id: string };
+// }
 
 interface MuxAssetResponse {
     status: string;
     playback_ids?: Array<{ id: string }>;
 }
 
-interface MuxResult {
-    assetId?: string;
-    playbackId?: string;
-    hlsUrl?: string;
-    playerUrl?: string;
-    error?: string;
-}
+// interface MuxResult {
+//     assetId?: string;
+//     playbackId?: string;
+//     hlsUrl?: string;
+//     playerUrl?: string;
+//     error?: string;
+// }
 
-interface TTSWeatherResult {
-    success: boolean;
-    zipCode: string;
-    summaryText?: string;
-    localAudioFile?: string;
-    localVideoFile?: string;
-    mux?: MuxResult;
-    playbackUrl?: string;
-    playerUrl?: string;
-    assetId?: string;
-    playbackId?: string;
-    error?: string;
-    message?: string;
-}
+// interface TTSWeatherResult {
+//     success: boolean;
+//     zipCode: string;
+//     summaryText?: string;
+//     localAudioFile?: string;
+//     localVideoFile?: string;
+//     mux?: MuxResult;
+//     playbackUrl?: string;
+//     playerUrl?: string;
+//     assetId?: string;
+//     playbackId?: string;
+//     error?: string;
+//     message?: string;
+// }
 
 const execFileAsync = promisify(execFile);
 

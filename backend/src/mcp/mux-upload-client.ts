@@ -491,22 +491,22 @@ class MuxMCPClient {
                             const ctx = context || {};
 
                             // Build canonical path/body wrappers for common endpoints
-                            const idVal = (ctx as any).UPLOAD_ID || (ctx as any).upload_id || (ctx as any).id;
-                            const assetVal = (ctx as any).ASSET_ID || (ctx as any).asset_id || (ctx as any).id;
+                            // const idVal = (ctx as any).UPLOAD_ID || (ctx as any).upload_id || (ctx as any).id;
+                            // const assetVal = (ctx as any).ASSET_ID || (ctx as any).asset_id || (ctx as any).id;
                             
                             // Use correct parameter names based on endpoint type
-                            let path: any = undefined;
-                            if (endpoint.includes('uploads')) {
-                                if (idVal) {
-                                    // For uploads endpoints, use only UPLOAD_ID as per Mux API schema
-                                    path = { UPLOAD_ID: idVal };
-                                }
-                            } else if (endpoint.includes('assets')) {
-                                if (assetVal) {
-                                    // For assets endpoints, use only ASSET_ID as per Mux API schema
-                                    path = { ASSET_ID: assetVal };
-                                }
-                            }
+                            // let path: any = undefined;
+                            // if (endpoint.includes('uploads')) {
+                            //     if (idVal) {
+                            //         // For uploads endpoints, use only UPLOAD_ID as per Mux API schema
+                            //         path = { UPLOAD_ID: idVal };
+                            //     }
+                            // } else if (endpoint.includes('assets')) {
+                            //     if (assetVal) {
+                            //         // For assets endpoints, use only ASSET_ID as per Mux API schema
+                            //         path = { ASSET_ID: assetVal };
+                            //     }
+                            // }
 
                             // Filter out problematic arguments that cause union type issues
                             const filteredCtx = { ...ctx };

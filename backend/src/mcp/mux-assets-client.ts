@@ -157,9 +157,9 @@ class MuxAssetsMCPClient {
                         const direct = tools[endpoint];
                         if (direct && direct !== tools[id]) return direct.execute({ context });
                         const ctx = context || {};
-                        const idVal = (ctx as any).ASSET_ID || (ctx as any).asset_id || (ctx as any).id;
+                        // const idVal = (ctx as any).ASSET_ID || (ctx as any).asset_id || (ctx as any).id;
                         // Use only ASSET_ID as per Mux API schema
-                        const path = idVal ? { ASSET_ID: idVal } : undefined;
+                        // const path = idVal ? { ASSET_ID: idVal } : undefined;
                         // Filter out problematic arguments that cause union type issues
                         const filteredCtx = { ...ctx };
                         if (filteredCtx.new_asset_settings) {

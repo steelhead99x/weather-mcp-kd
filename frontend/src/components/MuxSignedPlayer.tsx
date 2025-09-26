@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, Suspense, lazy } from 'react'
+import { useEffect, useMemo, useState, Suspense, lazy } from 'react'
 
 // Lazy load MuxPlayer to reduce initial bundle size
 const MuxPlayer = lazy(() => import('@mux/mux-player-react').then(module => ({ default: module.default })))

@@ -7,10 +7,8 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { createStreamVNextEnhanced } from '../utils/streamVNextEnhanced'
 import type {
   StreamVNextOptions,
-  StreamVNextResponse,
   StreamChunk,
-  StreamMetrics,
-  StreamVNextHook
+  StreamMetrics
 } from '../types/streamVNext'
 
 export interface UseStreamVNextState {
@@ -57,7 +55,7 @@ export function useStreamVNext(options: UseStreamVNextOptions = {}): UseStreamVN
     defaultTimeout: options.timeout || 30000,
     enableMetrics: options.enableMetrics !== false
   }, {
-    onStart: (opts) => {
+    onStart: () => {
       setState(prev => ({
         ...prev,
         isLoading: true,

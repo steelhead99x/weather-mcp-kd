@@ -107,7 +107,7 @@ export default function WeatherChat() {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Enhanced streamVNext hook with better error handling and metrics
-  const { state: streamState, streamVNext, reset: resetStream, retry } = useStreamVNext({
+  const { state: streamState, streamVNext, retry } = useStreamVNext({
     onChunk: (chunk: StreamChunk) => {
       if (chunk.type === 'text' && chunk.content) {
         setMessages((prev) => {
@@ -152,10 +152,10 @@ export default function WeatherChat() {
         })
       }
     },
-    onComplete: (metrics: StreamMetrics) => {
+    onComplete: () => {
       setHasAssistantResponded(true)
     },
-    onError: (error: Error, metrics: StreamMetrics) => {
+    onError: () => {
       // Error handling is managed by the useStreamVNext hook
     },
     maxRetries: 3,

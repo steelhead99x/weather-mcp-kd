@@ -47,7 +47,7 @@ export const weatherTool = createTool({
             throw new Error(`Invalid ZIP code: ${zipCode}`);
         }
 
-        const geoData = await geoResponse.json();
+        const geoData = await geoResponse.json() as any;
         const places = Array.isArray(geoData?.places) ? geoData.places : [];
         if (places.length === 0) {
             throw new Error("Location data not available for this ZIP code");
@@ -77,7 +77,7 @@ export const weatherTool = createTool({
             throw new Error(`Failed to get weather grid data: ${pointsResponse.statusText}`);
         }
 
-        const pointsData = await pointsResponse.json();
+        const pointsData = await pointsResponse.json() as any;
         const forecastUrl = pointsData?.properties?.forecast || pointsData?.properties?.forecastHourly;
         if (!forecastUrl || typeof forecastUrl !== 'string') {
             throw new Error('Weather service did not provide a forecast URL for this location');
@@ -93,7 +93,7 @@ export const weatherTool = createTool({
             throw new Error(`Failed to get weather forecast: ${forecastResponse.statusText}`);
         }
 
-        const forecastData = await forecastResponse.json();
+        const forecastData = await forecastResponse.json() as any;
         const periods = forecastData.properties.periods;
 
         return {
