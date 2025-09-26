@@ -1,224 +1,234 @@
-# Weather MCP KD
+# Weather Agent - Mastra Monorepo
 
-This project demonstrates a Weather MCP (Model Context Protocol) implementation using Mastra framework.
+A modern weather agent built with Mastra, featuring a React frontend and Node.js backend with MCP (Model Context Protocol) tools for weather data and Mux video processing.
 
-## Features
+## 🏗️ Project Structure
 
-- Weather data retrieval and processing
-- Integration with Mux for media handling
-- Voice synthesis and recognition capabilities
-- OpenTelemetry instrumentation for observability
-- Docker support for containerization
+This project follows a monorepo structure with clear separation of concerns:
 
-## Prerequisites
+```
+weather-agent-monorepo/
+├── backend/                 # Mastra backend server
+│   ├── src/
+│   │   ├── agents/         # Weather agent implementation
+│   │   ├── tools/          # Weather and utility tools
+│   │   ├── mcp/           # MCP server implementations
+│   │   └── scripts/       # Test and utility scripts
+│   ├── files/             # Static files (images, audio)
+│   └── package.json
+├── frontend/               # React frontend application
+│   ├── src/
+│   │   ├── components/     # React components
+│   │   ├── hooks/         # Custom React hooks
+│   │   ├── lib/           # Client libraries
+│   │   └── utils/         # Frontend utilities
+│   └── package.json
+├── shared/                 # Shared types and utilities
+│   ├── src/
+│   │   ├── types/         # TypeScript type definitions
+│   │   └── utils/         # Shared utility functions
+│   └── package.json
+├── scripts/               # Build and deployment scripts
+├── docs/                 # Documentation
+└── package.json          # Root package.json (monorepo config)
+```
 
-- Node.js 18+
-- Docker (for containerized deployment)
+## 🚀 Quick Start
 
-## Getting Started
+### Prerequisites
+
+- Node.js 20+ 
+- npm or yarn
+- API keys for OpenWeather, Mux, and Mastra
 
 ### Installation
-```
-bash
-npm install
-```
-### Running Locally
-```
-bash
-npm run dev
-```
+
+1. **Clone and setup:**
+   ```bash
+   git clone <repository-url>
+   cd weather-agent-monorepo
+   ./scripts/setup.sh
+   ```
+
+2. **Configure environment:**
+   ```bash
+   cp env.example .env
+   # Edit .env with your API keys
+   ```
+
+3. **Start development:**
+   ```bash
+   npm run dev
+   ```
+
+This will start both the backend server (port 3001) and frontend (port 3000).
+
+## 📦 Available Scripts
+
+### Root Level (Monorepo)
+- `npm run dev` - Start both backend and frontend in development mode
+- `npm run build` - Build all packages
+- `npm run start:prod` - Start production server
+- `npm run clean` - Clean all build artifacts
+- `npm run typecheck` - Type check all packages
+- `npm run test` - Run all tests
+
+### Backend
+- `npm run dev:backend` - Start backend development server
+- `npm run build:backend` - Build backend
+- `npm run test:agent` - Test weather agent
+- `npm run test:claude` - Test Claude integration
+- `npm run test:stt` - Test speech-to-text
+- `npm run test:tts` - Test text-to-speech
+
+### Frontend
+- `npm run dev:frontend` - Start frontend development server
+- `npm run build:frontend` - Build frontend
+- `npm run test:frontend` - Run frontend tests
+
+## 🔧 Configuration
+
 ### Environment Variables
 
-Create a `.env` file with the following required variables:
+Create a `.env` file based on `env.example`:
 
-#### Server Configuration
-- `PORT` - Server port (default: 8080)
-- `HOST` - Server host (default: 0.0.0.0)
-- `NODE_ENV` - Environment (development/production)
+```bash
+# Backend Configuration
+NODE_ENV=development
+PORT=3001
 
-#### CORS Configuration
-- `CORS_ORIGIN` - Additional CORS origin URL
-- `LOCALHOST_3000_URL` - Override localhost:3000 URL (default: http://localhost:3000)
-- `LOCALHOST_3001_URL` - Override localhost:3001 URL (default: http://localhost:3001)
-- `LOCALHOST_8080_URL` - Override localhost:8080 URL (default: http://localhost:8080)
+# Mastra Configuration
+MASTRA_API_KEY=your_mastra_api_key_here
 
-#### API Keys
-- `ANTHROPIC_API_KEY` - Required for Claude AI integration
-- `DEEPGRAM_API_KEY` - Required for TTS/STT functionality
-- `MUX_TOKEN_ID` - Required for Mux media handling
-- `MUX_TOKEN_SECRET` - Required for Mux media handling
+# Weather API Configuration
+OPENWEATHER_API_KEY=your_openweather_api_key_here
 
-#### Optional Configuration
-- `MUX_HLS_BASE_URL` - Mux HLS base URL (default: https://stream.mux.com)
-- `STREAMING_PORTFOLIO_BASE_URL` - Base URL for streaming portfolio (default: https://streamingportfolio.com)
-- `VIDEO_MAX_WIDTH` - Maximum video width (default: 1920)
-- `VIDEO_MAX_HEIGHT` - Maximum video height (default: 1080)
-- `FFMPEG_PRESET` - FFmpeg encoding preset (default: fast)
-- `TTS_TMP_DIR` - Temporary directory for TTS files (default: /tmp/tts)
+# Mux Configuration
+MUX_TOKEN_ID=your_mux_token_id_here
+MUX_TOKEN_SECRET=your_mux_token_secret_here
 
-## Project Structure
+# Frontend Configuration
+VITE_MASTRA_API_HOST=http://localhost:3001
+VITE_WEATHER_AGENT_ID=weatherAgent
 ```
 
-src/
-├── mastra/
-│   ├── agents/
-│   │   └── weather-agent.ts
-│   ├── mcp/
-│   │   ├── mux-assets-client.ts
-│   │   ├── mux-upload-client.ts
-│   │   └── weather-server.ts
-│   ├── public/
-│   ├── scripts/
-│   │   ├── mux-upload-verify-real.ts
-│   │   ├── start-production.js
-│   │   ├── test-claude.ts
-│   │   ├── test-stt.ts
-│   │   ├── test-tts.ts
-│   │   ├── test-weather-agent.ts
-│   │   └── test-zip.ts
-│   ├── tools/
-│   │   └── weather.ts
-│   └── index.ts
-└── types/
-```
-## Available Scripts
+### API Keys Required
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start` - Start production server
-- `npm run test` - Run tests
+1. **OpenWeather API** - For weather data
+2. **Mux API** - For video processing and streaming
+3. **Mastra API** - For AI agent functionality
 
-## Deployment
+## 🏛️ Architecture
 
-Docker support is included for containerized deployment.
+### Backend (Mastra Server)
+- **Agents**: Weather agent with conversational AI capabilities
+- **Tools**: Weather data fetching and processing tools
+- **MCP Servers**: Weather and Mux integration servers
+- **Memory**: Persistent conversation memory
+- **Streaming**: Real-time response streaming
 
-## Contributing
+### Frontend (React App)
+- **Components**: Modular React components
+- **Hooks**: Custom hooks for state management
+- **Client**: Mastra client for backend communication
+- **UI**: Modern, responsive interface with Tailwind CSS
 
-This project uses Mastra framework for building AI agents and MCP servers.
+### Shared
+- **Types**: TypeScript definitions shared between frontend and backend
+- **Utils**: Common utility functions and validation schemas
+
+## 🧪 Testing
+
+### Backend Tests
+```bash
+cd backend
+npm run test:agent      # Test weather agent
+npm run test:claude     # Test Claude integration
+npm run test:stt        # Test speech-to-text
+npm run test:tts        # Test text-to-speech
 ```
 
-
-Now I'll update it to reflect the current codebase structure and features:
-
-```markdown
-# Weather MCP KD
-
-This project demonstrates a Weather MCP (Model Context Protocol) implementation using Mastra framework.
-
-## Features
-
-- Weather data retrieval and processing
-- Integration with Mux for media handling (upload and asset management)
-- Voice synthesis and recognition capabilities via TTS/STT tools
-- OpenTelemetry instrumentation for observability
-- Docker support for containerized deployment
-- Claude AI integration through MCP protocol
-- Zip file processing utilities
-
-## Prerequisites
-
-- Node.js 18+
-- Docker (for containerized deployment)
-- Mux API credentials (for media handling)
-- Anthropic API key (for Claude integration)
-
-## Getting Started
-
-### Installation
-```
-bash
-npm install
-```
-### Running Locally
-```
-bash
-npm run dev
-```
-### Environment Variables
-
-Create a `.env` file with the following required variables:
-
-#### Server Configuration
-- `PORT` - Server port (default: 8080)
-- `HOST` - Server host (default: 0.0.0.0)
-- `NODE_ENV` - Environment (development/production)
-
-#### CORS Configuration
-- `CORS_ORIGIN` - Additional CORS origin URL
-- `LOCALHOST_3000_URL` - Override localhost:3000 URL (default: http://localhost:3000)
-- `LOCALHOST_3001_URL` - Override localhost:3001 URL (default: http://localhost:3001)
-- `LOCALHOST_8080_URL` - Override localhost:8080 URL (default: http://localhost:8080)
-
-#### API Keys
-- `ANTHROPIC_API_KEY` - Required for Claude AI integration
-- `DEEPGRAM_API_KEY` - Required for TTS/STT functionality
-- `MUX_TOKEN_ID` - Required for Mux media handling
-- `MUX_TOKEN_SECRET` - Required for Mux media handling
-
-#### Optional Configuration
-- `MUX_HLS_BASE_URL` - Mux HLS base URL (default: https://stream.mux.com)
-- `STREAMING_PORTFOLIO_BASE_URL` - Base URL for streaming portfolio (default: https://streamingportfolio.com)
-- `VIDEO_MAX_WIDTH` - Maximum video width (default: 1920)
-- `VIDEO_MAX_HEIGHT` - Maximum video height (default: 1080)
-- `FFMPEG_PRESET` - FFmpeg encoding preset (default: fast)
-- `TTS_TMP_DIR` - Temporary directory for TTS files (default: /tmp/tts)
-
-## Project Structure
-```
-````
-src/
-├── mastra/
-│   ├── agents/
-│   │   └── weather-agent.ts
-│   ├── mcp/
-│   │   ├── mux-assets-client.ts
-│   │   ├── mux-upload-client.ts
-│   │   └── weather-server.ts
-│   ├── public/
-│   ├── scripts/
-│   │   ├── mux-upload-verify-real.ts
-│   │   ├── start-production.js
-│   │   ├── test-claude.ts
-│   │   ├── test-stt.ts
-│   │   ├── test-tts.ts
-│   │   ├── test-weather-agent.ts
-│   │   └── test-zip.ts
-│   ├── tools/
-│   │   └── weather.ts
-│   └── index.ts
-└── types/
-
-## Available Scripts
-
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start` - Start production server
-- `npm run test` - Run tests
-
-## Deployment
-
-Docker support is included for containerized deployment.
-
-## Contributing
-
-This project uses Mastra framework for building AI agents and MCP servers.
-It integrates with:
-- Mux for media handling
-- Claude via Anthropic API through MCP protocol
-- OpenTelemetry for observability
+### Frontend Tests
+```bash
+cd frontend
+npm run test           # Run all frontend tests
+npm run test:watch     # Run tests in watch mode
 ```
 
+## 🚀 Deployment
 
-This updated README reflects the current codebase by:
+### Docker Deployment
+```bash
+# Build Docker image
+docker build -t weather-agent .
 
-1. Adding more specific features like Mux integration, Claude AI, and zip file processing
-2. Including required environment variables (Mux credentials, Anthropic API key)
-3. Updating the project structure to show all current components
-4. Adding information about the technologies used in the project (Mux, Claude, OpenTelemetry)
-5. Keeping the same basic format and structure while updating the content to match the current implementation
+# Run container
+docker run -p 3001:3001 --env-file .env weather-agent
+```
 
-The agent can now handle requests like:
-"Get information about asset xyz123"
-"Give me the playback URL for asset abc456"
-"Create an MP4 URL with 720p resolution for playback ID def789"
-"Generate a thumbnail at 30 seconds for this video"
+### Manual Deployment
+```bash
+# Build all packages
+npm run build
+
+# Start production server
+npm run start:prod
+```
+
+## 📚 Features
+
+### Weather Agent
+- **Conversational AI**: Natural language weather queries
+- **Real-time Data**: Live weather information
+- **Voice Support**: Speech-to-text and text-to-speech
+- **Memory**: Persistent conversation context
+- **Streaming**: Real-time response streaming
+
+### Mux Integration
+- **Video Processing**: Upload and process audio/video files
+- **Streaming**: Video streaming capabilities
+- **Asset Management**: Organize and manage media assets
+
+### Frontend Features
+- **Modern UI**: Clean, responsive interface
+- **Real-time Chat**: Live conversation with the agent
+- **Theme Support**: Light/dark theme toggle
+- **Error Handling**: Comprehensive error boundaries
+- **TypeScript**: Full type safety
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+1. **Port Conflicts**: Ensure ports 3000 and 3001 are available
+2. **API Keys**: Verify all required API keys are set in `.env`
+3. **Dependencies**: Run `npm run install:all` to install all dependencies
+4. **Build Issues**: Run `npm run clean` then `npm run build`
+
+### Debug Mode
+```bash
+# Backend debug
+npm run debug:agent
+
+# Frontend debug
+cd frontend && npm run dev
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
+
+For support and questions:
+- Create an issue in the repository
+- Check the documentation in the `docs/` folder
+- Review the troubleshooting section above

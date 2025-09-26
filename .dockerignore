@@ -1,34 +1,20 @@
-# Exclude build artifacts and generated files
-.mastra/
-dist/
-node_modules/
-src/my-mastra-vite/node_modules/
-*.log
-*.tmp
-
-# Exclude development files
+node_modules
+npm-debug.log
+.git
+.gitignore
+README.md
+.env
 .env.local
-.env.development
-.env.test
-
-# Exclude OS files
+.env.development.local
+.env.test.local
+.env.production.local
+dist
+.mastra
+coverage
+.nyc_output
+.cache
+.vscode
+.idea
+*.log
 .DS_Store
 Thumbs.db
-
-# Exclude IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Exclude test files
-coverage/
-.nyc_output/
-
-# Exclude documentation
-*.md
-docs/
-
-# Exclude other config files that might confuse Digital Ocean
-.git/
-.gitignore
