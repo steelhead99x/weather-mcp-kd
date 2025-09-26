@@ -64,8 +64,32 @@ describe('MCP Input Flow Tests', () => {
       })
     }
     
+    const fullMockAgent = {
+      ...mockAgent,
+      agentId: 'test-agent',
+      voice: null,
+      details: {},
+      generate: vi.fn(),
+      stream: vi.fn(),
+      streamObject: vi.fn(),
+      generateText: vi.fn(),
+      generateObject: vi.fn(),
+      generateSchema: vi.fn(),
+      tools: {},
+      memory: null,
+      llm: null,
+      instructions: '',
+      model: '',
+      temperature: 0.7,
+      maxTokens: 1000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      stopSequences: []
+    } as any
+    
     const { mastra } = await import('../../lib/mastraClient')
-    vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent as any)
+    vi.mocked(mastra.getAgent).mockResolvedValue(fullMockAgent)
   })
 
   it('should trace input from WeatherChat to MCP streamVNext', async () => {
@@ -156,21 +180,21 @@ describe('MCP Input Flow Tests', () => {
       // Case 1: Message as object with content property
       { 
         name: 'Object with content property',
-        input: { content: '85001' } as any,
+        input: { content: '85001', messages: undefined, toString: undefined } as { content: string; messages?: undefined; toString?: undefined },
         shouldFail: true 
       },
       
       // Case 2: Messages array format
       { 
         name: 'Messages array format',
-        input: [{ role: 'user', content: '85001' }] as any,
+        input: [{ role: 'user', content: '85001' }] as { role: string; content: string }[],
         shouldFail: true 
       },
       
       // Case 3: MastraClient message format
       { 
         name: 'Mastra message format',
-        input: { messages: '85001' } as any,
+        input: { messages: '85001', content: undefined, toString: undefined } as { messages: string; content?: undefined; toString?: undefined },
         shouldFail: true 
       },
       
@@ -184,7 +208,7 @@ describe('MCP Input Flow Tests', () => {
       // Case 5: Options object passed as message
       {
         name: 'Options object as message',
-        input: { format: 'mastra', system: 'prompt' },
+        input: { toString: () => '[object Object]', content: undefined, messages: undefined } as { toString: () => string; content?: undefined; messages?: undefined },
         shouldFail: true
       }
     ]

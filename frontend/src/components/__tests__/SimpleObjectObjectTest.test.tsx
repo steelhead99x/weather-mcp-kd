@@ -22,7 +22,27 @@ describe('Simple [object Object] Test', () => {
         textStream: async function* () {
           yield 'Test response'
         }
-      })
+      }),
+      agentId: 'test-agent',
+      voice: null,
+      details: {},
+      generate: vi.fn(),
+      stream: vi.fn(),
+      streamObject: vi.fn(),
+      generateText: vi.fn(),
+      generateObject: vi.fn(),
+      generateSchema: vi.fn(),
+      tools: {},
+      memory: null,
+      llm: null,
+      instructions: '',
+      model: '',
+      temperature: 0.7,
+      maxTokens: 1000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      stopSequences: []
     } as any
     
     const { mastra } = await import('../../lib/mastraClient')

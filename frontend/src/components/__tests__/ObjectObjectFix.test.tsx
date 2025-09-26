@@ -214,9 +214,9 @@ describe('[object Object] Fix Tests', () => {
       // Test various input types that could cause issues
       const testInputs = [
         { input: 'normal string', expected: 'normal string' },
-        { input: { content: 'message content' } as any, expected: 'message content' },
-        { input: [{ content: 'array message' }] as any, expected: 'array message' },
-        { input: { messages: 'mastra format' } as any, expected: 'mastra format' },
+        { input: { content: 'message content', messages: undefined, toString: undefined } as { content: string; messages?: undefined; toString?: undefined }, expected: 'message content' },
+        { input: [{ content: 'array message' }] as { content: string }[], expected: 'array message' },
+        { input: { messages: 'mastra format', content: undefined, toString: undefined } as { messages: string; content?: undefined; toString?: undefined }, expected: 'mastra format' },
         { input: ['string1', 'string2'], expected: 'string1 string2' },
         { input: { toString: () => 'custom string' }, expected: 'custom string' }
       ]

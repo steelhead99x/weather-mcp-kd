@@ -20,9 +20,29 @@ describe('Debug Stream Error Test', () => {
   it('should debug where [object Object] comes from in stream errors', async () => {
     const mockStreamVNext = vi.fn()
     
-    // Create a mock agent
+    // Create a mock agent with required properties
     const mockAgent = {
-      streamVNext: mockStreamVNext
+      streamVNext: mockStreamVNext,
+      agentId: 'test-agent',
+      voice: null,
+      details: {},
+      generate: vi.fn(),
+      stream: vi.fn(),
+      streamObject: vi.fn(),
+      generateText: vi.fn(),
+      generateObject: vi.fn(),
+      generateSchema: vi.fn(),
+      tools: {},
+      memory: null,
+      llm: null,
+      instructions: '',
+      model: '',
+      temperature: 0.7,
+      maxTokens: 1000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      stopSequences: []
     } as any
     
     const { mastra } = await import('../../lib/mastraClient')
@@ -88,7 +108,29 @@ describe('Debug Stream Error Test', () => {
       console.log('Error object:', testCase.error)
       
       const mockStreamVNext = vi.fn()
-      const mockAgent = { streamVNext: mockStreamVNext } as any
+      const mockAgent = {
+        streamVNext: mockStreamVNext,
+        agentId: 'test-agent',
+        voice: null,
+        details: {},
+        generate: vi.fn(),
+        stream: vi.fn(),
+        streamObject: vi.fn(),
+        generateText: vi.fn(),
+        generateObject: vi.fn(),
+        generateSchema: vi.fn(),
+        tools: {},
+        memory: null,
+        llm: null,
+        instructions: '',
+        model: '',
+        temperature: 0.7,
+        maxTokens: 1000,
+        topP: 1,
+        frequencyPenalty: 0,
+        presencePenalty: 0,
+        stopSequences: []
+      } as any
       
       const { mastra } = await import('../../lib/mastraClient')
       vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent)
