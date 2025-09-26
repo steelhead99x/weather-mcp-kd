@@ -46,6 +46,9 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 weatheruser
 
+# Optional: install ffmpeg for TTS/video features
+RUN apk add --no-cache ffmpeg
+
 # Copy built application
 COPY --from=builder --chown=weatheruser:nodejs /app/backend/dist ./backend/dist
 COPY --from=builder --chown=weatheruser:nodejs /app/frontend/dist ./frontend/dist
