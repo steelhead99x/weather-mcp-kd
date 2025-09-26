@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core';
 import express from 'express';
 import cors from 'cors';
 import { weatherAgent } from './agents/weather-agent.js';
+import { resolve, join } from 'path';
 
 const mastra = new Mastra({
   agents: { weatherAgent },
@@ -34,6 +35,19 @@ app.post('/api/agents/:agentId/stream/vnext', async (req, res) => {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
+
+// Serve built frontend (SPA) from ../frontend/dist
+try {
+  const frontendDist = resolve(process.cwd(), '../frontend/dist');
+  app.use(express.static(frontendDist));
+  // Fallback to index.html for non-API routes
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(join(frontendDist, 'index.html'));
+  });
+} catch {
+  // ignore if dist not present
+}
 
 const port = Number(process.env.PORT || 3001);
 const host = process.env.HOST || '0.0.0.0';
