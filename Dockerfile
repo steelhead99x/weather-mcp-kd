@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.6
 # Multi-stage build for production
 FROM node:20-alpine AS base
 
@@ -13,7 +12,7 @@ COPY frontend/package*.json ./frontend/
 COPY shared/package*.json ./shared/
 
 # Install production dependencies for all workspaces using a single lockfile
-RUN --mount=type=cache,target=/root/.npm npm ci --workspaces --omit=dev
+RUN npm ci --workspaces --omit=dev
 
 # Build the application
 FROM base AS builder-deps
@@ -26,27 +25,27 @@ COPY frontend/package*.json ./frontend/
 COPY shared/package*.json ./shared/
 
 # Install all dependencies for all workspaces (including dev)
-RUN --mount=type=cache,target=/root/.npm npm ci --workspaces --include=dev
+RUN npm ci --workspaces --include=dev
 
 # Build shared package
 FROM builder-deps AS build-shared
 WORKDIR /app
 COPY shared ./shared
-RUN --mount=type=cache,target=/app/shared/.tsbuildcache npm --workspace shared run build
+RUN npm --workspace shared run build
 
 # Build backend (depends on shared sources for TS paths)
 FROM builder-deps AS build-backend
 WORKDIR /app
 COPY backend ./backend
 COPY shared ./shared
-RUN --mount=type=cache,target=/app/backend/.tsbuildcache npm --workspace backend run build
+RUN npm --workspace backend run build
 
 # Build frontend (depends on shared sources for TS paths)
 FROM builder-deps AS build-frontend
 WORKDIR /app
 COPY frontend ./frontend
 COPY shared ./shared
-RUN --mount=type=cache,target=/app/frontend/node_modules/.vite npm --workspace frontend run build
+RUN npm --workspace frontend run build
 
 # (Optional) Mastra CLI build is skipped in CI to avoid failures; runtime can use dist
 
