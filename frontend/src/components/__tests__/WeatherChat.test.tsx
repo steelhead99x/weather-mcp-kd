@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import WeatherChat from '../WeatherChat'
 
@@ -18,7 +18,7 @@ vi.mock('../../lib/mastraClient', () => {
     throw new Error('Not Found (404)')
   })
 
-  const mockGetAgent = vi.fn(() => ({
+  const mockGetAgent = vi.fn(async () => ({
     streamVNext: mockStreamVNextSuccess,
   }))
 
@@ -94,7 +94,7 @@ describe('WeatherChat', () => {
     expect(button).toBeDisabled()
   })
 
-  it('enables send button for valid ZIP code', () => {
+  it('enables send button for valid ZIP code', async () => {
     render(<WeatherChat />)
 
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
@@ -102,10 +102,13 @@ describe('WeatherChat', () => {
     
     fireEvent.change(input, { target: { value: '94102' } })
 
-    expect(button).not.toBeDisabled()
+    // Wait for agent to load before checking button state
+    await waitFor(() => {
+      expect(button).not.toBeDisabled()
+    })
   })
 
-  it('validates ZIP code format correctly', () => {
+  it('validates ZIP code format correctly', async () => {
     render(<WeatherChat />)
 
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
@@ -118,7 +121,11 @@ describe('WeatherChat', () => {
     
     // Test valid ZIP code
     fireEvent.change(input, { target: { value: '94102' } })
-    expect(button).not.toBeDisabled()
+    
+    // Wait for agent to load before checking button state
+    await waitFor(() => {
+      expect(button).not.toBeDisabled()
+    })
     expect(screen.queryByText(/please enter a valid 5-digit zip code/i)).not.toBeInTheDocument()
   })
 })

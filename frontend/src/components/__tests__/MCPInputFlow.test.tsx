@@ -3,16 +3,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import MCPDebugPanel from '../MCPDebugPanel'
 import WeatherChat from '../WeatherChat'
 
-// Mock the streaming utilities to capture input data
-const mockStreamVNext = vi.fn()
-const mockGetAgent = vi.fn()
-
+// Mock the mastra client
 vi.mock('../../lib/mastraClient', () => ({
   mastra: {
-    getAgent: mockGetAgent
+    getAgent: vi.fn()
   },
+  getWeatherAgentId: () => 'weather',
+  getDisplayHost: () => 'localhost:3000',
   getMastraBaseUrl: () => 'http://localhost:3000'
 }))
+
+// Mock functions for tracking
+const mockStreamVNext = vi.fn()
 
 // Track MCP-specific data flow
 const mcpTrace: Array<{
@@ -24,7 +26,7 @@ const mcpTrace: Array<{
 }> = []
 
 describe('MCP Input Flow Tests', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     mcpTrace.length = 0
     
@@ -62,7 +64,8 @@ describe('MCP Input Flow Tests', () => {
       })
     }
     
-    mockGetAgent.mockResolvedValue(mockAgent)
+    const { mastra } = await import('../../lib/mastraClient')
+    vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent)
   })
 
   it('should trace input from WeatherChat to MCP streamVNext', async () => {
