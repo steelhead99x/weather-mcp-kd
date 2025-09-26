@@ -1,4 +1,8 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
+import { resolve as resolvePath } from 'path';
+
+// Load environment variables from the root project directory
+config({ path: resolvePath(process.cwd(), '../.env') });
 import { Agent } from "@mastra/core";
 import { anthropic } from "@ai-sdk/anthropic";
 import { weatherTool } from "../tools/weather.js";

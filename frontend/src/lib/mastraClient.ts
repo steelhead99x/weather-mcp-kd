@@ -65,7 +65,7 @@ const host = sanitizeHost(rawHost)
 const baseUrl = buildBaseUrl(host)
 
 // Override for direct API connection if no env var is set
-const directApiHost = 'http://localhost:3001'
+const directApiHost = 'http://localhost:3000'
 const finalBaseUrl = rawHost ? baseUrl : directApiHost
 
 console.log('[Mastra] Raw host from env:', rawHost)

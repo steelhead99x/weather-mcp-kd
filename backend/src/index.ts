@@ -1,3 +1,9 @@
+import { config } from 'dotenv';
+import { resolve as resolvePath } from 'path';
+
+// Load environment variables from the root project directory
+config({ path: resolvePath(process.cwd(), '../.env') });
+
 import { Mastra } from '@mastra/core';
 import express from 'express';
 import cors from 'cors';
