@@ -506,9 +506,16 @@ class MuxMCPClient {
                                 }
                             }
 
+                            // Filter out problematic arguments that cause union type issues
+                            const filteredCtx = { ...ctx };
+                            if (filteredCtx.new_asset_settings) {
+                                console.debug(`[invoke_api_endpoint] Filtering out new_asset_settings to avoid union type bug`);
+                                delete filteredCtx.new_asset_settings;
+                            }
+                            
                             const attemptArgs = [
                                 // Correct Mux MCP format - endpoint_name with nested args
-                                { endpoint_name: endpoint, args: ctx },
+                                { endpoint_name: endpoint, args: filteredCtx },
                             ] as any[];
 
                             let lastErr: any;

@@ -159,9 +159,16 @@ class MuxAssetsMCPClient {
                         const idVal = (ctx as any).ASSET_ID || (ctx as any).asset_id || (ctx as any).id;
                         // Use only ASSET_ID as per Mux API schema
                         const path = idVal ? { ASSET_ID: idVal } : undefined;
+                        // Filter out problematic arguments that cause union type issues
+                        const filteredCtx = { ...ctx };
+                        if (filteredCtx.new_asset_settings) {
+                            console.debug(`[invoke_api_endpoint] Filtering out new_asset_settings to avoid union type bug`);
+                            delete filteredCtx.new_asset_settings;
+                        }
+                        
                         const attemptArgs = [
                             // Correct Mux MCP format - endpoint_name with nested args
-                            { endpoint_name: endpoint, args: ctx },
+                            { endpoint_name: endpoint, args: filteredCtx },
                         ] as any[];
                         let lastErr: any;
                         for (const args of attemptArgs) {

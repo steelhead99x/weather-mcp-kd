@@ -923,14 +923,17 @@ const ttsWeatherTool = createTool({
                     cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com'
                 };
                 
-                // Only add new_asset_settings if we need signed playback
-                const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
-                if (playbackPolicy === 'signed') {
-                    // Use a simpler structure to avoid union type issues
-                    (createArgs as any).new_asset_settings = {
-                        playback_policies: ['signed']
-                    };
-                }
+                // TEMPORARY WORKAROUND: Skip new_asset_settings entirely to avoid union type bug
+                // TODO: Remove this workaround when Mux MCP server fixes union type validation
+                console.debug('[tts-weather-upload] Using minimal args to avoid MCP union type bug');
+                
+                // Comment out the problematic new_asset_settings until MCP SDK is fixed
+                // const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
+                // if (playbackPolicy === 'signed') {
+                //     (createArgs as any).new_asset_settings = {
+                //         playback_policies: ['signed']
+                //     };
+                // }
                 
                 // Add test flag if specified
                 if (process.env.MUX_UPLOAD_TEST === 'true') {

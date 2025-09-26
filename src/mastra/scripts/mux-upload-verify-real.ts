@@ -143,17 +143,21 @@ async function main() {
     }
 
     console.log('[mux-upload-verify-real] Creating upload via MCP...');
-    const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
     const createArgs: any = {
         cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com'
     };
     
-    // Only add new_asset_settings if we need signed playback to avoid union type issues
-    if (playbackPolicy === 'signed') {
-        createArgs.new_asset_settings = {
-            playback_policies: ['signed']
-        };
-    }
+    // TEMPORARY WORKAROUND: Skip new_asset_settings entirely to avoid union type bug
+    // TODO: Remove this workaround when Mux MCP server fixes union type validation
+    console.log('[mux-upload-verify-real] Using minimal args to avoid MCP union type bug');
+    
+    // Comment out the problematic new_asset_settings until MCP SDK is fixed
+    // const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
+    // if (playbackPolicy === 'signed') {
+    //     createArgs.new_asset_settings = {
+    //         playback_policies: ['signed']
+    //     };
+    // }
     if (process.env.MUX_UPLOAD_TEST === 'true') createArgs.test = true;
 
     // Add timeout if specified (Mux expects SECONDS, not ms)
