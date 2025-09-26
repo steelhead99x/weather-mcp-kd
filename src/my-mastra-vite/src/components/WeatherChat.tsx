@@ -172,11 +172,6 @@ export default function WeatherChat() {
     }
   }, [])
 
-  // Auto-scroll when messages change
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages, scrollToBottom])
-
   /**
    * Scrolls the chat container to the bottom
    */
@@ -185,6 +180,11 @@ export default function WeatherChat() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [])
+
+  // Auto-scroll when messages change
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, scrollToBottom])
 
 
   /**

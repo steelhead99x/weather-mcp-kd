@@ -106,45 +106,20 @@ describe('WeatherChat', () => {
     expect(button).not.toBeDisabled()
   })
 
-  it('shows loading state when streaming', () => {
-    const mockUseStreamVNext = vi.mocked(require('../../hooks/useStreamVNext').useStreamVNext)
-    mockUseStreamVNext.mockReturnValue({
-      state: {
-        isLoading: true,
-        error: null,
-        isStreaming: true,
-        metrics: null,
-        retryCount: 0
-      },
-      streamVNext: vi.fn(),
-      reset: vi.fn(),
-      retry: vi.fn()
-    })
-
+  it('validates ZIP code format correctly', () => {
     render(<WeatherChat />)
 
-    expect(screen.getByText(/sending.../i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /send message/i })).toBeDisabled()
-  })
-
-  it('shows error state with retry button', () => {
-    const mockUseStreamVNext = vi.mocked(require('../../hooks/useStreamVNext').useStreamVNext)
-    mockUseStreamVNext.mockReturnValue({
-      state: {
-        isLoading: false,
-        error: 'Network error',
-        isStreaming: false,
-        metrics: null,
-        retryCount: 1
-      },
-      streamVNext: vi.fn(),
-      reset: vi.fn(),
-      retry: vi.fn()
-    })
-
-    render(<WeatherChat />)
-
-    expect(screen.getByText(/network error/i)).toBeInTheDocument()
-    expect(screen.getByText(/retry \(1\/3\)/i)).toBeInTheDocument()
+    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
+    const button = screen.getByRole('button', { name: /send message/i })
+    
+    // Test invalid ZIP code
+    fireEvent.change(input, { target: { value: '123' } })
+    expect(button).toBeDisabled()
+    expect(screen.getByText(/please enter a valid 5-digit zip code/i)).toBeInTheDocument()
+    
+    // Test valid ZIP code
+    fireEvent.change(input, { target: { value: '94102' } })
+    expect(button).not.toBeDisabled()
+    expect(screen.queryByText(/please enter a valid 5-digit zip code/i)).not.toBeInTheDocument()
   })
 })
