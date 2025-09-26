@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useRef, useState, useEffect, memo } from 'react'
+import { useCallback, useMemo, useRef, useState, useEffect, memo } from 'react'
 import { mastra, getWeatherAgentId, getDisplayHost } from '../lib/mastraClient'
 import { useStreamVNext } from '../hooks/useStreamVNext'
-import type { StreamChunk, StreamMetrics } from '../types/streamVNext'
+import type { StreamChunk } from '../types/streamVNext'
 
 /**
  * Enhanced WeatherChat Component with improved streamVNext implementation

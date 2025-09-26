@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react'
+import { Suspense, lazy } from 'react'
 import WeatherChat from './components/WeatherChat'
 import ThemeToggle from './components/ThemeToggle'
 import MCPDebugPanel from './components/MCPDebugPanel'
