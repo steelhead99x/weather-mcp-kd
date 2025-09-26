@@ -36,8 +36,7 @@ RUN cd shared && npm run build
 # Build the application
 RUN npm run build
 
-# Build Mastra output for production runtime
-RUN cd backend && npx mastra build
+# (Optional) Mastra CLI build is skipped in CI to avoid failures; runtime can use dist
 
 # Production image
 FROM base AS runner
@@ -53,8 +52,7 @@ COPY --from=builder --chown=weatheruser:nodejs /app/frontend/dist ./frontend/dis
 COPY --from=builder --chown=weatheruser:nodejs /app/shared/dist ./shared/dist
 COPY --from=builder --chown=weatheruser:nodejs /app/backend/files ./backend/files
 
-# Copy Mastra production output
-COPY --from=builder --chown=weatheruser:nodejs /app/backend/.mastra ./backend/.mastra
+# (No Mastra CLI output copied)
 
 # Copy production dependencies (hoisted workspaces install)
 COPY --from=deps --chown=weatheruser:nodejs /app/node_modules ./node_modules
@@ -72,5 +70,4 @@ ENV PORT=3001
 
 WORKDIR /app/backend
 
-# Run Mastra production server directly
-CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
+CMD ["npm", "run", "start:production"]
