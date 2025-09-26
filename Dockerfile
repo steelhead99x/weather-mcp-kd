@@ -11,17 +11,8 @@ COPY backend/package*.json ./backend/
 COPY frontend/package*.json ./frontend/
 COPY shared/package*.json ./shared/
 
-# Install root dependencies
-RUN npm ci --omit=dev
-
-# Install backend dependencies
-RUN cd backend && npm ci --omit=dev
-
-# Install frontend dependencies  
-RUN cd frontend && npm ci --omit=dev
-
-# Install shared dependencies
-RUN cd shared && npm ci --omit=dev
+# Install production dependencies for all workspaces using a single lockfile
+RUN npm ci --workspaces --omit=dev
 
 # Build the application
 FROM base AS builder
@@ -59,11 +50,8 @@ COPY --from=builder --chown=weatheruser:nodejs /app/frontend/dist ./frontend/dis
 COPY --from=builder --chown=weatheruser:nodejs /app/shared/dist ./shared/dist
 COPY --from=builder --chown=weatheruser:nodejs /app/backend/files ./backend/files
 
-# Copy production dependencies
+# Copy production dependencies (hoisted workspaces install)
 COPY --from=deps --chown=weatheruser:nodejs /app/node_modules ./node_modules
-COPY --from=deps --chown=weatheruser:nodejs /app/backend/node_modules ./backend/node_modules
-COPY --from=deps --chown=weatheruser:nodejs /app/frontend/node_modules ./frontend/node_modules
-COPY --from=deps --chown=weatheruser:nodejs /app/shared/node_modules ./shared/node_modules
 
 # Copy package files
 COPY --chown=weatheruser:nodejs package*.json ./
