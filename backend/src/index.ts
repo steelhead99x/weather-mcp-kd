@@ -25,6 +25,112 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'weather-mcp-server', timestamp: new Date().toISOString() });
 });
 
+// Standard Mastra agent endpoints
+app.get('/api/agents', (_req, res) => {
+  res.json([{ id: 'weather', name: 'weatherAgent' }]);
+});
+
+app.get('/api/agents/:agentId', (req, res) => {
+  const agentId = req.params.agentId;
+  if (agentId === 'weather') {
+    res.json({ id: 'weather', name: 'weatherAgent' });
+  } else {
+    res.status(404).json({ error: 'Agent not found' });
+  }
+});
+
+// Standard agent execution endpoint (non-streaming)
+app.post('/api/agents/:agentId/invoke', async (req, res) => {
+  try {
+    const agentId = req.params.agentId;
+    if (agentId !== 'weather') {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Handle different message formats
+    let messages;
+    if (Array.isArray(req.body?.messages)) {
+      messages = req.body.messages;
+    } else if (typeof req.body?.messages === 'string') {
+      messages = [{ role: 'user', content: req.body.messages }];
+    } else if (req.body?.message) {
+      messages = [{ role: 'user', content: String(req.body.message) }];
+    } else {
+      messages = [{ role: 'user', content: 'hello' }];
+    }
+
+    console.log(`[invoke] Received request for agent: ${agentId}`);
+    console.log(`[invoke] Messages:`, messages);
+
+    const result = await weatherAgent.text(messages);
+    res.json({ text: result.text });
+    
+  } catch (error) {
+    console.error('[invoke] Error:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Agent streamVNext endpoint (for MastraClient compatibility)
+app.post('/api/agents/:agentId/streamVNext', async (req, res) => {
+  try {
+    const agentId = req.params.agentId;
+    if (agentId !== 'weather') {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Handle different message formats
+    let messages;
+    if (Array.isArray(req.body?.messages)) {
+      messages = req.body.messages;
+    } else if (typeof req.body?.messages === 'string') {
+      messages = [{ role: 'user', content: req.body.messages }];
+    } else if (req.body?.message) {
+      messages = [{ role: 'user', content: String(req.body.message) }];
+    } else {
+      messages = [{ role: 'user', content: 'hello' }];
+    }
+
+    console.log(`[streamVNext] Received request for agent: ${agentId}`);
+    console.log(`[streamVNext] Messages:`, messages);
+
+    // For MastraClient compatibility, we need to handle this differently
+    // MastraClient expects a streaming response, not a JSON object with streams
+    
+    // Set headers for streaming response
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const stream = await weatherAgent.streamVNext(messages);
+    
+    // Stream the response back to the client
+    if (stream.textStream) {
+      for await (const chunk of stream.textStream) {
+        if (chunk && typeof chunk === 'string') {
+          res.write(chunk);
+        }
+      }
+      res.end();
+    } else if (stream.text) {
+      res.write(stream.text);
+      res.end();
+    } else {
+      res.write('No content available');
+      res.end();
+    }
+    
+  } catch (error) {
+    console.error('[streamVNext] Error:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
 // StreamVNext endpoint for proper streaming support
 app.post('/api/agents/:agentId/stream/vnext', async (req, res) => {
   try {

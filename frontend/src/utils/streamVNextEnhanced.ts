@@ -143,8 +143,20 @@ export class StreamVNextEnhanced {
     const hasTextStream = response.textStream && typeof response.textStream[Symbol.asyncIterator] === 'function'
     const hasFullStream = response.fullStream && typeof response.fullStream[Symbol.asyncIterator] === 'function'
     const hasAsyncIterator = Symbol.asyncIterator in Object(response)
+    
+    // Handle MastraClient HTTP responses - check if it's a Response object or has a ReadableStream
+    const isHttpResponse = response instanceof Response || 
+                          (response.body && typeof response.body.getReader === 'function') ||
+                          (response.stream && typeof response.stream.getReader === 'function')
+    
+    // Handle cases where the response might be a text string (from HTTP streaming endpoints)
+    const isTextResponse = typeof response === 'string' || 
+                          (response.text && typeof response.text === 'string')
 
-    if (!hasTextStream && !hasFullStream && !hasAsyncIterator) {
+    if (!hasTextStream && !hasFullStream && !hasAsyncIterator && !isHttpResponse && !isTextResponse) {
+      console.warn('[StreamVNextEnhanced] Response validation failed. Response:', response)
+      console.warn('[StreamVNextEnhanced] Response type:', typeof response)
+      console.warn('[StreamVNextEnhanced] Response keys:', Object.keys(response || {}))
       throw this.createError('No valid streaming method found in response', 'NO_STREAM', false)
     }
 
@@ -165,6 +177,18 @@ export class StreamVNextEnhanced {
         await this.processFullStream(response.fullStream, onChunk)
       } else if (Symbol.asyncIterator in Object(response)) {
         await this.processGenericStream(response as any, onChunk)
+      } else if (response instanceof Response) {
+        await this.processHttpResponse(response, onChunk)
+      } else if (response.body && typeof response.body.getReader === 'function') {
+        await this.processReadableStream(response.body, onChunk)
+      } else if (response.stream && typeof response.stream.getReader === 'function') {
+        await this.processReadableStream(response.stream, onChunk)
+      } else if (typeof response === 'string') {
+        // Handle direct text response
+        onChunk({ type: 'text', content: response })
+      } else if (response.text && typeof response.text === 'string') {
+        // Handle object with text property
+        onChunk({ type: 'text', content: response.text })
       }
     } catch (error) {
       const normalizedError = this.normalizeError(error)
@@ -363,6 +387,51 @@ export class StreamVNextEnhanced {
    */
   public resetMetrics(): void {
     this.initializeMetrics()
+  }
+
+  /**
+   * Process HTTP Response object (from fetch API)
+   */
+  private async processHttpResponse(
+    response: Response,
+    onChunk: (chunk: StreamChunk) => void
+  ): Promise<void> {
+    if (!response.body) {
+      throw this.createError('Response has no body', 'NO_BODY', false)
+    }
+    
+    await this.processReadableStream(response.body, onChunk)
+  }
+
+  /**
+   * Process ReadableStream (from HTTP responses)
+   */
+  private async processReadableStream(
+    stream: ReadableStream,
+    onChunk: (chunk: StreamChunk) => void
+  ): Promise<void> {
+    const reader = stream.getReader()
+    const decoder = new TextDecoder()
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        
+        if (done) {
+          break
+        }
+        
+        if (value) {
+          const text = decoder.decode(value, { stream: true })
+          if (text) {
+            this.metrics.chunks++
+            onChunk({ type: 'text', content: text })
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
   }
 
 }
