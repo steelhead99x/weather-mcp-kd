@@ -17,8 +17,9 @@ async function checkFfmpegAvailability(): Promise<{ available: boolean; path?: s
     // Try packaged binaries first
     try {
       const ffmpegStatic = await import('ffmpeg-static')
-      if (ffmpegStatic.default && typeof ffmpegStatic.default === 'string' && existsSync(ffmpegStatic.default)) {
-        return { available: true, path: ffmpegStatic.default }
+      const ffmpegPath = ffmpegStatic.default
+      if (ffmpegPath && typeof ffmpegPath === 'string' && existsSync(ffmpegPath)) {
+        return { available: true, path: ffmpegPath }
       }
     } catch {}
 
@@ -87,7 +88,7 @@ describe('Simple FFmpeg Tests', () => {
 
       try {
         console.log('🧪 Testing FFmpeg version command...')
-        const { stdout, stderr } = await execFileAsync(ffmpegInfo.path, ['-version'], { 
+        const { stdout } = await execFileAsync(ffmpegInfo.path, ['-version'], { 
           timeout: 10000 
         })
         
@@ -229,8 +230,9 @@ describe('Simple FFmpeg Tests', () => {
       // Test ffmpeg-static detection logic
       try {
         const ffmpegStatic = await import('ffmpeg-static')
-        if (ffmpegStatic && typeof ffmpegStatic.default === 'string') {
-          packagedCandidates.push(ffmpegStatic.default)
+        const ffmpegPath = ffmpegStatic.default
+        if (ffmpegStatic && ffmpegPath && typeof ffmpegPath === 'string') {
+          packagedCandidates.push(ffmpegPath)
         }
       } catch {
         // Expected in some environments

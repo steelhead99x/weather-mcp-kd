@@ -37,6 +37,15 @@ vi.mock('fs', async () => {
   }
 })
 
+// Mock fs/promises operations
+vi.mock('fs/promises', async () => {
+  const actual = await vi.importActual('fs/promises')
+  return {
+    ...actual,
+    unlink: vi.fn().mockResolvedValue(undefined),
+  }
+})
+
 describe('Weather Agent FFmpeg Functions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -306,7 +315,7 @@ describe('Weather Agent FFmpeg Functions', () => {
     it('should clean up temporary files', async () => {
       console.log('🧹 Testing temporary file cleanup...')
 
-      const { unlink } = await import('fs')
+      const { unlink } = await import('fs/promises')
       const tempImagePath = '/test/image.resized.jpg'
 
       // Simulate cleanup as done in weather agent
