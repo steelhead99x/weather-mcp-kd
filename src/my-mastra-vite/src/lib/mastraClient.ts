@@ -9,7 +9,10 @@ declare module '@mastra/client-js' {
 
 function sanitizeHost(raw: string | undefined): string {
   try {
-    if (!raw) return 'stage-weather-mcp-kd.streamingportfolio.com'
+    if (!raw) {
+      // In production, use the same domain (no subdomain needed)
+      return window.location.hostname || 'weather-mcp-kd.streamingportfolio.com'
+    }
     let v = String(raw).trim()
 
     // Strip surrounding quotes if present
@@ -28,13 +31,13 @@ function sanitizeHost(raw: string | undefined): string {
 
     // Validate hostname format (basic security check)
     if (v && !/^[a-zA-Z0-9.-]+$/.test(v)) {
-      console.warn('[Mastra] Invalid hostname format detected, using default')
-      return 'stage-weather-mcp-kd.streamingportfolio.com'
+      console.warn('[Mastra] Invalid hostname format detected, using current hostname')
+      return window.location.hostname || 'weather-mcp-kd.streamingportfolio.com'
     }
 
-    return v || 'stage-weather-mcp-kd.streamingportfolio.com'
+    return v || window.location.hostname || 'weather-mcp-kd.streamingportfolio.com'
   } catch {
-    return 'stage-weather-mcp-kd.streamingportfolio.com'
+    return window.location.hostname || 'weather-mcp-kd.streamingportfolio.com'
   }
 }
 

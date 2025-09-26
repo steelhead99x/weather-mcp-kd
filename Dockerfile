@@ -1,5 +1,5 @@
-# Digital Ocean App Platform - DOCKER ONLY DEPLOYMENT
-# This is the ONLY deployment configuration - ignore package.json
+# Digital Ocean App Platform - Full Stack Deployment
+# Serves both Mastra backend API and Vite frontend
 FROM node:20-alpine
 
 # Install ffmpeg for video processing (system ffmpeg with musl)
@@ -7,21 +7,30 @@ RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 
-# Copy package files (lockfile optional)
+# Copy root package files
 COPY package*.json ./
 
-# Install all dependencies (including dev) for build
+# Install root dependencies (including dev) for build
 RUN npm install
 
 # Copy source code
 COPY . .
 
-# Ensure background images directory exists. Do NOT create an empty fallback image; the app
-# will generate a valid tiny PNG at runtime if none is provided.
+# Ensure background images directory exists
 RUN mkdir -p files/images
 
-# Build the application
+# Build the Mastra backend
 RUN npm run build
+
+# Build the Vite frontend
+WORKDIR /app/src/my-mastra-vite
+COPY src/my-mastra-vite/package*.json ./
+RUN npm ci
+COPY src/my-mastra-vite/ ./
+RUN npm run build
+
+# Go back to root and clean up
+WORKDIR /app
 
 # Remove dev dependencies to reduce image size
 RUN npm prune --omit=dev
@@ -34,9 +43,7 @@ EXPOSE 8080
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV HOST=0.0.0.0
-# Ensure temp dir is configurable
 ENV TTS_TMP_DIR=/tmp/tts
-# Enable CORS for production domain
 ENV CORS_ORIGIN=https://weather-mcp-kd.streamingportfolio.com
 
 # Memory optimization for ffmpeg
@@ -49,5 +56,5 @@ ENV FFMPEG_THREADS=0
 # Enable garbage collection for memory optimization
 ENV NODE_OPTIONS="--expose-gc --max-old-space-size=1024"
 
-# Use direct node command instead of npm to avoid package.json detection
-CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
+# Use the fullstack production server that serves both backend and frontend
+CMD ["npm", "run", "start:fullstack"]
