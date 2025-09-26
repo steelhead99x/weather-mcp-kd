@@ -266,7 +266,24 @@ export default function WeatherChat() {
         setAgent(loadedAgent as WeatherAgent)
         setAgentError(null)
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
+        let errorMessage: string
+        
+        if (error instanceof Error) {
+          errorMessage = error.message
+        } else if (error && typeof error === 'object') {
+          // Handle object errors properly
+          if ('message' in error && typeof error.message === 'string') {
+            errorMessage = error.message
+          } else if ('code' in error || 'status' in error) {
+            // Try to create a meaningful message from object properties
+            errorMessage = JSON.stringify(error)
+          } else {
+            errorMessage = 'Unknown error object'
+          }
+        } else {
+          errorMessage = String(error) || 'Unknown error'
+        }
+        
         setAgentError(`Failed to load weather agent: ${errorMessage}`)
         setAgent(null)
       }
