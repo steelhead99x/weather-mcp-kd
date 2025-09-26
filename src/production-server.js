@@ -103,7 +103,7 @@ app.get('/health', (req, res) => {
 })
 
 // Serve frontend for all other routes (SPA routing)
-app.get('/*', (req, res) => {
+app.use((req, res) => {
   res.sendFile(join(frontendDistPath, 'index.html'))
 })
 
