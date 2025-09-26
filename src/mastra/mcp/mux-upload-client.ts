@@ -428,6 +428,15 @@ class MuxMCPClient {
                         });
                     } catch (toolError) {
                         Logger.warn(`Skipping tool ${tool.name} due to error:`, toolError);
+                        // Log the specific schema that caused the issue
+                        if (toolError instanceof Error && toolError.message.includes('union')) {
+                            console.error(`Union error for tool ${tool.name}:`, {
+                                toolName: tool.name,
+                                inputSchema: tool.inputSchema,
+                                error: toolError.message,
+                                stack: toolError.stack
+                            });
+                        }
                     }
                 }
             }
@@ -537,6 +546,25 @@ class MuxMCPClient {
         }
 
         try {
+            // Handle union types (anyOf, oneOf, allOf)
+            if (inputSchema.anyOf) {
+                const unionTypes = inputSchema.anyOf.map((schema: any) => this.convertToZodSchema(schema));
+                return z.union(unionTypes as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+            }
+            
+            if (inputSchema.oneOf) {
+                const unionTypes = inputSchema.oneOf.map((schema: any) => this.convertToZodSchema(schema));
+                return z.union(unionTypes as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+            }
+            
+            if (inputSchema.allOf) {
+                // For allOf, we typically want to merge the schemas
+                const mergedSchema = inputSchema.allOf.reduce((acc: any, schema: any) => {
+                    return { ...acc, ...schema };
+                }, {});
+                return this.convertToZodSchema(mergedSchema);
+            }
+
             // Handle JSON Schema to Zod conversion
             if (inputSchema.type === 'object' && inputSchema.properties) {
                 const schemaObject: Record<string, z.ZodTypeAny> = {};
