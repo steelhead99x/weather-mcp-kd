@@ -208,11 +208,11 @@ export default function MCPDebugPanel() {
                       const baseUrl = getMastraBaseUrl()
                       const healthUrl = baseUrl.endsWith('/') ? `${baseUrl}health` : `${baseUrl}/health`
                       fetch(healthUrl)
-                      .then(res => res.json())
-                      .then(data => console.log('[MCPDebug] Health check result:', data))
-                      .catch(err => console.error('[MCPDebug] Health check error:', err))
+                        .then(res => res.json())
+                        .then(data => console.log('[MCPDebug] Health check result:', data))
+                        .catch(err => console.error('[MCPDebug] Health check error:', err))
                     }
-                  }
+                  }}
                   className="w-full text-left px-3 py-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100"
                 >
                   Test Connection
