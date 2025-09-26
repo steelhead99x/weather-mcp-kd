@@ -139,7 +139,11 @@ describe('Debug Stream Error Test', () => {
       
       mockStreamVNext.mockRejectedValue(testCase.error)
       
-      const { unmount } = render(<WeatherChat />)
+      let renderResult: ReturnType<typeof render> | undefined
+      await act(async () => {
+        renderResult = render(<WeatherChat />)
+      })
+      const { unmount } = renderResult!
       
       // Wait for agent to load
       await new Promise(resolve => setTimeout(resolve, 50))

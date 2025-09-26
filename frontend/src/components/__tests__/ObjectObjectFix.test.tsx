@@ -137,7 +137,11 @@ describe('[object Object] Fix Tests', () => {
       
       mockStreamVNext.mockRejectedValue(testCase.error)
       
-      const { unmount } = render(<WeatherChat />)
+      let renderResult: ReturnType<typeof render> | undefined
+      await act(async () => {
+        renderResult = render(<WeatherChat />)
+      })
+      const { unmount } = renderResult!
       
       const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
       fireEvent.change(input, { target: { value: '85001' } })
