@@ -204,7 +204,7 @@ describe('Tool Display Functionality', () => {
     
     // Should show the actual data
     expect(screen.getByText(/zip_code/i)).toBeInTheDocument()
-    expect(screen.getByText(/85001/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/85001/i)).toHaveLength(2) // User message + tool args
     expect(screen.getByText(/Phoenix, AZ/i)).toBeInTheDocument()
   })
 
@@ -237,15 +237,16 @@ describe('Tool Display Functionality', () => {
     
     // Check that complex objects are properly formatted
     await waitFor(() => {
-      const resultSection = screen.getByText(/Result:/i).closest('div')
-      expect(resultSection).toBeInTheDocument()
+      // Check that the result section exists
+      expect(screen.getByText(/Result:/i)).toBeInTheDocument()
+      
+      // Check that the temperature and conditions are properly formatted in the result JSON
+      expect(screen.getByText(/temperature/i)).toBeInTheDocument()
+      expect(screen.getByText(/conditions/i)).toBeInTheDocument()
       
       // Should not contain [object Object]
-      expect(resultSection?.textContent).not.toContain('[object Object]')
-      
-      // Should contain properly formatted JSON
-      expect(resultSection?.textContent).toContain('temperature')
-      expect(resultSection?.textContent).toContain('conditions')
+      const allText = document.body.textContent || ''
+      expect(allText).not.toContain('[object Object]')
     })
   })
 

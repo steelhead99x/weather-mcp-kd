@@ -59,7 +59,7 @@ describe('App Component', () => {
     
     // Should render without errors
     expect(container).toBeTruthy();
-    expect(container.firstChild).toBeTruthy();
+    expect(container!.firstChild).toBeTruthy();
   });
 
   it('should render weather chat component', async () => {
