@@ -23,7 +23,7 @@ describe('Simple [object Object] Test', () => {
           yield 'Test response'
         }
       })
-    }
+    } as any
     
     const { mastra } = await import('../../lib/mastraClient')
     vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent)

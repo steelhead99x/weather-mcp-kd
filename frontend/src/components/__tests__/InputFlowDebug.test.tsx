@@ -68,7 +68,7 @@ describe('Input Flow Debug Tests', () => {
     
     // Setup mock agent
     const { mastra } = await import('../../lib/mastraClient')
-    vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent)
+    vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent as any)
   })
 
   it('should pass string input correctly through the entire flow', async () => {
@@ -156,7 +156,7 @@ describe('Input Flow Debug Tests', () => {
     button = screen.getByRole('button', { name: /send message/i })
     
     // If button is still disabled, skip this test as it's dependent on the mock response flow
-    if (button.disabled) {
+    if ((button as HTMLButtonElement).disabled) {
       console.log('Button still disabled - skipping complex input test')
       return
     }
@@ -226,7 +226,7 @@ describe('Input Flow Debug Tests', () => {
 
   it('should identify where object serialization might occur', async () => {
     // Mock different scenarios that could cause [object Object]
-    const problematicInputs = [
+    const problematicInputs: any[] = [
       { content: '85001' },                    // Object with content property
       ['85001'],                               // Array
       new String('85001'),                     // String object

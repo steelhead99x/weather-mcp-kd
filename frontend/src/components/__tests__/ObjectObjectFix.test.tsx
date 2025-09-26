@@ -25,7 +25,7 @@ describe('[object Object] Fix Tests', () => {
     }
     
     const { mastra } = await import('../../lib/mastraClient')
-    vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent)
+    vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent as any)
   })
 
   it('should handle string messages correctly (baseline test)', async () => {
@@ -214,9 +214,9 @@ describe('[object Object] Fix Tests', () => {
       // Test various input types that could cause issues
       const testInputs = [
         { input: 'normal string', expected: 'normal string' },
-        { input: { content: 'message content' }, expected: 'message content' },
-        { input: [{ content: 'array message' }], expected: 'array message' },
-        { input: { messages: 'mastra format' }, expected: 'mastra format' },
+        { input: { content: 'message content' } as any, expected: 'message content' },
+        { input: [{ content: 'array message' }] as any, expected: 'array message' },
+        { input: { messages: 'mastra format' } as any, expected: 'mastra format' },
         { input: ['string1', 'string2'], expected: 'string1 string2' },
         { input: { toString: () => 'custom string' }, expected: 'custom string' }
       ]

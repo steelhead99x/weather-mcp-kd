@@ -23,7 +23,7 @@ describe('Debug Stream Error Test', () => {
     // Create a mock agent
     const mockAgent = {
       streamVNext: mockStreamVNext
-    }
+    } as any
     
     const { mastra } = await import('../../lib/mastraClient')
     vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent)
@@ -88,7 +88,7 @@ describe('Debug Stream Error Test', () => {
       console.log('Error object:', testCase.error)
       
       const mockStreamVNext = vi.fn()
-      const mockAgent = { streamVNext: mockStreamVNext }
+      const mockAgent = { streamVNext: mockStreamVNext } as any
       
       const { mastra } = await import('../../lib/mastraClient')
       vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent)

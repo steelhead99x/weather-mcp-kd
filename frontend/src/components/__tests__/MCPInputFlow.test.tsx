@@ -65,7 +65,7 @@ describe('MCP Input Flow Tests', () => {
     }
     
     const { mastra } = await import('../../lib/mastraClient')
-    vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent)
+    vi.mocked(mastra.getAgent).mockResolvedValue(mockAgent as any)
   })
 
   it('should trace input from WeatherChat to MCP streamVNext', async () => {
@@ -156,21 +156,21 @@ describe('MCP Input Flow Tests', () => {
       // Case 1: Message as object with content property
       { 
         name: 'Object with content property',
-        input: { content: '85001' },
+        input: { content: '85001' } as any,
         shouldFail: true 
       },
       
       // Case 2: Messages array format
       { 
         name: 'Messages array format',
-        input: [{ role: 'user', content: '85001' }],
+        input: [{ role: 'user', content: '85001' }] as any,
         shouldFail: true 
       },
       
       // Case 3: MastraClient message format
       { 
         name: 'Mastra message format',
-        input: { messages: '85001' },
+        input: { messages: '85001' } as any,
         shouldFail: true 
       },
       
@@ -221,7 +221,7 @@ describe('MCP Input Flow Tests', () => {
         })
         
         // Simulate the problematic call
-        await mockStreamVNext.mock.fn(testCase.input, {})
+        await mockStreamVNext(testCase.input, {})
         
       } catch (error) {
         console.log(`  Error: ${error}`)
@@ -274,7 +274,7 @@ describe('MCP Input Flow Tests', () => {
     }
     
     // Test the fix function
-    const testInputs = [
+    const testInputs: any[] = [
       '85001',
       { content: '85001' },
       { messages: '85001' },
