@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { getMastraBaseUrl } from '../lib/mastraClient'
 
 interface MCPDebugInfo {
   connectionStatus: 'connected' | 'disconnected' | 'error' | 'testing'
@@ -62,7 +63,9 @@ export default function MCPDebugPanel() {
       try {
         setDebugInfo(prev => ({ ...prev, connectionStatus: 'testing' }))
         
-        const response = await fetch('/api/health', {
+        const baseUrl = getMastraBaseUrl()
+        const healthUrl = baseUrl.endsWith('/') ? `${baseUrl}health` : `${baseUrl}/health`
+        const response = await fetch(healthUrl, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }
         })
@@ -201,11 +204,15 @@ export default function MCPDebugPanel() {
                 <button
                   onClick={() => {
                     console.log('[MCPDebug] Manual connection test triggered')
-                    fetch('/api/health')
+                    {
+                      const baseUrl = getMastraBaseUrl()
+                      const healthUrl = baseUrl.endsWith('/') ? `${baseUrl}health` : `${baseUrl}/health`
+                      fetch(healthUrl)
                       .then(res => res.json())
                       .then(data => console.log('[MCPDebug] Health check result:', data))
                       .catch(err => console.error('[MCPDebug] Health check error:', err))
-                  }}
+                    }
+                  }
                   className="w-full text-left px-3 py-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100"
                 >
                   Test Connection

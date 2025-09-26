@@ -19,6 +19,8 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./.tsbuildcache/tsconfig.tsbuildinfo",
     "outDir": "./dist",
     "rootDir": "./src",
     "baseUrl": ".",

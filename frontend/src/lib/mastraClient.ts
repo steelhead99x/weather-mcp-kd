@@ -98,25 +98,7 @@ async function testConnection() {
       const data = await response.json()
       console.log('[Mastra] Connection test successful:', data)
     } else {
-      console.warn('[Mastra] Health endpoint failed, trying agent endpoint...')
-      // Fallback to agent endpoint test
-      const testUrl = finalBaseUrl.endsWith('/') ? `${finalBaseUrl}api/agents/weatherAgent/stream/vnext` : `${finalBaseUrl}/api/agents/weatherAgent/stream/vnext`
-      
-      const agentResponse = await fetch(testUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: 'test connection' }]
-        })
-      })
-      
-      if (agentResponse.ok) {
-        console.log('[Mastra] Agent endpoint test successful')
-      } else {
-        console.warn('[Mastra] Agent endpoint test failed:', agentResponse.status, agentResponse.statusText)
-      }
+      console.warn('[Mastra] Health endpoint failed:', response.status, response.statusText)
     }
   } catch (error) {
     console.error('[Mastra] Connection test error:', error)
@@ -166,4 +148,9 @@ export function getWeatherAgentId() {
 // Optional helper for UI/status displays
 export function getDisplayHost() {
   return host
+}
+
+// Expose resolved base URL for other UI components (e.g., debug panels)
+export function getMastraBaseUrl() {
+  return finalBaseUrl
 }

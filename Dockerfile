@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.6
 # Multi-stage build for production
 FROM node:20-alpine AS base
 
@@ -12,7 +13,7 @@ COPY frontend/package*.json ./frontend/
 COPY shared/package*.json ./shared/
 
 # Install production dependencies for all workspaces using a single lockfile
-RUN npm ci --workspaces --omit=dev
+RUN --mount=type=cache,target=/root/.npm npm ci --workspaces --omit=dev
 
 # Build the application
 FROM base AS builder
@@ -25,16 +26,18 @@ COPY frontend/package*.json ./frontend/
 COPY shared/package*.json ./shared/
 
 # Install all dependencies for all workspaces (including dev)
-RUN npm ci --workspaces --include=dev
+RUN --mount=type=cache,target=/root/.npm npm ci --workspaces --include=dev
 
 # Copy source code
 COPY . .
 
 # Build shared package first
-RUN cd shared && npm run build
+RUN --mount=type=cache,target=/app/shared/.tsbuildcache cd shared && npm run build
 
 # Build the application
-RUN npm run build
+RUN --mount=type=cache,target=/app/backend/.tsbuildcache \
+    --mount=type=cache,target=/app/frontend/node_modules/.vite \
+    npm run build
 
 # (Optional) Mastra CLI build is skipped in CI to avoid failures; runtime can use dist
 
@@ -46,8 +49,7 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 weatheruser
 
-# Optional: install ffmpeg for TTS/video features
-RUN apk add --no-cache ffmpeg
+# Optional: system ffmpeg not installed; project uses ffmpeg-static
 
 # Copy built application
 COPY --from=builder --chown=weatheruser:nodejs /app/backend/dist ./backend/dist
