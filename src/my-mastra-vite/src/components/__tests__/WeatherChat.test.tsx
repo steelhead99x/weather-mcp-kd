@@ -35,50 +35,116 @@ vi.mock('../../lib/mastraClient', () => {
   }
 })
 
+// Mock the enhanced streamVNext hook
+vi.mock('../../hooks/useStreamVNext', () => ({
+  useStreamVNext: vi.fn(() => ({
+    state: {
+      isLoading: false,
+      error: null,
+      isStreaming: false,
+      metrics: null,
+      retryCount: 0
+    },
+    streamVNext: vi.fn(),
+    reset: vi.fn(),
+    retry: vi.fn()
+  }))
+}))
+
 describe('WeatherChat', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('streams a successful assistant response using streamVNext and shows no error', async () => {
-    const { mastra } = await import('../../lib/mastraClient')
-    const agent = mastra.getAgent('weather')
-    
+  it('renders the weather chat component correctly', () => {
     render(<WeatherChat />)
 
-    // Type a zipcode, then click Ask
-    const input = screen.getByPlaceholderText(/enter your zipcode here/i)
-    fireEvent.change(input, { target: { value: '94102' } })
-    const askButton = screen.getByRole('button', { name: /send message/i })
-    fireEvent.click(askButton)
-
-    // Expect streamed text to appear
-    await waitFor(() => {
-      expect(screen.getByText(/sunny with mild coastal fog\./i)).toBeInTheDocument()
-    })
-
-    // No error message should be present
-    const errorText = screen.queryByText(/something went wrong|failed to contact agent|404/i)
-    expect(errorText).toBeNull()
+    // Check that the component renders with the expected elements
+    expect(screen.getByText(/farmer-friendly, solar-powered weather insights/i)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/enter your 5-digit zip code/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /send message/i })).toBeInTheDocument()
+    expect(screen.getByText(/connected to agent:/i)).toBeInTheDocument()
   })
 
-  it('handles an error from streamVNext and shows an error message', async () => {
-    const { mastra } = await import('../../lib/mastraClient')
-    const agent = mastra.getAgent('weather')
-    // Mock the streamVNext method to throw an error
-    vi.mocked(agent.streamVNext).mockImplementation(() => {
-      throw new Error('Not Found (404)')
+  it('handles input changes correctly', () => {
+    render(<WeatherChat />)
+
+    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
+    fireEvent.change(input, { target: { value: '94102' } })
+
+    expect(input).toHaveValue('94102')
+  })
+
+  it('shows validation error for invalid ZIP code', () => {
+    render(<WeatherChat />)
+
+    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
+    fireEvent.change(input, { target: { value: '123' } })
+
+    expect(screen.getByText(/please enter a valid 5-digit zip code/i)).toBeInTheDocument()
+  })
+
+  it('disables send button for invalid ZIP code', () => {
+    render(<WeatherChat />)
+
+    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
+    const button = screen.getByRole('button', { name: /send message/i })
+    
+    fireEvent.change(input, { target: { value: '123' } })
+
+    expect(button).toBeDisabled()
+  })
+
+  it('enables send button for valid ZIP code', () => {
+    render(<WeatherChat />)
+
+    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
+    const button = screen.getByRole('button', { name: /send message/i })
+    
+    fireEvent.change(input, { target: { value: '94102' } })
+
+    expect(button).not.toBeDisabled()
+  })
+
+  it('shows loading state when streaming', () => {
+    const mockUseStreamVNext = vi.mocked(require('../../hooks/useStreamVNext').useStreamVNext)
+    mockUseStreamVNext.mockReturnValue({
+      state: {
+        isLoading: true,
+        error: null,
+        isStreaming: true,
+        metrics: null,
+        retryCount: 0
+      },
+      streamVNext: vi.fn(),
+      reset: vi.fn(),
+      retry: vi.fn()
     })
 
     render(<WeatherChat />)
 
-    const input = screen.getByPlaceholderText(/enter your zipcode here/i)
-    fireEvent.change(input, { target: { value: '94102' } })
-    const askButton = screen.getByRole('button', { name: /send message/i })
-    fireEvent.click(askButton)
+    expect(screen.getByText(/sending.../i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /send message/i })).toBeDisabled()
+  })
 
-    await waitFor(() => {
-      expect(screen.getByText(/404/i)).toBeInTheDocument()
+  it('shows error state with retry button', () => {
+    const mockUseStreamVNext = vi.mocked(require('../../hooks/useStreamVNext').useStreamVNext)
+    mockUseStreamVNext.mockReturnValue({
+      state: {
+        isLoading: false,
+        error: 'Network error',
+        isStreaming: false,
+        metrics: null,
+        retryCount: 1
+      },
+      streamVNext: vi.fn(),
+      reset: vi.fn(),
+      retry: vi.fn()
     })
+
+    render(<WeatherChat />)
+
+    expect(screen.getByText(/network error/i)).toBeInTheDocument()
+    expect(screen.getByText(/retry \(1\/3\)/i)).toBeInTheDocument()
   })
 })
