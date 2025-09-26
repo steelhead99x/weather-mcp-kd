@@ -3,7 +3,7 @@ import { z } from "zod";
 
 const USER_AGENT = process.env.WEATHER_MCP_USER_AGENT || "WeatherAgent/1.0 (weather-agent@streamingportfolio.com)";
 
-export const weatherTool = createTool({
+export const weatherTool: any = createTool({
     id: "get-weather",
     description: "Get comprehensive weather information for a specific ZIP code using the National Weather Service API (api.weather.gov)",
     inputSchema: z.object({
