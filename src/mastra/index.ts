@@ -3,7 +3,6 @@ import { Mastra } from "@mastra/core/mastra";
 import { InMemoryStore } from "@mastra/core/storage";
 import { registerApiRoute } from "@mastra/core/server";
 import { weatherAgent } from "./agents/weather-agent.js";
-import { weatherMcpServer } from "./mcp/weather-server.js";
 
 const corsOrigins = [
     'http://localhost:3000',
@@ -23,9 +22,6 @@ console.log('🚀 Starting Weather Agent...');
 export const mastra = new Mastra({
     agents: {
         weatherAgent
-    },
-    mcpServers: {
-        weatherMcpServer
     },
     storage: new InMemoryStore(),
     server: {

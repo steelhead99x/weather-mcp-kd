@@ -326,52 +326,18 @@ export default function WeatherChat() {
         console.log('[WeatherChat] Agent streamVNext method:', typeof (agent as any).streamVNext)
         console.log('[WeatherChat] Agent stream method:', typeof (agent as any).stream)
         
-        // Use Mastra MCP streaming with proper configuration
-        if (typeof (agent as any).streamVNext === 'function') {
-          console.log('[WeatherChat] Using Mastra MCP streamVNext method')
+        // Use Mastra streaming with proper configuration
+        if (typeof (agent as any).stream === 'function') {
+          console.log('[WeatherChat] Using Mastra stream method')
           
-          // Get dynamic toolsets for this request
-          const dynamicToolsets = await mastra.getDynamicToolsets?.() || {}
-          console.log('[WeatherChat] Dynamic toolsets:', Object.keys(dynamicToolsets))
-          
-          response = await (agent as any).streamVNext(
-            userMsg.content,
-            {
-              format: 'mastra', // Use Mastra MCP format for optimal performance
-              system: systemPrompt,
-              memory: {
-                thread: threadId,
-                resource: resourceId,
-              },
-              toolsets: dynamicToolsets,
-              // Add proper error handling and callbacks
-              onChunk: (chunk: any) => {
-                console.debug('[WeatherChat] Mastra MCP chunk:', chunk)
-                // Handle chunks immediately if needed
-              },
-              onError: ({ error }: { error: Error | string }) => {
-                console.error('[WeatherChat] Mastra MCP error:', error)
-                setError(formatError(error))
-              },
-              onFinish: (result: any) => {
-                console.log('[WeatherChat] Mastra MCP finished:', result)
-                receivedText = true
-                try { clearTimeout(timeoutId) } catch {}
-              },
-              // Model settings for better performance
-              modelSettings: {
-                temperature: 0.7,
-                maxRetries: 3,
-              },
-              // Ensure proper tool handling
-              toolChoice: 'auto',
-            }
-          )
-          console.log('[WeatherChat] streamVNext response:', response)
-          console.log('[WeatherChat] streamVNext response type:', typeof response)
-          console.log('[WeatherChat] streamVNext response keys:', response ? Object.keys(response) : 'null')
+          response = await (agent as any).stream([
+            { role: 'user', content: userMsg.content }
+          ])
+          console.log('[WeatherChat] stream response:', response)
+          console.log('[WeatherChat] stream response type:', typeof response)
+          console.log('[WeatherChat] stream response keys:', response ? Object.keys(response) : 'null')
         } else {
-          throw new Error('Agent streamVNext is not available in this client. Please ensure you are using a compatible Mastra version.')
+          throw new Error('Agent stream is not available in this client. Please ensure you are using a compatible Mastra version.')
         }
 
         let receivedText = false
@@ -643,9 +609,9 @@ export default function WeatherChat() {
           }
         }
         
-        // Handle streamVNext response (MastraModelOutput) - with fallback support
+        // Handle Mastra stream response
         if (response && typeof response.textStream === 'object' && response.textStream) {
-          console.log('[WeatherChat] Using textStream from MastraModelOutput (streamVNext)')
+          console.log('[WeatherChat] Using textStream from Mastra stream')
           
           // Use async iterator for cleaner code
           try {
@@ -669,7 +635,7 @@ export default function WeatherChat() {
             }
           }
         } else if (response && typeof response.fullStream === 'object' && response.fullStream) {
-          console.log('[WeatherChat] Using fullStream from MastraModelOutput (streamVNext)')
+          console.log('[WeatherChat] Using fullStream from Mastra stream')
           
           // Use async iterator for cleaner code
           try {
@@ -693,16 +659,8 @@ export default function WeatherChat() {
               setError(`Stream error: ${errorMsg}`)
             }
           }
-        } else if (typeof response?.processDataStream === 'function') {
-          console.log('[WeatherChat] Using processDataStream (legacy stream) - fallback')
-          await response.processDataStream({ onChunk: handleChunk })
-        } else if (typeof (response as any)?.stream === 'function') {
-          console.log('[WeatherChat] Using stream() method (legacy stream) - fallback')
-          for await (const chunk of (response as any).stream()) {
-            handleChunk(chunk)
-          }
         } else if (response && Symbol.asyncIterator in Object(response)) {
-          console.log('[WeatherChat] Using async iterator - fallback')
+          console.log('[WeatherChat] Using async iterator')
           for await (const chunk of response as any) {
             handleChunk(chunk)
           }
@@ -710,13 +668,6 @@ export default function WeatherChat() {
           console.error('[WeatherChat] No valid streaming method found in response')
           console.error('[WeatherChat] Response type:', typeof response)
           console.error('[WeatherChat] Response keys:', response ? Object.keys(response) : 'null')
-          console.error('[WeatherChat] Response properties:', {
-            hasTextStream: !!(response?.textStream),
-            hasFullStream: !!(response?.fullStream),
-            hasProcessDataStream: !!(response?.processDataStream),
-            hasStream: !!(response?.stream),
-            hasAsyncIterator: response ? Symbol.asyncIterator in Object(response) : false,
-          })
           setError('No valid streaming method found in agent response. Please check your Mastra server configuration.')
         }
         
