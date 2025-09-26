@@ -29,8 +29,12 @@ export const mastra = new Mastra({
     },
     storage: new InMemoryStore(),
     server: {
-        port: parseInt(process.env.PORT || '8080', 10),
+        port: parseInt(process.env.PORT || '4111', 10),
         host: process.env.HOST || '0.0.0.0',
+        build: {
+            openAPIDocs: true,
+            swaggerUI: true
+        },
         cors: {
             origin: corsOrigins,
             credentials: true,
