@@ -220,8 +220,15 @@ describe('MCP Input Flow Tests', () => {
       console.log(`  Input:`, testCase.input)
       console.log(`  Type: ${typeof testCase.input}`)
       
-      const serialized = String(testCase.input)
-      console.log(`  Serialized: "${serialized}"`)
+      // Safe string conversion
+      let serialized: string
+      try {
+        serialized = String(testCase.input)
+        console.log(`  Serialized: "${serialized}"`)
+      } catch (error) {
+        serialized = '[object Object]'
+        console.log(`  Serialized: Error - ${error}`)
+      }
       
       const isObjectString = serialized === '[object Object]'
       console.log(`  Becomes [object Object]: ${isObjectString}`)

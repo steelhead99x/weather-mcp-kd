@@ -261,11 +261,24 @@ describe('Input Flow Debug Tests', () => {
     problematicInputs.forEach((input, index) => {
       console.log(`\nTesting problematic input ${index + 1}:`, input)
       console.log(`  - typeof: ${typeof input}`)
-      console.log(`  - String(): "${String(input)}"`)
-      console.log(`  - JSON.stringify(): ${JSON.stringify(input)}`)
+      
+      // Safe string conversion
+      let stringResult: string
+      try {
+        stringResult = String(input)
+        console.log(`  - String(): "${stringResult}"`)
+      } catch (error) {
+        stringResult = '[object Object]'
+        console.log(`  - String(): Error - ${error}`)
+      }
+      
+      try {
+        console.log(`  - JSON.stringify(): ${JSON.stringify(input)}`)
+      } catch (error) {
+        console.log(`  - JSON.stringify(): Error - ${error}`)
+      }
       
       // Check if this would cause [object Object]
-      const stringResult = String(input)
       if (stringResult === '[object Object]') {
         console.warn(`⚠️  Input ${index + 1} causes [object Object]!`)
       } else {
