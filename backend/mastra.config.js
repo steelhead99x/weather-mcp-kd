@@ -11,5 +11,6 @@ export default {
   },
   mcpServers: {
     weatherServer: './src/mcp/weather-server.ts'
-  }
+  },
+  telemetry: './src/mastra/telemetry.ts'
 };
