@@ -16,23 +16,88 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'weather-mcp-server', timestamp: new Date().toISOString() });
 });
 
-// Minimal compatibility endpoint used by frontend connectivity checks
+// StreamVNext endpoint for proper streaming support
 app.post('/api/agents/:agentId/stream/vnext', async (req, res) => {
   try {
+    const agentId = req.params.agentId;
     const messages = Array.isArray(req.body?.messages)
       ? req.body.messages
       : [{ role: 'user', content: String(req.body?.message ?? 'hello') }];
 
-    // Attempt to invoke the agent to ensure wiring works; return simple JSON (no streaming)
-    try {
-      const stream = await weatherAgent.streamVNext(messages);
-      const text = await stream.text;
-      res.json({ streamed: false, text, method: 'streamVNext' });
-    } catch (e) {
-      res.status(200).json({ streamed: false, text: 'ok', method: 'noop' });
+    // Set headers for streaming response
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    console.log(`[streamVNext] Received request for agent: ${agentId}`);
+    console.log(`[streamVNext] Messages:`, messages.length);
+
+    // Call the agent with proper streaming
+    const stream = await weatherAgent.streamVNext(messages);
+
+    // Handle the streaming response properly
+    if (stream.textStream) {
+      // This is a proper streaming response
+      res.writeHead(200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+
+      let chunkCount = 0;
+      try {
+        for await (const chunk of stream.textStream) {
+          if (chunk && typeof chunk === 'string') {
+            chunkCount++;
+            res.write(chunk);
+          }
+        }
+        console.log(`[streamVNext] Stream completed with ${chunkCount} chunks`);
+      } catch (streamError) {
+        console.error('[streamVNext] Stream error:', streamError);
+      }
+
+      res.end();
+    } else if (stream.fullStream) {
+      // Handle full stream chunks
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+
+      let chunkCount = 0;
+      try {
+        for await (const chunk of stream.fullStream) {
+          if (chunk && chunk.type === 'text' && chunk.content) {
+            chunkCount++;
+            res.write(chunk.content);
+          }
+        }
+        console.log(`[streamVNext] Full stream completed with ${chunkCount} chunks`);
+      } catch (streamError) {
+        console.error('[streamVNext] Full stream error:', streamError);
+      }
+
+      res.end();
+    } else {
+      // Fallback: return simple text response
+      const text = stream.text || 'Stream completed';
+      res.json({
+        streamed: true,
+        text,
+        method: 'streamVNext',
+        chunks: 1
+      });
     }
+
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    console.error('[streamVNext] Error:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : String(error),
+      streamed: false
+    });
   }
 });
 
