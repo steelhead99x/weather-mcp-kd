@@ -6,12 +6,14 @@
   "description": "Weather agent using Mastra with MCP tools to upload tts audio files to mux.",
   "scripts": {
     "dev": "mastra dev",
-    "build": "NODE_OPTIONS=--max-old-space-size=2048 npm run compile && NODE_OPTIONS=--max-old-space-size=2048 mastra build",
+    "dev:frontend": "vite",
+    "build": "NODE_OPTIONS=--max-old-space-size=2048 npm run compile && NODE_OPTIONS=--max-old-space-size=2048 mastra build && npm run build:frontend",
+    "build:frontend": "vite build",
     "postbuild": "mkdir -p dist && cp -R files dist/files || true",
     "compile": "NODE_OPTIONS=--max-old-space-size=2048 tsc --build --verbose",
-    "clean": "rm -rf dist .mastra",
+    "clean": "rm -rf dist .mastra src/my-mastra-vite/dist",
     "prebuild": "npm run clean",
-    "build:fast": "NODE_OPTIONS=--max-old-space-size=2048 mastra build",
+    "build:fast": "NODE_OPTIONS=--max-old-space-size=2048 mastra build && npm run build:frontend",
     "build:check": "npm run typecheck && npm run build:fast",
     "start": "NODE_ENV=development npm run dev",
     "start:prod": "npm run build && npm run start:production",
@@ -22,7 +24,10 @@
     "typecheck": "tsc --noEmit",
     "test:compile": "echo 'Test compilation removed from build process'",
     "test:compile:skip": "echo 'Test compilation skipped'",
+    "test:frontend": "vitest run",
+    "test:frontend:watch": "vitest",
     "debug:agent": "npx tsx src/mastra/scripts/test-debug.js",
+    "debug:mcp": "cd src/my-mastra-vite && npm run debug:mcp",
     "test:claude": "npm run build:fast && npx tsx src/mastra/scripts/test-claude.ts",
     "test:weather-agent": "npm run build:fast && npx tsx src/mastra/scripts/test-weather-agent.ts",
     "test:stt": "npm run build:fast && npx tsx src/mastra/scripts/test-stt.ts",
@@ -41,11 +46,13 @@
     "@ai-sdk/anthropic": "^2.0.0",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@mastra/chroma": "0.11.10-alpha.0",
+    "@mastra/client-js": "^0.13.2",
     "@mastra/core": "^0.17.1",
     "@mastra/mcp": "0.13.1-alpha.0",
     "@mastra/memory": "0.15.2-alpha.2",
     "@modelcontextprotocol/sdk": "1.11.5",
     "@mux/mcp": "^12.8.0",
+    "@mux/mux-player-react": "^3.6.0",
     "ai": "^5.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -54,13 +61,34 @@
     "fluent-ffmpeg": "^2.1.3",
     "http-proxy-middleware": "^3.0.5",
     "mastra": "0.13.1-alpha.0",
+    "nodemon": "^3.1.10",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "tsx": "^4.19.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.0.1",
     "@types/node": "^20.0.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
     "@types/ws": "^8.5.10",
-    "typescript": "^5.6.3"
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "jsdom": "^27.0.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.15",
+    "vitest": "^2.1.9"
+  },
+  "vitest": {
+    "environment": "jsdom",
+    "setupFiles": [
+      "src/my-mastra-vite/src/test/setup.ts"
+    ],
+    "globals": true
   }
 }
