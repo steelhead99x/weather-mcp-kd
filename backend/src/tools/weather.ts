@@ -1,4 +1,4 @@
-import { createTool } from "@mastra/core/tools";
+import { createTool } from "@mastra/core";
 import { z } from "zod";
 
 const USER_AGENT = process.env.WEATHER_MCP_USER_AGENT || "WeatherAgent/1.0 (weather-agent@streamingportfolio.com)";
@@ -58,7 +58,7 @@ export const weatherTool = createTool({
             expires: z.string(),
         })).optional(),
     }),
-    execute: async (toolCtx, options) => {
+    execute: async (toolCtx: any, options: any) => {
         const { context } = toolCtx as any;
         const abortSignal = (options as any)?.signal;
         // In Mastra tools, parameters come in the context object
