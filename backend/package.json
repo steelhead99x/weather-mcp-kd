@@ -25,10 +25,10 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
-    "@mastra/chroma": "^0.18.0",
-    "@mastra/core": "^0.18.0",
-    "@mastra/mcp": "^0.18.0",
-    "@mastra/memory": "^0.18.0",
+    "@mastra/chroma": "^0.11.10",
+    "@mastra/core": "^0.17.1",
+    "@mastra/mcp": "^0.13.1",
+    "@mastra/memory": "^0.15.3",
     "@modelcontextprotocol/sdk": "1.11.5",
     "@mux/mcp": "^12.8.0",
     "ai": "^5.0.0",
@@ -37,7 +37,7 @@
     "express": "^5.1.0",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.3",
-    "mastra": "^0.18.0",
+    "mastra": "0.13.1",
     "tsx": "^4.19.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
