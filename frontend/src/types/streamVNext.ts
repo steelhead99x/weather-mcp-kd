@@ -21,6 +21,10 @@ export interface StreamVNextResponse {
   textStream?: AsyncIterable<string>
   fullStream?: AsyncIterable<StreamChunk>
   metadata?: StreamMetadata
+  // Optional HTTP-like fields to support broader response shapes
+  body?: ReadableStream
+  stream?: ReadableStream
+  text?: string
 }
 
 export interface StreamChunk {

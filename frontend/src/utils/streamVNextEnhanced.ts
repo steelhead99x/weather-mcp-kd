@@ -424,7 +424,7 @@ export class StreamVNextEnhanced {
         if (value) {
           const text = decoder.decode(value, { stream: true })
           if (text) {
-            this.metrics.chunks++
+            this.metrics.chunksReceived++
             onChunk({ type: 'text', content: text })
           }
         }
