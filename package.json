@@ -87,8 +87,10 @@
   "vitest": {
     "environment": "jsdom",
     "setupFiles": [
-      "src/my-mastra-vite/src/test/setup.ts"
+      "src/test/setup.ts"
     ],
-    "globals": true
+    "globals": true,
+    "root": "src/my-mastra-vite",
+    "include": ["src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"]
   }
 }

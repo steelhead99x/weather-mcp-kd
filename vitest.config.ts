@@ -3,8 +3,9 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'jsdom',
-    setupFiles: ['src/my-mastra-vite/src/test/setup.ts'],
+    setupFiles: ['src/test/setup.ts'],
     globals: true,
     root: 'src/my-mastra-vite',
+    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
   },
 })

@@ -19,18 +19,8 @@ COPY . .
 # Ensure background images directory exists
 RUN mkdir -p files/images
 
-# Build the Mastra backend
+# Build both backend and frontend
 RUN npm run build
-
-# Build the Vite frontend
-WORKDIR /app/src/my-mastra-vite
-COPY src/my-mastra-vite/package*.json ./
-RUN npm ci
-COPY src/my-mastra-vite/ ./
-RUN npm run build
-
-# Go back to root and clean up
-WORKDIR /app
 
 # Remove dev dependencies to reduce image size
 RUN npm prune --omit=dev
