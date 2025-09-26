@@ -81,8 +81,9 @@ if (!rawHost) {
 async function testConnection() {
   try {
     console.log('[Mastra] Testing connection to:', finalBaseUrl)
-    // Use the direct health endpoint (not /api/health) since we're testing the proxy
+    // Test the health endpoint first
     const healthUrl = finalBaseUrl.endsWith('/') ? `${finalBaseUrl}health` : `${finalBaseUrl}/health`
+    
     const response = await fetch(healthUrl, {
       method: 'GET',
       headers: {
@@ -94,7 +95,25 @@ async function testConnection() {
       const data = await response.json()
       console.log('[Mastra] Connection test successful:', data)
     } else {
-      console.warn('[Mastra] Connection test failed:', response.status, response.statusText)
+      console.warn('[Mastra] Health endpoint failed, trying agent endpoint...')
+      // Fallback to agent endpoint test
+      const testUrl = finalBaseUrl.endsWith('/') ? `${finalBaseUrl}api/agents/weatherAgent/stream/vnext` : `${finalBaseUrl}/api/agents/weatherAgent/stream/vnext`
+      
+      const agentResponse = await fetch(testUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: 'test connection' }]
+        })
+      })
+      
+      if (agentResponse.ok) {
+        console.log('[Mastra] Agent endpoint test successful')
+      } else {
+        console.warn('[Mastra] Agent endpoint test failed:', agentResponse.status, agentResponse.statusText)
+      }
     }
   } catch (error) {
     console.error('[Mastra] Connection test error:', error)

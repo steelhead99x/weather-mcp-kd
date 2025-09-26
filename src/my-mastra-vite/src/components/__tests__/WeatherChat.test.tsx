@@ -4,11 +4,16 @@ import { vi } from 'vitest'
 import WeatherChat from '../WeatherChat'
 
 vi.mock('../../lib/mastraClient', () => {
-  const mockStreamVNextSuccess = vi.fn(() => ({
-    processDataStream: async ({ onChunk }: { onChunk: (chunk: any) => void }) => {
-      onChunk({ type: 'text', content: 'Sunny with mild coastal fog.' })
-    },
-  }))
+  const mockStreamVNextSuccess = vi.fn(async () => {
+    // Create an async generator that yields text chunks
+    const textStream = (async function* () {
+      yield 'Sunny with mild coastal fog.'
+    })()
+    
+    return {
+      textStream,
+    }
+  })
 
   const mockStreamVNext404 = vi.fn(() => {
     throw new Error('Not Found (404)')
@@ -21,6 +26,7 @@ vi.mock('../../lib/mastraClient', () => {
   return {
     mastra: { getAgent: mockGetAgent },
     getWeatherAgentId: () => 'weather',
+    getDisplayHost: () => 'localhost:3001',
     __mocks: {
       mockStreamVNextSuccess,
       mockStreamVNext404,
@@ -59,7 +65,8 @@ describe('WeatherChat', () => {
   it('handles an error from streamVNext and shows an error message', async () => {
     const { mastra } = await import('../../lib/mastraClient')
     const agent = mastra.getAgent('weather')
-    agent.streamVNext.mockImplementation(() => {
+    // Mock the streamVNext method to throw an error
+    vi.mocked(agent.streamVNext).mockImplementation(() => {
       throw new Error('Not Found (404)')
     })
 

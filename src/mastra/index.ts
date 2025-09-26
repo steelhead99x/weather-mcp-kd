@@ -7,6 +7,7 @@ import { weatherAgent } from "./agents/weather-agent.js";
 const corsOrigins = [
     'http://localhost:3000',
     'http://localhost:3001', 
+    'http://localhost:3333',  // Frontend Vite dev server
     'http://localhost:8080',
     'https://weather-mcp-kd.streamingportfolio.com',
     'https://streamingportfolio.com',

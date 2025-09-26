@@ -160,17 +160,17 @@ export default function MuxSignedPlayer({
         </div>
       }>
         <MuxPlayer
-          playbackId={state.playbackId}
+          playbackId={state.status === 'ready' ? state.playbackId : ''}
           tokens={{ 
-            playback: state.token,
-            ...(state.thumbnailToken && { thumbnail: state.thumbnailToken })
+            playback: state.status === 'ready' ? state.token : '',
+            ...(state.status === 'ready' && state.thumbnailToken && { thumbnail: state.thumbnailToken })
           }}
           streamType="on-demand"
           autoPlay={false}
           style={{
             width: '100%',
             height: 'auto',
-            aspectRatio: state.width && state.height ? `${state.width} / ${state.height}` : '16 / 9',
+            aspectRatio: state.status === 'ready' && state.width && state.height ? `${state.width} / ${state.height}` : '16 / 9',
             borderRadius: 12,
           }}
         />
