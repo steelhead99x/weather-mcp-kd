@@ -16,7 +16,7 @@ COPY shared/package*.json ./shared/
 RUN --mount=type=cache,target=/root/.npm npm ci --workspaces --omit=dev
 
 # Build the application
-FROM base AS builder
+FROM base AS builder-deps
 WORKDIR /app
 
 # Copy package files
@@ -28,16 +28,25 @@ COPY shared/package*.json ./shared/
 # Install all dependencies for all workspaces (including dev)
 RUN --mount=type=cache,target=/root/.npm npm ci --workspaces --include=dev
 
-# Copy source code
-COPY . .
+# Build shared package
+FROM builder-deps AS build-shared
+WORKDIR /app
+COPY shared ./shared
+RUN --mount=type=cache,target=/app/shared/.tsbuildcache npm --workspace shared run build
 
-# Build shared package first
-RUN --mount=type=cache,target=/app/shared/.tsbuildcache cd shared && npm run build
+# Build backend (depends on shared sources for TS paths)
+FROM builder-deps AS build-backend
+WORKDIR /app
+COPY backend ./backend
+COPY shared ./shared
+RUN --mount=type=cache,target=/app/backend/.tsbuildcache npm --workspace backend run build
 
-# Build the application
-RUN --mount=type=cache,target=/app/backend/.tsbuildcache \
-    --mount=type=cache,target=/app/frontend/node_modules/.vite \
-    npm run build
+# Build frontend (depends on shared sources for TS paths)
+FROM builder-deps AS build-frontend
+WORKDIR /app
+COPY frontend ./frontend
+COPY shared ./shared
+RUN --mount=type=cache,target=/app/frontend/node_modules/.vite npm --workspace frontend run build
 
 # (Optional) Mastra CLI build is skipped in CI to avoid failures; runtime can use dist
 
@@ -52,9 +61,9 @@ RUN adduser --system --uid 1001 weatheruser
 # Optional: system ffmpeg not installed; project uses ffmpeg-static
 
 # Copy built application
-COPY --from=builder --chown=weatheruser:nodejs /app/backend/dist ./backend/dist
-COPY --from=builder --chown=weatheruser:nodejs /app/frontend/dist ./frontend/dist
-COPY --from=builder --chown=weatheruser:nodejs /app/shared/dist ./shared/dist
+COPY --from=build-backend --chown=weatheruser:nodejs /app/backend/dist ./backend/dist
+COPY --from=build-frontend --chown=weatheruser:nodejs /app/frontend/dist ./frontend/dist
+COPY --from=build-shared --chown=weatheruser:nodejs /app/shared/dist ./shared/dist
 COPY --from=builder --chown=weatheruser:nodejs /app/backend/files ./backend/files
 
 # (No Mastra CLI output copied)
