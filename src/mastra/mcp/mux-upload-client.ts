@@ -187,7 +187,9 @@ class MuxMCPClient {
      * Provides comprehensive security validation and fallback logic
      */
     private parseMcpArgs(envValue: string | undefined): string[] {
-        const defaultArgs = ["@mux/mcp", "client=claude", "--tools=dynamic", "--resource=video.uploads"];
+        // TEMPORARY WORKAROUND: Use generic tools instead of specific video.uploads resource
+        // This avoids the union type bug in the create_video_uploads endpoint validation
+        const defaultArgs = ["@mux/mcp", "client=claude", "--tools=dynamic"];
 
         // Use default if environment variable is not set
         if (!envValue) {

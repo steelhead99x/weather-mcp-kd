@@ -73,8 +73,9 @@ class MuxAssetsMCPClient {
     }
 
     private parseMcpArgs(envValue: string | undefined): string[] {
-        // Default to assets resource
-        const defaultArgs = ["@mux/mcp", "client=claude", "--tools=dynamic", "--resource=video.assets"]; 
+        // TEMPORARY WORKAROUND: Use generic tools instead of specific video.assets resource
+        // This avoids potential union type bugs in endpoint validation
+        const defaultArgs = ["@mux/mcp", "client=claude", "--tools=dynamic"]; 
         const value = (envValue || '').trim();
         if (!value) return defaultArgs;
         if (value.length > 1000) return defaultArgs;
