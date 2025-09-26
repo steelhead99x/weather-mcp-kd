@@ -37,16 +37,13 @@ COPY shared/package*.json ./shared/
 RUN npm ci
 
 # Install backend dependencies (including dev dependencies for TypeScript compilation)
-RUN cd backend && npm ci
+RUN cd backend && npm ci --include=dev
 
 # Install frontend dependencies (including dev dependencies for Vite build)
-RUN cd frontend && npm ci
+RUN cd frontend && npm ci --include=dev
 
 # Install shared dependencies (including dev dependencies for TypeScript compilation)
-RUN cd shared && npm ci
-
-# Verify that @types/node is installed
-RUN cd backend && npm list @types/node
+RUN cd shared && npm ci --include=dev
 
 # Copy source code
 COPY . .
