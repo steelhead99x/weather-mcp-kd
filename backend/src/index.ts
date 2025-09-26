@@ -4,6 +4,9 @@ import cors from 'cors';
 import { weatherAgent } from './agents/weather-agent.js';
 import { resolve, join } from 'path';
 
+// Set telemetry flag to suppress warnings when not using Mastra server environment
+(globalThis as any).___MASTRA_TELEMETRY___ = true;
+
 const mastra = new Mastra({
   agents: { weatherAgent },
 });

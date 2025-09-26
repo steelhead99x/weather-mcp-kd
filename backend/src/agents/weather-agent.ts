@@ -164,36 +164,64 @@ async function createVideoFromAudioAndImageStreaming(
     });
 }
 
-// Configure FFmpeg path: prefer system ffmpeg in container (/usr/bin/ffmpeg) to avoid glibc mismatch
+// Configure FFmpeg path: use packaged ffmpeg binaries first, then system fallback
 (function configureFfmpeg() {
-    const candidates = [
+    // Try packaged binaries first
+    const packagedCandidates: string[] = [];
+    
+    // Try ffmpeg-static package
+    try {
+        const ffmpegStatic = require('ffmpeg-static');
+        if (ffmpegStatic && typeof ffmpegStatic === 'string') {
+            packagedCandidates.push(ffmpegStatic);
+        }
+    } catch {
+        // ffmpeg-static not available
+    }
+    
+    // Try @ffmpeg-installer/ffmpeg package
+    try {
+        const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+        if (ffmpegInstaller?.path) {
+            packagedCandidates.push(ffmpegInstaller.path);
+        }
+    } catch {
+        // @ffmpeg-installer/ffmpeg not available
+    }
+
+    // System ffmpeg fallback candidates
+    const systemCandidates = [
         '/usr/bin/ffmpeg',
         '/usr/local/bin/ffmpeg',
         '/opt/homebrew/bin/ffmpeg',  // Homebrew on Apple Silicon
         '/bin/ffmpeg',
-    ].filter(Boolean) as string[];
+    ];
 
     // Also check for Homebrew Intel installations
     try {
         const { execSync } = require('child_process');
         const homebrewPrefix = execSync('brew --prefix', { encoding: 'utf8', timeout: 5000 }).trim();
         if (homebrewPrefix) {
-            candidates.push(`${homebrewPrefix}/bin/ffmpeg`);
+            systemCandidates.push(`${homebrewPrefix}/bin/ffmpeg`);
         }
     } catch {
         // Ignore if brew command fails
     }
 
-    const found = candidates.find(p => {
+    // Combine all candidates (packaged first, then system)
+    const allCandidates = [...packagedCandidates, ...systemCandidates];
+
+    const found = allCandidates.find(p => {
         try { return existsSync(p); } catch { return false; }
     });
 
     if (found) {
         ffmpeg.setFfmpegPath(found);
-        console.debug(`[ffmpeg] Using ffmpeg at: ${found}`);
+        const source = packagedCandidates.includes(found) ? 'packaged' : 'system';
+        console.debug(`[ffmpeg] Using ${source} ffmpeg at: ${found}`);
     } else {
         console.warn('[ffmpeg] No ffmpeg binary found in expected locations. Video features may fail.');
-        console.warn('[ffmpeg] Searched paths:', candidates);
+        console.warn('[ffmpeg] Searched paths:', allCandidates);
     }
 })();
 
