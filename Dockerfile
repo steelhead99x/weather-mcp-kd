@@ -33,17 +33,8 @@ COPY backend/package*.json ./backend/
 COPY frontend/package*.json ./frontend/
 COPY shared/package*.json ./shared/
 
-# Install all dependencies (including dev dependencies)
-RUN npm ci
-
-# Install backend dependencies (including dev dependencies for TypeScript compilation)
-RUN cd backend && npm ci --include=dev
-
-# Install frontend dependencies (including dev dependencies for Vite build)
-RUN cd frontend && npm ci --include=dev
-
-# Install shared dependencies (including dev dependencies for TypeScript compilation)
-RUN cd shared && npm ci --include=dev
+# Install all dependencies for all workspaces (including dev)
+RUN npm ci --workspaces --include=dev
 
 # Copy source code
 COPY . .
