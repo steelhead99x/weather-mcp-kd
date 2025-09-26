@@ -119,9 +119,15 @@ describe('Tool Display Functionality', () => {
     
     // Enter a ZIP code
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
-    const button = screen.getByRole('button', { name: /ask/i })
-    
     fireEvent.change(input, { target: { value: '85001' } })
+    
+    // Wait for the button to be enabled
+    await waitFor(() => {
+      const button = screen.getByRole('button', { name: /send message/i })
+      expect(button).not.toBeDisabled()
+    })
+    
+    const button = screen.getByRole('button', { name: /send message/i })
     fireEvent.click(button)
     
     // Wait for the tool call to appear
@@ -138,9 +144,15 @@ describe('Tool Display Functionality', () => {
     render(<WeatherChat />)
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
-    const button = screen.getByRole('button', { name: /ask/i })
-    
     fireEvent.change(input, { target: { value: '85001' } })
+    
+    // Wait for the button to be enabled
+    await waitFor(() => {
+      const button = screen.getByRole('button', { name: /send message/i })
+      expect(button).not.toBeDisabled()
+    })
+    
+    const button = screen.getByRole('button', { name: /send message/i })
     fireEvent.click(button)
     
     // Wait for tool call summary
@@ -161,9 +173,15 @@ describe('Tool Display Functionality', () => {
     render(<WeatherChat />)
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
-    const button = screen.getByRole('button', { name: /ask/i })
-    
     fireEvent.change(input, { target: { value: '85001' } })
+    
+    // Wait for the button to be enabled
+    await waitFor(() => {
+      const button = screen.getByRole('button', { name: /send message/i })
+      expect(button).not.toBeDisabled()
+    })
+    
+    const button = screen.getByRole('button', { name: /send message/i })
     fireEvent.click(button)
     
     // Wait for tool call and expand it
@@ -194,9 +212,15 @@ describe('Tool Display Functionality', () => {
     render(<WeatherChat />)
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
-    const button = screen.getByRole('button', { name: /ask/i })
-    
     fireEvent.change(input, { target: { value: '90210' } })
+    
+    // Wait for the button to be enabled
+    await waitFor(() => {
+      const button = screen.getByRole('button', { name: /send message/i })
+      expect(button).not.toBeDisabled()
+    })
+    
+    const button = screen.getByRole('button', { name: /send message/i })
     fireEvent.click(button)
     
     // Expand tool calls
@@ -229,9 +253,15 @@ describe('Tool Display Functionality', () => {
     render(<WeatherChat />)
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
-    const button = screen.getByRole('button', { name: /ask/i })
-    
     fireEvent.change(input, { target: { value: '33101' } })
+    
+    // Wait for the button to be enabled
+    await waitFor(() => {
+      const button = screen.getByRole('button', { name: /send message/i })
+      expect(button).not.toBeDisabled()
+    })
+    
+    const button = screen.getByRole('button', { name: /send message/i })
     fireEvent.click(button)
     
     // Expand tools
