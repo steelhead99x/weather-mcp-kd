@@ -24,6 +24,7 @@
     "tsBuildInfoFile": "./.tsbuildcache/tsconfig.tsbuildinfo",
     "outDir": "./dist",
     "baseUrl": ".",
+    "typeRoots": ["./node_modules/@types"],
     "paths": {
       "@/*": ["./src/*"],
       "@/shared/*": ["../shared/src/*"]
