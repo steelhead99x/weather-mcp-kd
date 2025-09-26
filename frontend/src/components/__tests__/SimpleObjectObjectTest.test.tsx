@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock the mastra client
@@ -50,7 +50,9 @@ describe('Simple [object Object] Test', () => {
   })
 
   it('should render without [object Object] errors', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     // Wait a moment for the component to fully initialize
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -75,7 +77,9 @@ describe('Simple [object Object] Test', () => {
     const errorObject = { code: 'AGENT_LOAD_ERROR', details: 'Failed to connect' }
     vi.mocked(mastra.getAgent).mockRejectedValue(errorObject)
     
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     // Wait for agent loading to complete/fail
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -99,7 +103,9 @@ describe('Simple [object Object] Test', () => {
     const errorObject = { message: 'Connection failed', code: 500 }
     vi.mocked(mastra.getAgent).mockRejectedValue(errorObject)
     
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     // Wait for agent loading to complete/fail
     await new Promise(resolve => setTimeout(resolve, 100))

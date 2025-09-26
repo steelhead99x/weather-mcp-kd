@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock the mastra client
@@ -52,7 +52,9 @@ describe('Debug Stream Error Test', () => {
     const errorObject = { code: 'TEST_ERROR', details: 'some details', status: 500 }
     mockStreamVNext.mockRejectedValue(errorObject)
     
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     // Wait for agent to load
     await new Promise(resolve => setTimeout(resolve, 100))

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock the mastra client first
@@ -96,7 +96,9 @@ describe('Input Flow Debug Tests', () => {
   })
 
   it('should pass string input correctly through the entire flow', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     const testInput = '85001'
     
@@ -144,7 +146,9 @@ describe('Input Flow Debug Tests', () => {
   })
 
   it('should handle complex input (text with spaces) correctly', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     const testInput = 'more detailed weather info'
     
@@ -199,7 +203,9 @@ describe('Input Flow Debug Tests', () => {
   })
 
   it('should handle message objects correctly if they exist', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     // Mock a scenario where the input somehow becomes an object
     const mockComplexInput = { content: '85001', type: 'text' }

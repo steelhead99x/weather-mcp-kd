@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock the mastra client
@@ -35,7 +35,9 @@ describe('[object Object] Fix Tests', () => {
       }
     })
 
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     fireEvent.change(input, { target: { value: '85001' } })
@@ -61,7 +63,9 @@ describe('[object Object] Fix Tests', () => {
     const errorObject = { code: 'TEST_ERROR', message: 'Test error message', details: { extra: 'info' } }
     mockStreamVNext.mockRejectedValue(errorObject)
 
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     fireEvent.change(input, { target: { value: '85001' } })
@@ -93,7 +97,9 @@ describe('[object Object] Fix Tests', () => {
     const error = new Error('Specific error message')
     mockStreamVNext.mockRejectedValue(error)
 
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     fireEvent.change(input, { target: { value: '85001' } })
@@ -170,7 +176,9 @@ describe('[object Object] Fix Tests', () => {
     
     mockStreamVNext.mockRejectedValue(complexError)
 
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     fireEvent.change(input, { target: { value: '85001' } })

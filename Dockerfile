@@ -57,7 +57,8 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 weatheruser
 
-# Optional: system ffmpeg not installed; project uses ffmpeg-static
+# Install ffmpeg for runtime (Alpine)
+RUN apk add --no-cache ffmpeg
 
 # Copy built application
 COPY --from=build-backend --chown=weatheruser:nodejs /app/backend/dist ./backend/dist

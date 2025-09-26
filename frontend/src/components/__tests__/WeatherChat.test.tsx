@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { vi } from 'vitest'
 import WeatherChat from '../WeatherChat'
 
@@ -55,8 +55,10 @@ describe('WeatherChat', () => {
     vi.clearAllMocks()
   })
 
-  it('renders the weather chat component correctly', () => {
-    render(<WeatherChat />)
+  it('renders the weather chat component correctly', async () => {
+    await act(async () => {
+      render(<WeatherChat />)
+    })
 
     // Check that the component renders with the expected elements
     expect(screen.getByText(/farmer-friendly, solar-powered weather insights/i)).toBeInTheDocument()
@@ -65,8 +67,10 @@ describe('WeatherChat', () => {
     expect(screen.getByText(/connected to agent:/i)).toBeInTheDocument()
   })
 
-  it('handles input changes correctly', () => {
-    render(<WeatherChat />)
+  it('handles input changes correctly', async () => {
+    await act(async () => {
+      render(<WeatherChat />)
+    })
 
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     fireEvent.change(input, { target: { value: '94102' } })
@@ -74,8 +78,10 @@ describe('WeatherChat', () => {
     expect(input).toHaveValue('94102')
   })
 
-  it('shows validation error for invalid ZIP code', () => {
-    render(<WeatherChat />)
+  it('shows validation error for invalid ZIP code', async () => {
+    await act(async () => {
+      render(<WeatherChat />)
+    })
 
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     fireEvent.change(input, { target: { value: '123' } })
@@ -83,8 +89,10 @@ describe('WeatherChat', () => {
     expect(screen.getByText(/please enter a valid 5-digit zip code/i)).toBeInTheDocument()
   })
 
-  it('disables send button for invalid ZIP code', () => {
-    render(<WeatherChat />)
+  it('disables send button for invalid ZIP code', async () => {
+    await act(async () => {
+      render(<WeatherChat />)
+    })
 
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     const button = screen.getByRole('button', { name: /send message/i })
@@ -95,7 +103,9 @@ describe('WeatherChat', () => {
   })
 
   it('enables send button for valid ZIP code', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
 
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     const button = screen.getByRole('button', { name: /send message/i })
@@ -109,7 +119,9 @@ describe('WeatherChat', () => {
   })
 
   it('validates ZIP code format correctly', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
 
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     const button = screen.getByRole('button', { name: /send message/i })

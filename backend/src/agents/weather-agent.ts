@@ -223,6 +223,10 @@ async function createVideoFromAudioAndImageStreaming(
         ffmpeg.setFfmpegPath(found);
         const source = packagedCandidates.includes(found) ? 'packaged' : 'system';
         console.debug(`[ffmpeg] Using ${source} ffmpeg at: ${found}`);
+        try {
+            // Expose resolved path for other checks/logging
+            process.env.FFMPEG_PATH = found;
+        } catch {}
     } else {
         console.warn('[ffmpeg] No ffmpeg binary found in expected locations. Video features may fail.');
         console.warn('[ffmpeg] Searched paths:', allCandidates);
@@ -232,7 +236,8 @@ async function createVideoFromAudioAndImageStreaming(
 // Log ffmpeg version once at startup to verify runtime binary
 (async () => {
     try {
-        const { stdout } = await execFileAsync('ffmpeg', ['-version']);
+        const ffmpegPathForVersion = process.env.FFMPEG_PATH || 'ffmpeg';
+        const { stdout } = await execFileAsync(ffmpegPathForVersion, ['-version']);
         console.debug('[ffmpeg] Version:\n' + stdout.split('\n').slice(0, 3).join('\n'));
     } catch (e) {
         console.warn('[ffmpeg] Unable to run ffmpeg -version:', e instanceof Error ? e.message : String(e));

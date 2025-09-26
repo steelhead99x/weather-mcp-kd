@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import WeatherChat from '../WeatherChat'
 
@@ -115,7 +115,9 @@ vi.mock('../../hooks/useStreamVNext', () => ({
 
 describe('Tool Display Functionality', () => {
   it('should display tool calls in collapsed state by default', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     // Enter a ZIP code
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
@@ -141,7 +143,9 @@ describe('Tool Display Functionality', () => {
   })
 
   it('should expand tool calls when clicked', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     fireEvent.change(input, { target: { value: '85001' } })
@@ -170,7 +174,9 @@ describe('Tool Display Functionality', () => {
   })
 
   it('should show tool arguments and results when tool is expanded', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     fireEvent.change(input, { target: { value: '85001' } })
@@ -209,7 +215,9 @@ describe('Tool Display Functionality', () => {
   })
 
   it('should properly format complex objects without [object Object] errors', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     fireEvent.change(input, { target: { value: '90210' } })
@@ -251,7 +259,9 @@ describe('Tool Display Functionality', () => {
   })
 
   it('should show status indicators for different tool states', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
     fireEvent.change(input, { target: { value: '33101' } })

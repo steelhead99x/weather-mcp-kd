@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import MCPDebugPanel from '../MCPDebugPanel'
 import WeatherChat from '../WeatherChat'
@@ -93,7 +93,9 @@ describe('MCP Input Flow Tests', () => {
   })
 
   it('should trace input from WeatherChat to MCP streamVNext', async () => {
-    render(<WeatherChat />)
+    await act(async () => {
+      render(<WeatherChat />)
+    })
     
     const testInput = '85001'
     
@@ -143,7 +145,9 @@ describe('MCP Input Flow Tests', () => {
   })
 
   it('should test MCP debug panel input handling', async () => {
-    render(<MCPDebugPanel />)
+    await act(async () => {
+      render(<MCPDebugPanel />)
+    })
     
     // Look for debug inputs if they exist
     const debugInputs = screen.queryAllByRole('textbox')
