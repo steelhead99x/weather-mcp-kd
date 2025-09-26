@@ -3,14 +3,7 @@ import { useEffect, useMemo, useState, Suspense, lazy, useRef } from 'react'
 // Lazy load MuxPlayer to reduce initial bundle size
 const MuxPlayer = lazy(() => import('@mux/mux-player-react').then(module => ({ default: module.default })))
 
-// Error handler for WritableStream issues
-const handleStreamError = (error: ErrorEvent) => {
-  if (error.message && error.message.includes('WritableStream')) {
-    console.warn('[MuxPlayer] WritableStream error caught and suppressed:', error.message)
-    return true // Prevent default error handling
-  }
-  return false
-}
+// Note: WritableStream errors are handled in the component's error handlers below
 
 /**
  * A lightweight wrapper that fetches a signed playback token for a Mux asset
@@ -62,8 +55,10 @@ export default function MuxSignedPlayer({
     
     window.onerror = (message, source, lineno, colno, error) => {
       // Check if this is a WritableStream error
-      if (typeof message === 'string' && message.includes('WritableStream')) {
-        console.warn('[MuxPlayer] WritableStream error suppressed:', message)
+      if (typeof message === 'string' && 
+          (message.includes('WritableStream') || 
+           (message.includes('close') && message.includes('locked stream')))) {
+        // Silently suppress WritableStream errors - this is a known issue with Mux Player
         return true // Prevent default error handling
       }
       
@@ -74,14 +69,25 @@ export default function MuxSignedPlayer({
       return false
     }
 
-    // Also handle unhandled promise rejections
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      if (event.reason && typeof event.reason === 'object' && 
-          event.reason.message && event.reason.message.includes('WritableStream')) {
-        console.warn('[MuxPlayer] WritableStream promise rejection suppressed:', event.reason.message)
+  // Also handle unhandled promise rejections
+  const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+    const reason = event.reason
+    
+    // Check for WritableStream errors in various forms
+    if (reason) {
+      const errorMessage = typeof reason === 'string' ? reason : 
+                          (reason && typeof reason === 'object' && reason.message) ? reason.message : 
+                          String(reason)
+      
+      if (errorMessage.includes('WritableStream') || 
+          errorMessage.includes('close') && errorMessage.includes('locked stream')) {
+        // Silently suppress WritableStream errors - this is a known issue with Mux Player
+        // where it tries to close a locked stream during cleanup
         event.preventDefault()
+        return
       }
     }
+  }
 
     window.addEventListener('unhandledrejection', handleUnhandledRejection)
 
@@ -216,8 +222,9 @@ export default function MuxSignedPlayer({
           onError={(error: any) => {
             // Handle MuxPlayer errors gracefully
             if (error && typeof error === 'object' && error.message) {
-              if (error.message.includes('WritableStream')) {
-                console.warn('[MuxPlayer] WritableStream error in player, suppressed:', error.message)
+              if (error.message.includes('WritableStream') || 
+                  (error.message.includes('close') && error.message.includes('locked stream'))) {
+                // Silently suppress WritableStream errors - this is a known issue with Mux Player
                 return // Don't propagate WritableStream errors
               }
             }
