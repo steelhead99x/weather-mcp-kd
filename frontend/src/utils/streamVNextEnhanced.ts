@@ -102,6 +102,12 @@ export class StreamVNextEnhanced {
       throw this.createError('Agent streamVNext method not available', 'AGENT_ERROR', false)
     }
 
+    // Ensure message is a string to prevent [object Object] issues
+    const cleanMessage = this.sanitizeMessage(message)
+    if (!cleanMessage) {
+      throw this.createError('Invalid message format - message must be a non-empty string', 'INVALID_MESSAGE', false)
+    }
+
     // Create abort controller for timeout
     const controller = new AbortController()
     const timeoutId = setTimeout(() => {
@@ -109,7 +115,7 @@ export class StreamVNextEnhanced {
     }, options.timeout || this.config.defaultTimeout)
 
     try {
-      const response = await agent.streamVNext(message, {
+      const response = await agent.streamVNext(cleanMessage, {
         ...options,
         abortSignal: controller.signal
       })
@@ -269,6 +275,64 @@ export class StreamVNextEnhanced {
     error.code = code
     error.retryable = retryable
     return error
+  }
+
+  /**
+   * Sanitize message input to prevent [object Object] issues
+   */
+  private sanitizeMessage(message: any): string {
+    if (typeof message === 'string') {
+      return message.trim()
+    }
+    
+    if (message === null || message === undefined) {
+      return ''
+    }
+    
+    // Handle common object formats that might be passed
+    if (typeof message === 'object') {
+      // Handle message objects with content property
+      if ('content' in message && typeof message.content === 'string') {
+        return String(message.content).trim()
+      }
+      
+      // Handle messages array format
+      if (Array.isArray(message) && message.length > 0) {
+        const firstMessage = message[0]
+        if (firstMessage && typeof firstMessage === 'object' && 'content' in firstMessage) {
+          return String(firstMessage.content).trim()
+        }
+        // If array contains strings, join them
+        if (typeof firstMessage === 'string') {
+          return message.join(' ').trim()
+        }
+      }
+      
+      // Handle Mastra-style message format
+      if ('messages' in message) {
+        return String(message.messages).trim()
+      }
+      
+      // Last resort: try JSON stringify for objects
+      try {
+        const jsonStr = JSON.stringify(message)
+        if (jsonStr && jsonStr !== '{}' && jsonStr !== 'null') {
+          return jsonStr
+        }
+      } catch {
+        // JSON stringify failed, fall through to String()
+      }
+    }
+    
+    // Fallback to string conversion
+    const stringified = String(message)
+    
+    // Prevent [object Object] from being returned
+    if (stringified === '[object Object]') {
+      return JSON.stringify(message)
+    }
+    
+    return stringified.trim()
   }
 
   private sleep(ms: number): Promise<void> {

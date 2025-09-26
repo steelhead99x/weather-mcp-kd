@@ -384,7 +384,7 @@ export default function WeatherChat() {
         >
           <div className="flex items-center gap-2">
             <span>⚠️</span>
-            <span>{streamState.error}</span>
+            <span>{typeof streamState.error === 'string' ? streamState.error : String(streamState.error || 'Unknown error')}</span>
           </div>
           {streamState.retryCount > 0 && (
             <button

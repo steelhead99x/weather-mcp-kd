@@ -71,9 +71,10 @@ export function useStreamVNext(options: UseStreamVNextOptions = {}): UseStreamVN
       }))
     },
     onError: (error, metrics) => {
+      const errorMessage = error?.message || String(error) || 'Unknown error occurred'
       setState(prev => ({
         ...prev,
-        error: error.message,
+        error: errorMessage,
         isLoading: false,
         isStreaming: false,
         metrics: { ...metrics }
@@ -91,10 +92,11 @@ export function useStreamVNext(options: UseStreamVNextOptions = {}): UseStreamVN
       options.onComplete?.(metrics)
     },
     onRetry: (attempt, error) => {
+      const errorMessage = error?.message || String(error) || 'Unknown error'
       setState(prev => ({
         ...prev,
         retryCount: attempt,
-        error: `Retrying... (${attempt}/${options.maxRetries || 3}): ${error.message}`
+        error: `Retrying... (${attempt}/${options.maxRetries || 3}): ${errorMessage}`
       }))
     }
   }))
@@ -116,9 +118,10 @@ export function useStreamVNext(options: UseStreamVNextOptions = {}): UseStreamVN
       
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error))
+      const errorMessage = err.message || String(error) || 'Unknown error occurred'
       setState(prev => ({
         ...prev,
-        error: err.message,
+        error: errorMessage,
         isLoading: false,
         isStreaming: false
       }))
