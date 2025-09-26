@@ -238,14 +238,26 @@ export class StreamVNextEnhanced {
 
   private normalizeError(error: unknown): StreamVNextError {
     if (error instanceof Error) {
-      return {
-        ...error,
-        code: this.getErrorCode(error),
-        retryable: this.isRetryableError(error)
-      } as StreamVNextError
+      // Properly preserve the Error properties
+      const normalizedError = error as StreamVNextError
+      normalizedError.code = this.getErrorCode(error)
+      normalizedError.retryable = this.isRetryableError(error)
+      return normalizedError
     }
     
-    return this.createError(String(error), 'UNKNOWN_ERROR', false)
+    // Handle non-Error objects
+    let errorMessage: string
+    if (error && typeof error === 'object') {
+      if ('message' in error && typeof error.message === 'string') {
+        errorMessage = error.message
+      } else {
+        errorMessage = JSON.stringify(error)
+      }
+    } else {
+      errorMessage = String(error)
+    }
+    
+    return this.createError(errorMessage, 'UNKNOWN_ERROR', false)
   }
 
   private getErrorCode(error: Error): string {
