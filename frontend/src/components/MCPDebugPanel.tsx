@@ -28,28 +28,26 @@ export default function MCPDebugPanel() {
   const [logs, setLogs] = useState<string[]>([])
 
   useEffect(() => {
-    // Capture console logs for debugging
+    // Capture console logs for debugging (only in development)
+    if (process.env.NODE_ENV !== 'development') return
+
     const originalLog = console.log
     const originalError = console.error
     const originalWarn = console.warn
 
-    console.log = (...args) => {
-      const message = `[LOG] ${new Date().toISOString()}: ${args.join(' ')}`
-      setLogs(prev => [...prev.slice(-99), message]) // Keep last 100 logs
-      originalLog(...args)
+    const logInterceptor = (level: string, originalFn: typeof console.log) => {
+      return (...args: any[]) => {
+        const message = `[${level}] ${new Date().toISOString()}: ${args.map(arg => 
+          typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+        ).join(' ')}`
+        setLogs(prev => [...prev.slice(-99), message]) // Keep last 100 logs
+        originalFn(...args)
+      }
     }
 
-    console.error = (...args) => {
-      const message = `[ERROR] ${new Date().toISOString()}: ${args.join(' ')}`
-      setLogs(prev => [...prev.slice(-99), message])
-      originalError(...args)
-    }
-
-    console.warn = (...args) => {
-      const message = `[WARN] ${new Date().toISOString()}: ${args.join(' ')}`
-      setLogs(prev => [...prev.slice(-99), message])
-      originalWarn(...args)
-    }
+    console.log = logInterceptor('LOG', originalLog)
+    console.error = logInterceptor('ERROR', originalError)
+    console.warn = logInterceptor('WARN', originalWarn)
 
     return () => {
       console.log = originalLog
@@ -166,7 +164,7 @@ export default function MCPDebugPanel() {
               <div className="text-sm text-gray-600 space-y-1">
                 <div>Host: {import.meta.env.VITE_MASTRA_API_HOST || 'stage-weather-mcp-kd.streamingportfolio.com'}</div>
                 <div>Agent ID: {import.meta.env.VITE_WEATHER_AGENT_ID || 'weather'}</div>
-                <div>Environment: {import.meta.env.MODE}</div>
+                <div>Environment: {import.meta.env.MODE || 'development'}</div>
               </div>
             </div>
 

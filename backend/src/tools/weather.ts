@@ -92,10 +92,10 @@ export const weatherTool = createTool({
         const longitude = Number.parseFloat(String(firstPlace?.longitude));
 
         if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
-            throw new Error("Invalid latitude");
+            throw new Error(`Invalid latitude: ${latitude}`);
         }
         if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
-            throw new Error("Invalid longitude");
+            throw new Error(`Invalid longitude: ${longitude}`);
         }
 
         const displayName = `${firstPlace?.["place name"] ?? "Unknown"}, ${firstPlace?.["state abbreviation"] ?? ""}`.trim();

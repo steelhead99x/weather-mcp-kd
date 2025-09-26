@@ -60,7 +60,7 @@ function buildBaseUrl(hostname: string): string {
   return url
 }
 
-const rawHost = (import.meta as any).env?.VITE_MASTRA_API_HOST as string | undefined
+const rawHost = (import.meta as any)?.env?.VITE_MASTRA_API_HOST as string | undefined
 const host = sanitizeHost(rawHost)
 const baseUrl = buildBaseUrl(host)
 
@@ -160,7 +160,7 @@ mastra.getDynamicToolsets = async () => {
 }
 
 export function getWeatherAgentId() {
-  return ((import.meta as any).env?.VITE_WEATHER_AGENT_ID as string) || 'weather'
+  return ((import.meta as any)?.env?.VITE_WEATHER_AGENT_ID as string) || 'weather'
 }
 
 // Optional helper for UI/status displays

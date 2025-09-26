@@ -108,9 +108,13 @@ function logMemoryUsage(context: string) {
 
 // Force garbage collection if available
 function forceGC() {
-    if (global.gc) {
-        global.gc();
-        console.debug('[memory] Forced garbage collection');
+    if (typeof global !== 'undefined' && global.gc) {
+        try {
+            global.gc();
+            console.debug('[memory] Forced garbage collection');
+        } catch (error) {
+            console.debug('[memory] GC failed:', error instanceof Error ? error.message : String(error));
+        }
     }
 }
 
@@ -1411,5 +1415,4 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
 }
 
 export const weatherAgentTestWrapper: any = weatherAgent as any;
-(weatherAgentTestWrapper as any).text = textShim;
 (weatherAgentTestWrapper as any).text = textShim;

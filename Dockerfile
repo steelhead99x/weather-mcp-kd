@@ -42,25 +42,25 @@ WORKDIR /app
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN adduser --system --uid 1001 weatheruser
 
 # Copy built application
-COPY --from=builder --chown=nextjs:nodejs /app/backend/dist ./backend/dist
-COPY --from=builder --chown=nextjs:nodejs /app/frontend/dist ./frontend/dist
-COPY --from=builder --chown=nextjs:nodejs /app/shared/dist ./shared/dist
-COPY --from=builder --chown=nextjs:nodejs /app/backend/files ./backend/files
+COPY --from=builder --chown=weatheruser:nodejs /app/backend/dist ./backend/dist
+COPY --from=builder --chown=weatheruser:nodejs /app/frontend/dist ./frontend/dist
+COPY --from=builder --chown=weatheruser:nodejs /app/shared/dist ./shared/dist
+COPY --from=builder --chown=weatheruser:nodejs /app/backend/files ./backend/files
 
 # Copy production dependencies
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
-COPY --from=deps --chown=nextjs:nodejs /app/backend/node_modules ./backend/node_modules
-COPY --from=deps --chown=nextjs:nodejs /app/frontend/node_modules ./frontend/node_modules
-COPY --from=deps --chown=nextjs:nodejs /app/shared/node_modules ./shared/node_modules
+COPY --from=deps --chown=weatheruser:nodejs /app/node_modules ./node_modules
+COPY --from=deps --chown=weatheruser:nodejs /app/backend/node_modules ./backend/node_modules
+COPY --from=deps --chown=weatheruser:nodejs /app/frontend/node_modules ./frontend/node_modules
+COPY --from=deps --chown=weatheruser:nodejs /app/shared/node_modules ./shared/node_modules
 
 # Copy package files
-COPY --chown=nextjs:nodejs package*.json ./
-COPY --chown=nextjs:nodejs backend/package*.json ./backend/
+COPY --chown=weatheruser:nodejs package*.json ./
+COPY --chown=weatheruser:nodejs backend/package*.json ./backend/
 
-USER nextjs
+USER weatheruser
 
 EXPOSE 3001
 

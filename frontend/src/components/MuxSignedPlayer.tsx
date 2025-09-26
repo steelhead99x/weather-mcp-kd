@@ -79,7 +79,7 @@ export default function MuxSignedPlayer({
         // Try to be flexible with field names returned by the keyserver.
         const playbackId: string | undefined = data.playbackId || data.playback_id || data.playbackID
         const token: string | undefined = data.token || data.playbackToken || data.playback_token
-        const thumbnailToken: string | undefined = data.thumbnailToken || data.thumbnail_token || data.thumbnailToken || data.thumbnail
+        const thumbnailToken: string | undefined = data.thumbnailToken || data.thumbnail_token || data.thumbnail
         const width: number | undefined = data.width || data.videoWidth || data.w
         const height: number | undefined = data.height || data.videoHeight || data.h
 
