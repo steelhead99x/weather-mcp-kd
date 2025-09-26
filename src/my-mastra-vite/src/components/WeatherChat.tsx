@@ -327,17 +327,25 @@ export default function WeatherChat() {
         console.log('[WeatherChat] Agent stream method:', typeof (agent as any).stream)
         
         // Use Mastra streaming with proper configuration
-        if (typeof (agent as any).stream === 'function') {
-          console.log('[WeatherChat] Using Mastra stream method')
+        if (typeof (agent as any).streamVNext === 'function') {
+          console.log('[WeatherChat] Using Mastra streamVNext method')
           
-          response = await (agent as any).stream([
-            { role: 'user', content: userMsg.content }
-          ])
+          response = await (agent as any).streamVNext(
+            userMsg.content,
+            {
+              format: 'mastra',
+              system: systemPrompt,
+              memory: {
+                thread: threadId,
+                resource: resourceId,
+              },
+            }
+          )
           console.log('[WeatherChat] stream response:', response)
           console.log('[WeatherChat] stream response type:', typeof response)
           console.log('[WeatherChat] stream response keys:', response ? Object.keys(response) : 'null')
         } else {
-          throw new Error('Agent stream is not available in this client. Please ensure you are using a compatible Mastra version.')
+          throw new Error('Agent streamVNext is not available in this client. Please ensure you are using a compatible Mastra version.')
         }
 
         let receivedText = false
@@ -609,9 +617,9 @@ export default function WeatherChat() {
           }
         }
         
-        // Handle Mastra stream response
+        // Handle Mastra streamVNext response
         if (response && typeof response.textStream === 'object' && response.textStream) {
-          console.log('[WeatherChat] Using textStream from Mastra stream')
+          console.log('[WeatherChat] Using textStream from Mastra streamVNext')
           
           // Use async iterator for cleaner code
           try {
@@ -635,7 +643,7 @@ export default function WeatherChat() {
             }
           }
         } else if (response && typeof response.fullStream === 'object' && response.fullStream) {
-          console.log('[WeatherChat] Using fullStream from Mastra stream')
+          console.log('[WeatherChat] Using fullStream from Mastra streamVNext')
           
           // Use async iterator for cleaner code
           try {
