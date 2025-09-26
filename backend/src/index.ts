@@ -114,7 +114,7 @@ try {
   // ignore if dist not present
 }
 
-const port = Number(process.env.PORT || 3001);
+const port = Number(process.env.PORT || 3002);
 const host = process.env.HOST || '0.0.0.0';
 
 app.listen(port, host, () => {
