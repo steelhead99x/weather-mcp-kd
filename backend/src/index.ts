@@ -29,16 +29,29 @@ app.get('/health', (_req, res) => {
 app.post('/api/agents/:agentId/stream/vnext', async (req, res) => {
   try {
     const agentId = req.params.agentId;
-    const messages = Array.isArray(req.body?.messages)
-      ? req.body.messages
-      : [{ role: 'user', content: String(req.body?.message ?? 'hello') }];
+    // Handle different message formats from the frontend
+    let messages;
+    if (Array.isArray(req.body?.messages)) {
+      // Standard messages array format
+      messages = req.body.messages;
+    } else if (typeof req.body?.messages === 'string') {
+      // MastraClient sends message as string in messages field
+      messages = [{ role: 'user', content: req.body.messages }];
+    } else if (req.body?.message) {
+      // Fallback to message field
+      messages = [{ role: 'user', content: String(req.body.message) }];
+    } else {
+      // Default fallback
+      messages = [{ role: 'user', content: 'hello' }];
+    }
 
     // Set headers for streaming response
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
 
     console.log(`[streamVNext] Received request for agent: ${agentId}`);
-    console.log(`[streamVNext] Messages:`, messages.length);
+    console.log(`[streamVNext] Raw body:`, JSON.stringify(req.body, null, 2));
+    console.log(`[streamVNext] Processed messages:`, messages);
 
     // Call the agent with proper streaming
     const stream = await weatherAgent.streamVNext(messages);
