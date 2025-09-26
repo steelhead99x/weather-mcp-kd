@@ -20,7 +20,7 @@
     "@mastra/chroma": "latest",
     "@mastra/core": "latest",
     "@mastra/memory": "latest",
-    "@modelcontextprotocol/sdk": "latest",
+    "@modelcontextprotocol/sdk": "^1.11.5",
     "@mux/mcp": "latest",
     "ai": "latest",
     "dotenv": "latest",
