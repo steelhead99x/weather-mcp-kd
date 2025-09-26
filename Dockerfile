@@ -12,7 +12,7 @@ COPY frontend/package*.json ./frontend/
 COPY shared/package*.json ./shared/
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # Build the application
 FROM base AS builder
@@ -30,6 +30,9 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Build shared package first
+RUN cd shared && npm run build
+
 # Build the application
 RUN npm run build
 
@@ -43,13 +46,15 @@ RUN adduser --system --uid 1001 nextjs
 
 # Copy built application
 COPY --from=builder --chown=nextjs:nodejs /app/backend/dist ./backend/dist
-COPY --from=builder --chown=nextjs:nodejs /app/backend/.mastra ./backend/.mastra
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/dist ./frontend/dist
+COPY --from=builder --chown=nextjs:nodejs /app/shared/dist ./shared/dist
 COPY --from=builder --chown=nextjs:nodejs /app/backend/files ./backend/files
 
 # Copy production dependencies
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=deps --chown=nextjs:nodejs /app/backend/node_modules ./backend/node_modules
+COPY --from=deps --chown=nextjs:nodejs /app/frontend/node_modules ./frontend/node_modules
+COPY --from=deps --chown=nextjs:nodejs /app/shared/node_modules ./shared/node_modules
 
 # Copy package files
 COPY --chown=nextjs:nodejs package*.json ./
@@ -62,4 +67,6 @@ EXPOSE 3001
 ENV NODE_ENV=production
 ENV PORT=3001
 
-CMD ["cd", "backend", "&&", "npm", "run", "start:production"]
+WORKDIR /app/backend
+
+CMD ["npm", "run", "start:production"]

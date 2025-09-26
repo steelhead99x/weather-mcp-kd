@@ -12,7 +12,7 @@
     "prebuild": "npm run clean",
     "start": "NODE_ENV=development npm run dev",
     "start:prod": "npm run build && npm run start:production",
-    "start:production": "NODE_ENV=production NODE_OPTIONS=\"--disable-warning=DEP0169\" node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs",
+    "start:production": "NODE_ENV=production node dist/backend/src/index.js",
     "typecheck": "tsc --noEmit",
     "test:agent": "npm run build && npx tsx src/scripts/test-weather-agent.ts",
     "test:claude": "npm run build && npx tsx src/scripts/test-claude.ts",

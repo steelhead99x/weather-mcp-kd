@@ -1,0 +1,35 @@
+# Simple production Dockerfile for Digital Ocean
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY backend/package*.json ./backend/
+COPY frontend/package*.json ./frontend/
+COPY shared/package*.json ./shared/
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build shared package first
+RUN cd shared && npm run build
+
+# Build the application
+RUN npm run build
+
+# Set working directory to backend
+WORKDIR /app/backend
+
+# Expose port
+EXPOSE 3001
+
+# Set environment
+ENV NODE_ENV=production
+ENV PORT=3001
+
+# Start the application
+CMD ["npm", "run", "start:production"]

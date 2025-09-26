@@ -1,29 +1,44 @@
-name: weather-mcp-kd
+name: weather-agent
 services:
-- name: web
+- name: weather-agent-backend
   source_dir: /
   github:
-    repo: your-repo/weather-mcp-kd
-    branch: stage
-  run_command: npm run start:fullstack
-  environment_slug: node-js
+    repo: your-username/weather-mcp-kd
+    branch: main
+  dockerfile_path: Dockerfile
   instance_count: 1
   instance_size_slug: basic-xxs
-  http_port: 8080
-  routes:
-  - path: /
+  http_port: 3001
   envs:
   - key: NODE_ENV
     value: production
   - key: PORT
-    value: "8080"
-  - key: HOST
-    value: "0.0.0.0"
-  - key: CORS_ORIGIN
-    value: "https://weather-mcp-kd.streamingportfolio.com"
-  - key: TTS_TMP_DIR
-    value: "/tmp/tts"
-  - key: NODE_OPTIONS
-    value: "--expose-gc --max-old-space-size=1024"
+    value: "3001"
+  - key: MASTRA_API_KEY
+    value: ${MASTRA_API_KEY}
+  - key: OPENWEATHER_API_KEY
+    value: ${OPENWEATHER_API_KEY}
+  - key: MUX_TOKEN_ID
+    value: ${MUX_TOKEN_ID}
+  - key: MUX_TOKEN_SECRET
+    value: ${MUX_TOKEN_SECRET}
+  - key: ANTHROPIC_API_KEY
+    value: ${ANTHROPIC_API_KEY}
+  - key: DEEPGRAM_API_KEY
+    value: ${DEEPGRAM_API_KEY}
+
+static_sites:
+- name: weather-agent-frontend
+  source_dir: /frontend
+  github:
+    repo: your-username/weather-mcp-kd
+    branch: main
   build_command: npm run build
-  dockerfile_path: Dockerfile
+  output_dir: dist
+  routes:
+  - path: /
+  envs:
+  - key: VITE_MASTRA_API_HOST
+    value: ${WEATHER_AGENT_BACKEND_URL}
+  - key: VITE_WEATHER_AGENT_ID
+    value: weatherAgent
