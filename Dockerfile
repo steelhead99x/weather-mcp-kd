@@ -63,7 +63,7 @@ RUN adduser --system --uid 1001 weatheruser
 COPY --from=build-backend --chown=weatheruser:nodejs /app/backend/dist ./backend/dist
 COPY --from=build-frontend --chown=weatheruser:nodejs /app/frontend/dist ./frontend/dist
 COPY --from=build-shared --chown=weatheruser:nodejs /app/shared/dist ./shared/dist
-COPY --from=builder --chown=weatheruser:nodejs /app/backend/files ./backend/files
+COPY --from=build-backend --chown=weatheruser:nodejs /app/backend/files ./backend/files
 
 # (No Mastra CLI output copied)
 
