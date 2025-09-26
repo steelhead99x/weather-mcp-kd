@@ -1,5 +1,5 @@
-# Digital Ocean App Platform - Full Stack Deployment
-# Serves both Mastra backend API and Vite frontend
+# Digital Ocean App Platform - Single App Deployment
+# This is a single full-stack application with Mastra backend + Vite frontend
 FROM node:20-alpine
 
 # Install ffmpeg for video processing (system ffmpeg with musl)
@@ -7,29 +7,27 @@ RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 
-# Copy root package files
-COPY package*.json ./
+# Copy ONLY the root package.json (ignore .mastra/output/package.json)
+COPY package.json package-lock.json ./
 
-# Install root dependencies (including dev) for build
-RUN npm install
+# Install ALL dependencies (including dev) for build
+RUN npm ci
 
-# Copy source code
+# Copy source code (excluding .mastra directory via .dockerignore)
 COPY . .
 
-# Ensure background images directory exists
-RUN mkdir -p files/images
+# Ensure required directories exist
+RUN mkdir -p files/images /tmp/tts
 
-# Build both backend and frontend
+# Build the application (both backend and frontend)
 RUN npm run build
 
 # Remove dev dependencies to reduce image size
 RUN npm prune --omit=dev
 
-# Create runtime temp directory
-RUN mkdir -p /tmp/tts
-
 EXPOSE 8080
 
+# Environment variables
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV HOST=0.0.0.0
@@ -46,5 +44,5 @@ ENV FFMPEG_THREADS=0
 # Enable garbage collection for memory optimization
 ENV NODE_OPTIONS="--expose-gc --max-old-space-size=1024"
 
-# Use the fullstack production server that serves both backend and frontend
+# Single entry point - serves both backend API and frontend
 CMD ["npm", "run", "start:fullstack"]

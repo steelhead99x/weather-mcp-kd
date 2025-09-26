@@ -1,10 +1,10 @@
 name: weather-mcp-kd
 services:
-- name: weather-app
+- name: web
   source_dir: /
   github:
-    repo: your-username/weather-mcp-kd
-    branch: main
+    repo: your-repo/weather-mcp-kd
+    branch: stage
   run_command: npm run start:fullstack
   environment_slug: node-js
   instance_count: 1
@@ -23,33 +23,7 @@ services:
     value: "https://weather-mcp-kd.streamingportfolio.com"
   - key: TTS_TMP_DIR
     value: "/tmp/tts"
-  - key: VIDEO_MAX_WIDTH
-    value: "1920"
-  - key: VIDEO_MAX_HEIGHT
-    value: "1080"
-  - key: FFMPEG_PRESET
-    value: "fast"
-  - key: FFMPEG_CRF
-    value: "23"
-  - key: FFMPEG_THREADS
-    value: "0"
   - key: NODE_OPTIONS
     value: "--expose-gc --max-old-space-size=1024"
-  # Add your API keys here
-  - key: ANTHROPIC_API_KEY
-    value: ${ANTHROPIC_API_KEY}
-  - key: OPENAI_API_KEY
-    value: ${OPENAI_API_KEY}
-  - key: MUX_TOKEN_ID
-    value: ${MUX_TOKEN_ID}
-  - key: MUX_TOKEN_SECRET
-    value: ${MUX_TOKEN_SECRET}
-  - key: DEEPGRAM_API_KEY
-    value: ${DEEPGRAM_API_KEY}
-  - key: WEATHER_API_KEY
-    value: ${WEATHER_API_KEY}
-  # Frontend environment variables
-  - key: VITE_MASTRA_API_HOST
-    value: "https://weather-mcp-kd.streamingportfolio.com"
-  - key: VITE_WEATHER_AGENT_ID
-    value: "weather"
+  build_command: npm run build
+  dockerfile_path: Dockerfile
