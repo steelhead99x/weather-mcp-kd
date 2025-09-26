@@ -17,4 +17,4 @@ export const telemetry = {
   }
 }
 
-export default { agents, tools, mcpServers }
+export default { agents, tools, mcpServers, telemetry }
