@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Accessible theme tokens: high-contrast and color-blind-friendly */
+:root {
+  /* Base */
+  --bg: #f7f7f8; /* near white */
+  --bg-soft: #ffffff;
+  --bg-elev: #ffffffcc; /* translucent for glassy cards */
+  --fg: #1f2937; /* slate-800 */
+  --fg-muted: #4b5563; /* slate-600 */
+  --fg-subtle: #6b7280; /* slate-500 */
+  --border: #e5e7eb; /* gray-200 */
+  --shadow: 0 10px 25px rgba(0,0,0,0.08);
+
+  /* Accents (blue/orange pair avoids R/G confusion) */
+  --accent: #007acc; /* accessible blue */
+  --accent-contrast: #ffffff;
+  --accent-muted: #e6f2fb;
+
+  /* Status colors chosen for CB-friendly distinguishability */
+  --ok: #2cb67d;      /* teal */
+  --warn: #f5a524;    /* orange */
+  --error: #d83f87;   /* magenta */
+
+  /* Overlays */
+  --overlay: rgba(0,0,0,0.08);
+  --overlay-strong: rgba(0,0,0,0.14);
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #0f172a; /* slate-950 */
+  --bg-soft: #0b1221; /* deep */
+  --bg-elev: rgba(17, 24, 39, 0.6); /* glass card */
+  --fg: #e5e7eb; /* gray-200 */
+  --fg-muted: #cbd5e1; /* slate-300 */
+  --fg-subtle: #94a3b8; /* slate-400 */
+  --border: rgba(148, 163, 184, 0.25);
+  --shadow: 0 10px 25px rgba(0,0,0,0.35);
+
+  --accent: #4fc3f7; /* lighter blue for dark bg */
+  --accent-contrast: #0b1221;
+  --accent-muted: rgba(79,195,247,0.15);
+
+  --ok: #2cb67d;
+  --warn: #f5a524;
+  --error: #ff6bb5;
+
+  --overlay: rgba(255,255,255,0.06);
+  --overlay-strong: rgba(255,255,255,0.12);
+}
+
+body {
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
+  color: var(--fg);
+  min-height: 100vh;
+}
+
+.card {
+  background: var(--bg-elev);
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  backdrop-filter: saturate(120%) blur(8px);
+}
+
+.input {
+  width: 100%;
+  border-radius: 0.75rem;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 0.75rem 1rem;
+}
+.input::placeholder { color: var(--fg-subtle); }
+.input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-muted);
+  border-color: var(--accent);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  padding: 0.5rem 1rem;
+  transition: background 120ms ease;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+.btn:hover:not(:disabled) { background: color-mix(in oklab, var(--accent), black 12%); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Screen reader only class for accessibility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

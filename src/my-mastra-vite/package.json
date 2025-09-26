@@ -1,0 +1,50 @@
+{
+  "name": "my-mastra-vite",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "vite preview --host 0.0.0.0 --strictPort --port ${PORT:-8080}",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "debug:mcp": "node debug-mcp-upload.js",
+    "dev:proxy": "node cors-proxy.js"
+  },
+  "dependencies": {
+    "@mastra/client-js": "^0.13.0",
+    "@mux/mux-player-react": "^3.1.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "http-proxy-middleware": "^3.0.5",
+    "nodemon": "^3.1.10",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.0.1",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "jsdom": "^27.0.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "5.4.5",
+    "vite": "^5.4.15",
+    "vitest": "^2.1.9"
+  },
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "vitest": {
+    "environment": "jsdom",
+    "setupFiles": [
+      "src/test/setup.ts"
+    ],
+    "globals": true
+  }
+}

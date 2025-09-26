@@ -1180,7 +1180,7 @@ export const weatherAgent: any = new Agent({
     name: 'weatherAgent',
     description: 'Provides agriculture-focused weather info for ZIP codes and generates a clear, natural TTS video uploaded to Mux with a streaming URL.',
     instructions: buildSystemPrompt(),
-    model: anthropic(process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'),
+    model: anthropic(process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-latest'),
     tools: {
         weatherTool,
         ttsWeatherTool,
@@ -1221,8 +1221,18 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
     // Check if we have a ZIP code in the current messages
     let currentZipCode = zipCode;
     
-    // If no ZIP in current messages, try to retrieve from memory
-    if (!currentZipCode) {
+    // Check if the user is asking a general weather question without providing a ZIP
+    const isGeneralWeatherQuestion = !currentZipCode && (
+        lastContent.toLowerCase().includes('weather') ||
+        lastContent.toLowerCase().includes('forecast') ||
+        lastContent.toLowerCase().includes('temperature') ||
+        lastContent.toLowerCase().includes('rain') ||
+        lastContent.toLowerCase().includes('sunny') ||
+        lastContent.toLowerCase().includes('cloudy')
+    );
+
+    // If no ZIP in current messages and it's a general weather question, don't use stored ZIP
+    if (!currentZipCode && !isGeneralWeatherQuestion) {
         try {
             const thread = await zipMemory.getThreadById({
                 threadId: "default-thread",
@@ -1240,7 +1250,7 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
         } catch (e) {
             console.warn('[textShim] Failed to retrieve ZIP from memory:', e);
         }
-    } else {
+    } else if (currentZipCode) {
         // Store the ZIP code in memory for future use
         try {
             await zipMemory.updateWorkingMemory({
