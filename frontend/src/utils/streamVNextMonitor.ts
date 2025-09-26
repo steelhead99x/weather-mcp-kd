@@ -3,7 +3,7 @@
  * Provides performance tracking, error analysis, and debugging capabilities
  */
 
-import React from 'react'
+import { useEffect, useState } from 'react'
 import type { StreamMetrics, StreamVNextError } from '../types/streamVNext'
 
 export interface StreamVNextMonitorConfig {
@@ -267,10 +267,10 @@ export const globalStreamVNextMonitor = new StreamVNextMonitor({
  * React hook for monitoring streamVNext performance
  */
 export function useStreamVNextMonitoring() {
-  const [monitorData, setMonitorData] = React.useState(globalStreamVNextMonitor.getData())
-  const [summary, setSummary] = React.useState(globalStreamVNextMonitor.getPerformanceSummary())
+  const [monitorData, setMonitorData] = useState(globalStreamVNextMonitor.getData())
+  const [summary, setSummary] = useState(globalStreamVNextMonitor.getPerformanceSummary())
 
-  React.useEffect(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
       setMonitorData(globalStreamVNextMonitor.getData())
       setSummary(globalStreamVNextMonitor.getPerformanceSummary())
