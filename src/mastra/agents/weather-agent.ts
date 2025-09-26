@@ -918,14 +918,19 @@ const ttsWeatherTool = createTool({
                     throw new Error(`Mux MCP missing upload tool. Available tools: ${availableTools.join(', ')}`);
                 }
 
-                // Simplified argument structure - use only essential args
-                const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
+                // Simplified argument structure - avoid union type issues by using minimal args
                 const createArgs = {
-                    cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com',
-                    new_asset_settings: { 
-                        playback_policies: [playbackPolicy] 
-                    }
+                    cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com'
                 };
+                
+                // Only add new_asset_settings if we need signed playback
+                const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
+                if (playbackPolicy === 'signed') {
+                    // Use a simpler structure to avoid union type issues
+                    (createArgs as any).new_asset_settings = {
+                        playback_policies: ['signed']
+                    };
+                }
                 
                 // Add test flag if specified
                 if (process.env.MUX_UPLOAD_TEST === 'true') {

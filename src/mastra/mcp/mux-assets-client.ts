@@ -103,7 +103,24 @@ class MuxAssetsMCPClient {
                         inputSchema: this.convertToZodSchema(tool.inputSchema),
                         execute: async ({ context }) => {
                             if (!this.client) throw new Error("Client not connected");
-                            return (await this.client.callTool({ name: tool.name, arguments: context || {} })).content;
+                            
+                            try {
+                                return (await this.client.callTool({ name: tool.name, arguments: context || {} })).content;
+                            } catch (error) {
+                                // Handle union type errors from MCP SDK
+                                if (error instanceof Error && error.message.includes('union is not a function')) {
+                                    console.error(`MCP Union error for tool ${tool.name}:`, {
+                                        toolName: tool.name,
+                                        context,
+                                        error: error.message,
+                                        stack: error.stack
+                                    });
+                                    
+                                    // Return a more user-friendly error
+                                    throw new Error(`MCP tool ${tool.name} failed due to schema validation error. This is a known issue with the MCP SDK version. Please try again or contact support.`);
+                                }
+                                throw error;
+                            }
                         },
                     });
                 } catch (e) {
