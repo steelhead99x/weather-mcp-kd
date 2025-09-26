@@ -6,10 +6,13 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx --watch src/index.ts",
-    "build": "NODE_OPTIONS=--max-old-space-size=2048 npm run compile",
+    "build": "npm run test && NODE_OPTIONS=--max-old-space-size=2048 npm run compile",
     "compile": "NODE_OPTIONS=--max-old-space-size=2048 tsc --build --verbose",
     "clean": "rm -rf dist .mastra",
-    "prebuild": "npm run clean",
+    "prebuild": "npm run clean && npm run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "start": "NODE_ENV=development npm run dev",
     "start:prod": "npm run build && npm run start:production",
     "start:production": "NODE_ENV=production node dist/index.js",
@@ -45,7 +48,11 @@
   "devDependencies": {
     "@types/fluent-ffmpeg": "^2.1.27",
     "@types/node": "^20.19.17",
+    "@types/supertest": "^6.0.3",
     "@types/ws": "^8.5.10",
-    "typescript": "^5.6.3"
+    "@vitest/ui": "^3.2.4",
+    "supertest": "^7.1.4",
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.4"
   }
 }

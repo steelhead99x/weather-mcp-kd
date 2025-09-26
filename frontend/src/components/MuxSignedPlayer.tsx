@@ -1,7 +1,16 @@
-import { useEffect, useMemo, useState, Suspense, lazy } from 'react'
+import { useEffect, useMemo, useState, Suspense, lazy, useRef } from 'react'
 
 // Lazy load MuxPlayer to reduce initial bundle size
 const MuxPlayer = lazy(() => import('@mux/mux-player-react').then(module => ({ default: module.default })))
+
+// Error handler for WritableStream issues
+const handleStreamError = (error: ErrorEvent) => {
+  if (error.message && error.message.includes('WritableStream')) {
+    console.warn('[MuxPlayer] WritableStream error caught and suppressed:', error.message)
+    return true // Prevent default error handling
+  }
+  return false
+}
 
 /**
  * A lightweight wrapper that fetches a signed playback token for a Mux asset
@@ -45,6 +54,42 @@ export default function MuxSignedPlayer({
   >({ status: 'idle' })
 
   const body = useMemo(() => ({ assetId, type }), [assetId, type])
+  const playerRef = useRef<any>(null)
+
+  // Setup global error handler for WritableStream errors
+  useEffect(() => {
+    const originalHandler = window.onerror
+    
+    window.onerror = (message, source, lineno, colno, error) => {
+      // Check if this is a WritableStream error
+      if (typeof message === 'string' && message.includes('WritableStream')) {
+        console.warn('[MuxPlayer] WritableStream error suppressed:', message)
+        return true // Prevent default error handling
+      }
+      
+      // Call original handler for other errors
+      if (originalHandler) {
+        return originalHandler(message, source, lineno, colno, error)
+      }
+      return false
+    }
+
+    // Also handle unhandled promise rejections
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (event.reason && typeof event.reason === 'object' && 
+          event.reason.message && event.reason.message.includes('WritableStream')) {
+        console.warn('[MuxPlayer] WritableStream promise rejection suppressed:', event.reason.message)
+        event.preventDefault()
+      }
+    }
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
+    return () => {
+      window.onerror = originalHandler
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -160,6 +205,7 @@ export default function MuxSignedPlayer({
         </div>
       }>
         <MuxPlayer
+          ref={playerRef}
           playbackId={state.status === 'ready' ? state.playbackId : ''}
           tokens={{ 
             playback: state.status === 'ready' ? state.token : '',
@@ -167,6 +213,16 @@ export default function MuxSignedPlayer({
           }}
           streamType="on-demand"
           autoPlay={false}
+          onError={(error: any) => {
+            // Handle MuxPlayer errors gracefully
+            if (error && typeof error === 'object' && error.message) {
+              if (error.message.includes('WritableStream')) {
+                console.warn('[MuxPlayer] WritableStream error in player, suppressed:', error.message)
+                return // Don't propagate WritableStream errors
+              }
+            }
+            console.error('[MuxPlayer] Player error:', error)
+          }}
           style={{
             width: '100%',
             height: 'auto',
