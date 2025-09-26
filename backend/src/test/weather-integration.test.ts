@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import request from 'supertest'
 import express from 'express'
 import cors from 'cors'
@@ -13,7 +13,7 @@ function createIntegrationTestApp() {
   // Copy the exact endpoint from our main server
   app.post('/api/agents/:agentId/stream/vnext', async (req, res) => {
     try {
-      const agentId = req.params.agentId
+      // agentId is available in req.params.agentId but not used in this test
       
       // Handle different message formats from the frontend
       let messages
