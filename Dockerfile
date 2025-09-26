@@ -11,8 +11,17 @@ COPY backend/package*.json ./backend/
 COPY frontend/package*.json ./frontend/
 COPY shared/package*.json ./shared/
 
-# Install dependencies
+# Install root dependencies
 RUN npm ci --omit=dev
+
+# Install backend dependencies
+RUN cd backend && npm ci --omit=dev
+
+# Install frontend dependencies  
+RUN cd frontend && npm ci --omit=dev
+
+# Install shared dependencies
+RUN cd shared && npm ci --omit=dev
 
 # Build the application
 FROM base AS builder
@@ -26,6 +35,15 @@ COPY shared/package*.json ./shared/
 
 # Install all dependencies (including dev dependencies)
 RUN npm ci
+
+# Install backend dependencies
+RUN cd backend && npm ci
+
+# Install frontend dependencies
+RUN cd frontend && npm ci
+
+# Install shared dependencies
+RUN cd shared && npm ci
 
 # Copy source code
 COPY . .
