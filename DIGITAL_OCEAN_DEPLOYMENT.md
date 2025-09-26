@@ -29,7 +29,7 @@ The project includes the following deployment configuration:
    Set these environment variables in Digital Ocean:
    ```
    MASTRA_API_KEY=your_mastra_api_key
-   OPENWEATHER_API_KEY=your_openweather_api_key
+   WEATHER_MCP_USER_AGENT=WeatherAgent/1.0 (weather-agent@streamingportfolio.com)
    MUX_TOKEN_ID=your_mux_token_id
    MUX_TOKEN_SECRET=your_mux_token_secret
    ANTHROPIC_API_KEY=your_anthropic_api_key
@@ -90,7 +90,7 @@ docker run -p 3001:3001 \
   -e NODE_ENV=production \
   -e PORT=3001 \
   -e MASTRA_API_KEY=your_key \
-  -e OPENWEATHER_API_KEY=your_key \
+  -e WEATHER_MCP_USER_AGENT="WeatherAgent/1.0 (weather-agent@streamingportfolio.com)" \
   weather-agent
 ```
 

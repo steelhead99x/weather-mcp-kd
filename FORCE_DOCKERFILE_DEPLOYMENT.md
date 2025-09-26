@@ -44,8 +44,8 @@ services:
     value: "3001"
   - key: MASTRA_API_KEY
     value: ${MASTRA_API_KEY}
-  - key: OPENWEATHER_API_KEY
-    value: ${OPENWEATHER_API_KEY}
+  - key: WEATHER_MCP_USER_AGENT
+    value: WeatherAgent/1.0 (weather-agent@streamingportfolio.com)
   - key: MUX_TOKEN_ID
     value: ${MUX_TOKEN_ID}
   - key: MUX_TOKEN_SECRET
@@ -78,7 +78,7 @@ Set these environment variables in Digital Ocean:
 
 ```
 MASTRA_API_KEY=your_mastra_api_key
-OPENWEATHER_API_KEY=your_openweather_api_key
+WEATHER_MCP_USER_AGENT=WeatherAgent/1.0 (weather-agent@streamingportfolio.com)
 MUX_TOKEN_ID=your_mux_token_id
 MUX_TOKEN_SECRET=your_mux_token_secret
 ANTHROPIC_API_KEY=your_anthropic_api_key

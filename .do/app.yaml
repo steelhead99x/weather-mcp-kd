@@ -16,8 +16,6 @@ services:
     value: "3001"
   - key: MASTRA_API_KEY
     value: ${MASTRA_API_KEY}
-  - key: OPENWEATHER_API_KEY
-    value: ${OPENWEATHER_API_KEY}
   - key: MUX_TOKEN_ID
     value: ${MUX_TOKEN_ID}
   - key: MUX_TOKEN_SECRET

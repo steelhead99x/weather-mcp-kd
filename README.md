@@ -39,7 +39,7 @@ weather-agent-monorepo/
 
 - Node.js 20+ 
 - npm or yarn
-- API keys for OpenWeather, Mux, and Mastra
+- API keys for Mux and Mastra (weather data is free from National Weather Service)
 
 ### Installation
 
@@ -100,8 +100,8 @@ PORT=3001
 # Mastra Configuration
 MASTRA_API_KEY=your_mastra_api_key_here
 
-# Weather API Configuration
-OPENWEATHER_API_KEY=your_openweather_api_key_here
+# Weather API Configuration (National Weather Service - Free, No API Key Required)
+WEATHER_MCP_USER_AGENT=WeatherAgent/1.0 (weather-agent@streamingportfolio.com)
 
 # Mux Configuration
 MUX_TOKEN_ID=your_mux_token_id_here
@@ -114,7 +114,10 @@ VITE_WEATHER_AGENT_ID=weatherAgent
 
 ### API Keys Required
 
-1. **OpenWeather API** - For weather data
+1. **National Weather Service API** - Free weather data (no API key required)
+   - Uses [api.weather.gov](https://www.weather.gov/documentation/services-web-api)
+   - Provides forecasts, alerts, and observations
+   - Requires User-Agent header for identification
 2. **Mux API** - For video processing and streaming
 3. **Mastra API** - For AI agent functionality
 
