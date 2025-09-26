@@ -1,3 +1,40 @@
+spec:
+  name: weather-mcp-kd
+  services:
+    - name: backend
+      dockerfile_path: Dockerfile
+      http_port: 3001
+      instance_count: 1
+      instance_size_slug: basic-xxs
+      routes:
+        - path: /
+      health_check:
+        http_path: /health
+        initial_delay_seconds: 10
+        period_seconds: 10
+        timeout_seconds: 5
+        failure_threshold: 3
+        success_threshold: 1
+      envs:
+        - key: NODE_ENV
+          value: production
+        - key: PORT
+          value: "3001"
+        # Set these in DO dashboard or DO secrets for security
+        - key: ANTHROPIC_API_KEY
+          scope: RUN_AND_BUILD_TIME
+          value: ""
+        - key: DEEPGRAM_API_KEY
+          scope: RUN_AND_BUILD_TIME
+          value: ""
+        - key: MUX_TOKEN_ID
+          scope: RUN_AND_BUILD_TIME
+          value: ""
+        - key: MUX_TOKEN_SECRET
+          scope: RUN_AND_BUILD_TIME
+          value: ""
+        - key: TTS_TMP_DIR
+          value: /tmp/tts
 name: weather-agent
 services:
 - name: weather-agent-backend
