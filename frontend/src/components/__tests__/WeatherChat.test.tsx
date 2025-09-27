@@ -62,8 +62,8 @@ describe('WeatherChat', () => {
 
     // Check that the component renders with the expected elements
     expect(screen.getByText(/farmer-friendly, solar-powered weather insights/i)).toBeInTheDocument()
-    expect(screen.getByPlaceholderText(/enter your 5-digit zip code/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /send message/i })).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/enter your zip code for detailed weather forecast/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /get forecast/i })).toBeInTheDocument()
     expect(screen.getByText(/connected to agent:/i)).toBeInTheDocument()
   })
 
@@ -72,7 +72,7 @@ describe('WeatherChat', () => {
       render(<WeatherChat />)
     })
 
-    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
+    const input = screen.getByPlaceholderText(/enter your zip code for detailed weather forecast/i)
     fireEvent.change(input, { target: { value: '94102' } })
 
     expect(input).toHaveValue('94102')
@@ -83,7 +83,7 @@ describe('WeatherChat', () => {
       render(<WeatherChat />)
     })
 
-    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
+    const input = screen.getByPlaceholderText(/enter your zip code for detailed weather forecast/i)
     fireEvent.change(input, { target: { value: '123' } })
 
     expect(screen.getByText(/please enter a valid 5-digit zip code/i)).toBeInTheDocument()
@@ -94,8 +94,8 @@ describe('WeatherChat', () => {
       render(<WeatherChat />)
     })
 
-    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
-    const button = screen.getByRole('button', { name: /send message/i })
+    const input = screen.getByPlaceholderText(/enter your zip code for detailed weather forecast/i)
+    const button = screen.getByRole('button', { name: /get forecast/i })
     
     fireEvent.change(input, { target: { value: '123' } })
 
@@ -107,8 +107,8 @@ describe('WeatherChat', () => {
       render(<WeatherChat />)
     })
 
-    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
-    const button = screen.getByRole('button', { name: /send message/i })
+    const input = screen.getByPlaceholderText(/enter your zip code for detailed weather forecast/i)
+    const button = screen.getByRole('button', { name: /get forecast/i })
     
     fireEvent.change(input, { target: { value: '94102' } })
 
@@ -123,8 +123,8 @@ describe('WeatherChat', () => {
       render(<WeatherChat />)
     })
 
-    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
-    const button = screen.getByRole('button', { name: /send message/i })
+    const input = screen.getByPlaceholderText(/enter your zip code for detailed weather forecast/i)
+    const button = screen.getByRole('button', { name: /get forecast/i })
     
     // Test invalid ZIP code
     fireEvent.change(input, { target: { value: '123' } })

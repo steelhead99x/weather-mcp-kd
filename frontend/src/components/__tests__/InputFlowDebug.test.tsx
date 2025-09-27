@@ -103,16 +103,16 @@ describe('Input Flow Debug Tests', () => {
     const testInput = '85001'
     
     // Enter ZIP code
-    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
+    const input = screen.getByPlaceholderText(/enter your zip code for detailed weather forecast/i)
     fireEvent.change(input, { target: { value: testInput } })
     
     // Wait for button to be enabled
     await waitFor(() => {
-      const button = screen.getByRole('button', { name: /send message/i })
+      const button = screen.getByRole('button', { name: /get forecast/i })
       expect(button).not.toBeDisabled()
     })
     
-    const button = screen.getByRole('button', { name: /send message/i })
+    const button = screen.getByRole('button', { name: /get forecast/i })
     fireEvent.click(button)
     
     // Wait for streamVNext to be called
@@ -153,15 +153,15 @@ describe('Input Flow Debug Tests', () => {
     const testInput = 'more detailed weather info'
     
     // First send a ZIP to enable further conversation
-    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
+    const input = screen.getByPlaceholderText(/enter your zip code for detailed weather forecast/i)
     fireEvent.change(input, { target: { value: '90210' } })
     
     await waitFor(() => {
-      const button = screen.getByRole('button', { name: /send message/i })
+      const button = screen.getByRole('button', { name: /get forecast/i })
       expect(button).not.toBeDisabled()
     })
     
-    let button = screen.getByRole('button', { name: /send message/i })
+    let button = screen.getByRole('button', { name: /get forecast/i })
     fireEvent.click(button)
     
     await waitFor(() => {
@@ -181,7 +181,7 @@ describe('Input Flow Debug Tests', () => {
     // Wait a bit and try - the hasAssistantResponded logic should allow this
     await new Promise(resolve => setTimeout(resolve, 100))
     
-    button = screen.getByRole('button', { name: /send message/i })
+    button = screen.getByRole('button', { name: /get forecast/i })
     
     // If button is still disabled, skip this test as it's dependent on the mock response flow
     if (button.hasAttribute('disabled')) {

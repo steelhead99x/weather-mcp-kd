@@ -59,15 +59,15 @@ describe('Debug Stream Error Test', () => {
     // Wait for agent to load
     await new Promise(resolve => setTimeout(resolve, 100))
     
-    const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
+    const input = screen.getByPlaceholderText(/enter your zip code for detailed weather forecast/i)
     fireEvent.change(input, { target: { value: '85001' } })
     
     await waitFor(() => {
-      const button = screen.getByRole('button', { name: /send message/i })
+      const button = screen.getByRole('button', { name: /get forecast/i })
       expect(button).not.toBeDisabled()
     })
     
-    const button = screen.getByRole('button', { name: /send message/i })
+    const button = screen.getByRole('button', { name: /get forecast/i })
     fireEvent.click(button)
     
     // Wait for error to appear
@@ -148,15 +148,15 @@ describe('Debug Stream Error Test', () => {
       // Wait for agent to load
       await new Promise(resolve => setTimeout(resolve, 50))
       
-      const input = screen.getByPlaceholderText(/enter your 5-digit zip code/i)
+      const input = screen.getByPlaceholderText(/enter your zip code for detailed weather forecast/i)
       fireEvent.change(input, { target: { value: '85001' } })
       
       await waitFor(() => {
-        const button = screen.getByRole('button', { name: /send message/i })
+        const button = screen.getByRole('button', { name: /get forecast/i })
         expect(button).not.toBeDisabled()
       })
       
-      const button = screen.getByRole('button', { name: /send message/i })
+      const button = screen.getByRole('button', { name: /get forecast/i })
       fireEvent.click(button)
       
       // Wait for error to appear

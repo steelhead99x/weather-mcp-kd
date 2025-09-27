@@ -327,9 +327,8 @@ async function waitForMuxAssetReady(assetId: string, {
 }
 
 async function performAssetPolling(assetId: string, {
-    pollMs,
     timeoutMs,
-}: { pollMs: number; timeoutMs: number }): Promise<{
+}: { pollMs?: number; timeoutMs: number }): Promise<{
     status: string;
     playbackId?: string;
     hlsUrl?: string;
@@ -350,7 +349,18 @@ async function performAssetPolling(assetId: string, {
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 5;
     
+    // Progressive polling intervals: start frequent, then back off
+    const getPollInterval = (elapsedMs: number): number => {
+        if (elapsedMs < 60000) return 5000; // First minute: every 5 seconds
+        if (elapsedMs < 300000) return 10000; // Next 4 minutes: every 10 seconds
+        if (elapsedMs < 900000) return 30000; // Next 10 minutes: every 30 seconds
+        return 60000; // After 15 minutes: every minute
+    };
+    
     while (Date.now() - start < timeoutMs) {
+        const elapsedMs = Date.now() - start;
+        const currentPollInterval = getPollInterval(elapsedMs);
+        
         try {
             const res = await getAsset.execute({ context: { ASSET_ID: assetId } });
             const text = Array.isArray(res) ? (res[0] as any)?.text ?? '' : String(res ?? '');
@@ -365,14 +375,19 @@ async function performAssetPolling(assetId: string, {
             // Type guard to check if lastPayload is a valid MuxAssetResponse
             if ('raw' in lastPayload) {
                 // Skip raw responses that couldn't be parsed
+                console.debug(`[performAssetPolling] Skipping unparseable response for asset ${assetId}: ${text.slice(0, 100)}...`);
+                await new Promise(r => setTimeout(r, currentPollInterval));
                 continue;
             }
             
             const status = lastPayload?.status as string | undefined;
+            console.debug(`[performAssetPolling] Asset ${assetId} status: ${status} (${Math.round(elapsedMs / 1000)}s elapsed, next check in ${currentPollInterval / 1000}s)`);
+            
             if (status === 'ready' && 'playback_ids' in lastPayload) {
                 const playbackId = Array.isArray(lastPayload.playback_ids) && lastPayload.playback_ids.length > 0
                     ? (lastPayload.playback_ids[0]?.id as string | undefined)
                     : undefined;
+                console.log(`[performAssetPolling] Asset ${assetId} is ready! Playback ID: ${playbackId}`);
                 return {
                     status,
                     playbackId,
@@ -393,17 +408,20 @@ async function performAssetPolling(assetId: string, {
             
         } catch (e) {
             consecutiveErrors++;
-            console.warn(`[performAssetPolling] Error polling asset ${assetId} (attempt ${consecutiveErrors}):`, e instanceof Error ? e.message : String(e));
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            console.warn(`[performAssetPolling] Error polling asset ${assetId} (attempt ${consecutiveErrors}/${maxConsecutiveErrors}):`, errorMsg);
             
             // If we have too many consecutive errors, fail fast
             if (consecutiveErrors >= maxConsecutiveErrors) {
-                throw new Error(`Too many consecutive errors (${consecutiveErrors}) polling asset ${assetId}: ${e instanceof Error ? e.message : String(e)}`);
+                throw new Error(`Too many consecutive errors (${consecutiveErrors}) polling asset ${assetId}: ${errorMsg}`);
             }
             
             // transient errors: jitter then continue
-            await new Promise(r => setTimeout(r, Math.min(2000, pollMs)));
+            await new Promise(r => setTimeout(r, Math.min(2000, currentPollInterval)));
         }
-        await new Promise(r => setTimeout(r, pollMs));
+        
+        // Use progressive polling interval
+        await new Promise(r => setTimeout(r, currentPollInterval));
     }
     throw new Error(`Timeout waiting for Mux asset ${assetId} to be ready after ${timeoutMs}ms`);
 }
@@ -914,8 +932,34 @@ const ttsWeatherTool = createTool({
                 let assetReadyPromise: Promise<any> | null = null;
                 if (assetId) {
                     console.debug('[tts-weather-upload] Starting background asset readiness polling...');
-                    assetReadyPromise = waitForMuxAssetReady(assetId).catch(error => {
-                        console.warn('[tts-weather-upload] Background asset polling failed:', error instanceof Error ? error.message : String(error));
+                    
+                    // Calculate timeout based on audio file size (longer files take more time to process)
+                    let audioFileSize = 0;
+                    try {
+                        const stats = await fs.stat(audioPath);
+                        audioFileSize = stats.size;
+                    } catch (error) {
+                        console.debug(`[tts-weather-upload] Could not get audio file size: ${error instanceof Error ? error.message : String(error)}`);
+                    }
+                    const baseTimeoutMs = 10 * 60 * 1000; // 10 minutes base
+                    const sizeBasedTimeoutMs = Math.min(audioFileSize / 1000, 10 * 60 * 1000); // 1ms per KB, max 10 minutes
+                    const totalTimeoutMs = Math.min(baseTimeoutMs + sizeBasedTimeoutMs, 30 * 60 * 1000); // Max 30 minutes
+                    
+                    console.debug(`[tts-weather-upload] Audio file size: ${audioFileSize} bytes, calculated timeout: ${Math.round(totalTimeoutMs / 1000)}s`);
+                    
+                    assetReadyPromise = waitForMuxAssetReady(assetId, {
+                        pollMs: 5000, // Initial poll interval (will be overridden by progressive logic)
+                        timeoutMs: totalTimeoutMs
+                    }).then(result => {
+                        console.log(`[tts-weather-upload] Asset ${assetId} is ready! Status: ${result.status}, Playback ID: ${result.playbackId}`);
+                        return result;
+                    }).catch(error => {
+                        const errorMsg = error instanceof Error ? error.message : String(error);
+                        if (errorMsg.includes('Timeout')) {
+                            console.warn(`[tts-weather-upload] Background asset polling timed out for ${assetId} after ${Math.round(totalTimeoutMs / 1000)}s. Asset may still be processing.`);
+                        } else {
+                            console.warn(`[tts-weather-upload] Background asset polling failed for ${assetId}:`, errorMsg);
+                        }
                         return null;
                     });
                 } else {

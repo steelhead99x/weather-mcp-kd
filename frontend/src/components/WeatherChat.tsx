@@ -529,17 +529,21 @@ export default function WeatherChat() {
               <div className="mb-4">
                 <span className="text-4xl">🌾</span>
               </div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
+              <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--fg)' }}>
                 Welcome to WeatherAgent
               </h3>
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm mb-4" style={{ color: 'var(--fg-subtle)' }}>
                 Get detailed weather forecasts tailored for farming decisions. Enter your ZIP code below to start.
               </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-blue-800 font-medium mb-2">
+              <div className="rounded-lg p-4 mb-4" style={{ 
+                backgroundColor: 'var(--accent-muted)', 
+                borderColor: 'var(--accent)',
+                border: '1px solid'
+              }}>
+                <p className="text-sm font-medium mb-2" style={{ color: 'var(--accent)' }}>
                   What you'll get:
                 </p>
-                <ul className="text-xs text-blue-700 space-y-1 text-left">
+                <ul className="text-xs space-y-1 text-left" style={{ color: 'var(--fg-subtle)' }}>
                   <li>• 7-day weather forecast with agricultural insights</li>
                   <li>• Planting and irrigation recommendations</li>
                   <li>• Pest and disease pressure alerts</li>
@@ -614,7 +618,7 @@ export default function WeatherChat() {
           )}
         </div>
         <button
-          aria-label="Send message"
+          aria-label={hasAssistantResponded ? "Send message" : "Get forecast"}
           className="btn whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={onSend}
           disabled={!agent || streamState.isLoading || !input.trim() || (!hasAssistantResponded && !/^\d{5}$/.test(input.trim()))}
