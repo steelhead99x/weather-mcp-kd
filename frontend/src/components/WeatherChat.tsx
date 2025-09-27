@@ -126,32 +126,39 @@ const ToolCallDisplay = memo(({ toolCall }: { toolCall: ToolCallDebug }) => {
   }
 
   return (
-    <div className="border border-gray-200 rounded-md mb-1 tool-call-container">
+    <div className="border rounded-md mb-1 tool-call-container" style={{ borderColor: 'var(--border)' }}>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full text-left p-2 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between group tool-call-expand"
+        className="w-full text-left p-2 hover:opacity-80 transition-opacity flex items-center justify-between group tool-call-expand"
+        style={{ backgroundColor: 'var(--overlay)' }}
       >
         <div className="flex items-center gap-2">
           <span className="group-hover:scale-110 transition-transform">{getStatusIcon(toolCall.status)}</span>
-          <span className="font-medium text-xs">{toolCall.toolName}</span>
-          <span className="text-xs text-gray-500">({toolCall.status})</span>
+          <span className="font-medium text-xs" style={{ color: 'var(--fg)' }}>{toolCall.toolName}</span>
+          <span className="text-xs" style={{ color: 'var(--fg-subtle)' }}>({toolCall.status})</span>
           {toolCall.duration && (
-            <span className="text-xs text-gray-400">
+            <span className="text-xs" style={{ color: 'var(--fg-subtle)' }}>
               {toolCall.duration < 1000 ? `${toolCall.duration}ms` : `${(toolCall.duration / 1000).toFixed(1)}s`}
             </span>
           )}
         </div>
-        <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">
+        <span className="text-xs group-hover:opacity-70 transition-opacity" style={{ color: 'var(--fg-subtle)' }}>
           {isExpanded ? '▼' : '▶'}
         </span>
       </button>
       
       {isExpanded && (
-        <div className="p-2 border-t border-gray-200 bg-white">
+        <div className="p-2 border-t" style={{ 
+          borderColor: 'var(--border)',
+          backgroundColor: 'var(--bg-elev)'
+        }}>
           {toolCall.args && Object.keys(toolCall.args).length > 0 && (
             <div className="mb-2">
-              <div className="text-xs font-semibold text-gray-700 mb-1">Arguments:</div>
-              <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto max-h-32">
+              <div className="text-xs font-semibold mb-1" style={{ color: 'var(--fg)' }}>Arguments:</div>
+              <pre className="text-xs p-2 rounded overflow-x-auto max-h-32" style={{ 
+                backgroundColor: 'var(--overlay)',
+                color: 'var(--fg)'
+              }}>
                 {formatToolData(toolCall.args)}
               </pre>
             </div>
@@ -159,8 +166,8 @@ const ToolCallDisplay = memo(({ toolCall }: { toolCall: ToolCallDebug }) => {
           
           {toolCall.result !== undefined && (
             <div className="mb-2">
-              <div className="text-xs font-semibold text-gray-700 mb-1">Result:</div>
-              <div className="text-xs tool-call-result whitespace-pre-wrap">
+              <div className="text-xs font-semibold mb-1" style={{ color: 'var(--fg)' }}>Result:</div>
+              <div className="text-xs tool-call-result whitespace-pre-wrap" style={{ color: 'var(--fg)' }}>
                 {formatToolResult(toolCall.result)}
               </div>
             </div>
@@ -225,12 +232,12 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
               </div>
             )}
             {/* Then render the video player */}
-            <div className="mt-3 border-t border-gray-200 pt-3">
+            <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
               <MuxSignedPlayer 
                 assetId={assetId}
                 className="w-full max-w-lg mx-auto rounded-lg overflow-hidden"
               />
-              <div className="text-xs text-gray-500 text-center mt-2">
+              <div className="text-xs text-center mt-2" style={{ color: 'var(--fg-subtle)' }}>
                 📹 Video: {muxVideoUrl}
               </div>
             </div>
@@ -718,17 +725,23 @@ export default function WeatherChat() {
       {/* Debug Panel */}
       {streamState.metrics && (
         <details className="text-xs">
-          <summary className="cursor-pointer hover:text-gray-700 transition-colors">
+          <summary className="cursor-pointer hover:opacity-70 transition-opacity" style={{ color: 'var(--fg-muted)' }}>
             🔧 Technical Details
           </summary>
-          <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="mt-2 p-3 rounded-lg border" style={{ 
+            backgroundColor: 'var(--overlay)',
+            borderColor: 'var(--border)'
+          }}>
             <div className="space-y-3">
               {/* Stream Metrics */}
               <div className="space-y-2">
-                <h4 className="font-semibold text-gray-800 border-b border-gray-300 pb-1">Weather Data Stream</h4>
+                <h4 className="font-semibold border-b pb-1" style={{ 
+                  color: 'var(--fg)',
+                  borderColor: 'var(--border)'
+                }}>Weather Data Stream</h4>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Response Time:</span>
-                  <span className="font-mono">
+                  <span style={{ color: 'var(--fg-muted)' }}>Response Time:</span>
+                  <span className="font-mono" style={{ color: 'var(--fg)' }}>
                     {streamState.metrics.endTime 
                       ? `${((streamState.metrics.endTime - streamState.metrics.startTime) / 1000).toFixed(1)}s`
                       : 'In progress...'
@@ -736,12 +749,12 @@ export default function WeatherChat() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Data Sources:</span>
-                  <span className="font-mono">{streamState.metrics.chunksReceived} weather stations</span>
+                  <span style={{ color: 'var(--fg-muted)' }}>Data Sources:</span>
+                  <span className="font-mono" style={{ color: 'var(--fg)' }}>{streamState.metrics.chunksReceived} weather stations</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Data Size:</span>
-                  <span className="font-mono">
+                  <span style={{ color: 'var(--fg-muted)' }}>Data Size:</span>
+                  <span className="font-mono" style={{ color: 'var(--fg)' }}>
                     {streamState.metrics.bytesReceived > 1024 
                       ? `${(streamState.metrics.bytesReceived / 1024).toFixed(1)}KB`
                       : `${streamState.metrics.bytesReceived}B`
@@ -749,13 +762,13 @@ export default function WeatherChat() {
                   </span>
                 </div>
                 {streamState.metrics.errors > 0 && (
-                  <div className="flex justify-between text-red-600">
+                  <div className="flex justify-between" style={{ color: 'var(--error)' }}>
                     <span>Connection Issues:</span>
                     <span className="font-mono">{streamState.metrics.errors}</span>
                   </div>
                 )}
                 {streamState.metrics.retries > 0 && (
-                  <div className="flex justify-between text-yellow-600">
+                  <div className="flex justify-between" style={{ color: 'var(--warn)' }}>
                     <span>Reconnection Attempts:</span>
                     <span className="font-mono">{streamState.metrics.retries}</span>
                   </div>
@@ -770,59 +783,62 @@ export default function WeatherChat() {
                 
                 return (
                   <div className="space-y-2">
-                    <h4 className="font-semibold text-gray-800 border-b border-gray-300 pb-1">Video Analytics</h4>
+                    <h4 className="font-semibold border-b pb-1" style={{ 
+                      color: 'var(--fg)',
+                      borderColor: 'var(--border)'
+                    }}>Video Analytics</h4>
                     {muxAnalytics.map((analytics, index) => (
-                      <div key={analytics.assetId || index} className="space-y-1 pl-2 border-l-2 border-blue-200">
+                      <div key={analytics.assetId || index} className="space-y-1 pl-2 border-l-2" style={{ borderColor: 'var(--accent)' }}>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Asset ID:</span>
-                          <span className="font-mono text-xs">{analytics.assetId?.substring(0, 8)}...</span>
+                          <span style={{ color: 'var(--fg-muted)' }}>Asset ID:</span>
+                          <span className="font-mono text-xs" style={{ color: 'var(--fg)' }}>{analytics.assetId?.substring(0, 8)}...</span>
                         </div>
                         {analytics.videoDuration && (
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Duration:</span>
-                            <span className="font-mono">{Math.round(analytics.videoDuration)}s</span>
+                            <span style={{ color: 'var(--fg-muted)' }}>Duration:</span>
+                            <span className="font-mono" style={{ color: 'var(--fg)' }}>{Math.round(analytics.videoDuration)}s</span>
                           </div>
                         )}
                         {analytics.currentTime !== undefined && (
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Current Time:</span>
-                            <span className="font-mono">{Math.round(analytics.currentTime)}s</span>
+                            <span style={{ color: 'var(--fg-muted)' }}>Current Time:</span>
+                            <span className="font-mono" style={{ color: 'var(--fg)' }}>{Math.round(analytics.currentTime)}s</span>
                           </div>
                         )}
                         {analytics.completionRate > 0 && (
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Completion:</span>
-                            <span className="font-mono">{analytics.completionRate.toFixed(1)}%</span>
+                            <span style={{ color: 'var(--fg-muted)' }}>Completion:</span>
+                            <span className="font-mono" style={{ color: 'var(--fg)' }}>{analytics.completionRate.toFixed(1)}%</span>
                           </div>
                         )}
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Play Events:</span>
-                          <span className="font-mono">{analytics.playEvents}</span>
+                          <span style={{ color: 'var(--fg-muted)' }}>Play Events:</span>
+                          <span className="font-mono" style={{ color: 'var(--fg)' }}>{analytics.playEvents}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Pause Events:</span>
-                          <span className="font-mono">{analytics.pauseEvents}</span>
+                          <span style={{ color: 'var(--fg-muted)' }}>Pause Events:</span>
+                          <span className="font-mono" style={{ color: 'var(--fg)' }}>{analytics.pauseEvents}</span>
                         </div>
                         {analytics.bufferingEvents > 0 && (
-                          <div className="flex justify-between text-yellow-600">
+                          <div className="flex justify-between" style={{ color: 'var(--warn)' }}>
                             <span>Buffering Events:</span>
                             <span className="font-mono">{analytics.bufferingEvents}</span>
                           </div>
                         )}
                         {analytics.seekingEvents > 0 && (
-                          <div className="flex justify-between text-blue-600">
+                          <div className="flex justify-between" style={{ color: 'var(--accent)' }}>
                             <span>Seek Events:</span>
                             <span className="font-mono">{analytics.seekingEvents}</span>
                           </div>
                         )}
                         {analytics.errorEvents > 0 && (
-                          <div className="flex justify-between text-red-600">
+                          <div className="flex justify-between" style={{ color: 'var(--error)' }}>
                             <span>Video Errors:</span>
                             <span className="font-mono">{analytics.errorEvents}</span>
                           </div>
                         )}
                         {analytics.lastEventTime && (
-                          <div className="flex justify-between text-gray-500">
+                          <div className="flex justify-between" style={{ color: 'var(--fg-subtle)' }}>
                             <span>Last Activity:</span>
                             <span className="font-mono text-xs">
                               {analytics.lastEventTime.toLocaleTimeString()}

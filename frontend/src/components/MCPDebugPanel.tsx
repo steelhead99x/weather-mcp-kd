@@ -621,11 +621,11 @@ ENVIRONMENT:
 
   const getStatusColor = (status: MCPDebugInfo['connectionStatus']) => {
     switch (status) {
-      case 'connected': return 'text-green-600'
-      case 'disconnected': return 'text-gray-600'
-      case 'error': return 'text-red-600'
-      case 'testing': return 'text-yellow-600'
-      default: return 'text-gray-600'
+      case 'connected': return 'var(--ok)'
+      case 'disconnected': return 'var(--fg-subtle)'
+      case 'error': return 'var(--error)'
+      case 'testing': return 'var(--warn)'
+      default: return 'var(--fg-subtle)'
     }
   }
 
@@ -687,27 +687,31 @@ ENVIRONMENT:
       </div>
       
       {isExpanded && (
-        <div className="absolute bottom-12 right-0 w-[500px] max-h-[600px] bg-white border border-gray-300 rounded-lg shadow-xl overflow-hidden">
+        <div className="absolute bottom-12 right-0 w-[500px] max-h-[600px] card overflow-hidden">
           {/* Header */}
-          <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
+          <div className="px-4 py-2 border-b" style={{ background: 'var(--overlay)', borderColor: 'var(--border)' }}>
             <div className="flex justify-between items-center">
               <div className="flex items-center space-x-2">
-                <h3 className="font-semibold text-gray-800">MCP Debug Panel</h3>
+                <h3 className="font-semibold" style={{ color: 'var(--fg)' }}>MCP Debug Panel</h3>
                 <span className={`text-xs px-2 py-1 rounded ${
                   isDebugEnabled 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-red-100 text-red-800'
-                }`}>
+                    ? 'text-green-800' 
+                    : 'text-red-800'
+                }`} style={{
+                  backgroundColor: isDebugEnabled ? 'var(--ok)' : 'var(--error)',
+                  color: 'white'
+                }}>
                   {isDebugEnabled ? '🟢 ACTIVE' : '🔴 INACTIVE'}
                 </span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="text-xs text-gray-600">
+                <div className="text-xs" style={{ color: 'var(--fg-muted)' }}>
                   {debugInfo.serverInfo?.responseTime && `${debugInfo.serverInfo.responseTime}ms`}
                 </div>
                 <button
                   onClick={() => setIsExpanded(false)}
-                  className="text-gray-500 hover:text-gray-700"
+                  className="hover:opacity-70 transition-opacity"
+                  style={{ color: 'var(--fg-subtle)' }}
                 >
                   ✕
                 </button>
@@ -716,7 +720,7 @@ ENVIRONMENT:
           </div>
 
           {/* Tab Navigation */}
-          <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+          <div className="px-4 py-2 border-b" style={{ background: 'var(--overlay)', borderColor: 'var(--border)' }}>
             <div className="flex space-x-4">
               {[
                 { id: 'status', label: 'Status', icon: '📊' },
@@ -729,14 +733,18 @@ ENVIRONMENT:
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`px-3 py-1 rounded text-sm font-medium transition-colors relative ${
                     activeTab === tab.id
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-800'
+                      ? ''
+                      : ''
                   }`}
+                  style={{
+                    backgroundColor: activeTab === tab.id ? 'var(--accent-muted)' : 'transparent',
+                    color: activeTab === tab.id ? 'var(--accent)' : 'var(--fg-muted)'
+                  }}
                 >
                   <span className="mr-1">{tab.icon}</span>
                   {tab.label}
                   {tab.badge && tab.badge > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center" style={{ backgroundColor: 'var(--error)' }}>
                       {tab.badge > 99 ? '99+' : tab.badge}
                     </span>
                   )}
@@ -748,12 +756,16 @@ ENVIRONMENT:
           <div className="p-4 max-h-96 overflow-y-auto">
             {/* Debug Status Warning */}
             {!isDebugEnabled && (
-              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+              <div className="mb-4 p-3 rounded text-sm" style={{ 
+                backgroundColor: 'var(--warn)', 
+                color: 'white',
+                border: '1px solid var(--warn)'
+              }}>
                 <div className="flex items-center space-x-2">
                   <span>⚠️</span>
                   <div>
                     <strong>Debug Mode Disabled</strong>
-                    <p className="text-xs mt-1">
+                    <p className="text-xs mt-1 opacity-90">
                       Enable debug mode to see real-time tool calls, logs, and metrics. 
                       Debug mode may impact performance when enabled.
                     </p>
@@ -764,12 +776,16 @@ ENVIRONMENT:
 
             {/* Performance Warning */}
             {isDebugEnabled && performanceWarning && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-800">
+              <div className="mb-4 p-3 rounded text-sm" style={{ 
+                backgroundColor: 'var(--error)', 
+                color: 'white',
+                border: '1px solid var(--error)'
+              }}>
                 <div className="flex items-center space-x-2">
                   <span>🚨</span>
                   <div>
                     <strong>High Debug Load Detected</strong>
-                    <p className="text-xs mt-1">
+                    <p className="text-xs mt-1 opacity-90">
                       Debug mode is processing a high volume of logs/tool calls. 
                       Consider disabling debug mode to improve performance.
                     </p>
@@ -783,22 +799,26 @@ ENVIRONMENT:
               <div className="space-y-4">
                 {/* Connection Status */}
                 <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Connection Status</h4>
+                  <h4 className="font-medium mb-2" style={{ color: 'var(--fg)' }}>Connection Status</h4>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <span className={getStatusColor(debugInfo.connectionStatus)}>
+                      <span style={{ color: getStatusColor(debugInfo.connectionStatus) }}>
                         {getStatusIcon(debugInfo.connectionStatus)}
                       </span>
-                      <span className="text-sm capitalize">{debugInfo.connectionStatus}</span>
+                      <span className="text-sm capitalize" style={{ color: 'var(--fg)' }}>{debugInfo.connectionStatus}</span>
                     </div>
                     {debugInfo.serverInfo?.lastPing && (
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs" style={{ color: 'var(--fg-subtle)' }}>
                         Last ping: {debugInfo.serverInfo.lastPing.toLocaleTimeString()}
                       </div>
                     )}
                   </div>
                   {debugInfo.lastError && (
-                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                    <div className="mt-2 p-2 rounded text-sm" style={{ 
+                      backgroundColor: 'var(--error)', 
+                      color: 'white',
+                      border: '1px solid var(--error)'
+                    }}>
                       {debugInfo.lastError}
                     </div>
                   )}
@@ -806,8 +826,8 @@ ENVIRONMENT:
 
                 {/* Server Info */}
                 <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Server Configuration</h4>
-                  <div className="text-sm text-gray-600 space-y-1">
+                  <h4 className="font-medium mb-2" style={{ color: 'var(--fg)' }}>Server Configuration</h4>
+                  <div className="text-sm space-y-1" style={{ color: 'var(--fg-muted)' }}>
                     <div>Host: {debugInfo.serverInfo?.host || 'Unknown'}</div>
                     <div>Agent ID: {debugInfo.serverInfo?.agentId || 'weather'}</div>
                     <div>Environment: {import.meta.env.MODE || 'development'}</div>
@@ -821,17 +841,22 @@ ENVIRONMENT:
                 {/* MCP Servers */}
                 {debugInfo.serverInfo?.mcpServers && debugInfo.serverInfo.mcpServers.length > 0 && (
                   <div>
-                    <h4 className="font-medium text-gray-700 mb-2">MCP Servers</h4>
+                    <h4 className="font-medium mb-2" style={{ color: 'var(--fg)' }}>MCP Servers</h4>
                     <div className="space-y-2">
                       {debugInfo.serverInfo.mcpServers.map((server, index) => (
-                        <div key={index} className="p-2 bg-gray-50 rounded border">
+                        <div key={index} className="p-2 rounded border" style={{ 
+                          backgroundColor: 'var(--overlay)', 
+                          borderColor: 'var(--border)' 
+                        }}>
                           <div className="flex items-center justify-between">
-                            <span className="font-medium text-sm">{server.name}</span>
-                            <span className={`text-xs ${server.status === 'connected' ? 'text-green-600' : 'text-red-600'}`}>
+                            <span className="font-medium text-sm" style={{ color: 'var(--fg)' }}>{server.name}</span>
+                            <span className="text-xs" style={{ 
+                              color: server.status === 'connected' ? 'var(--ok)' : 'var(--error)' 
+                            }}>
                               {server.status}
                             </span>
                           </div>
-                          <div className="text-xs text-gray-600 mt-1">
+                          <div className="text-xs mt-1" style={{ color: 'var(--fg-muted)' }}>
                             Tools: {server.tools.length > 0 ? server.tools.join(', ') : 'None'}
                           </div>
                         </div>
@@ -842,14 +867,19 @@ ENVIRONMENT:
 
                 {/* Quick Actions */}
                 <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Quick Actions</h4>
+                  <h4 className="font-medium mb-2" style={{ color: 'var(--fg)' }}>Quick Actions</h4>
                   <div className="space-y-2">
                     <button
                       onClick={() => {
                         console.log('[MCPDebug] Manual connection test triggered')
                         testConnection()
                       }}
-                      className="w-full text-left px-3 py-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100"
+                      className="w-full text-left px-3 py-2 rounded text-sm hover:opacity-80 transition-opacity"
+                      style={{ 
+                        backgroundColor: 'var(--accent-muted)', 
+                        color: 'var(--accent)',
+                        border: '1px solid var(--accent)'
+                      }}
                     >
                       🔄 Test Connection
                     </button>
@@ -858,7 +888,12 @@ ENVIRONMENT:
                         console.log('[MCPDebug] MCP server discovery triggered')
                         discoverMCPServers()
                       }}
-                      className="w-full text-left px-3 py-2 bg-green-50 border border-green-200 rounded text-sm text-green-700 hover:bg-green-100"
+                      className="w-full text-left px-3 py-2 rounded text-sm hover:opacity-80 transition-opacity"
+                      style={{ 
+                        backgroundColor: 'var(--ok)', 
+                        color: 'white',
+                        border: '1px solid var(--ok)'
+                      }}
                     >
                       🔍 Discover MCP Servers
                     </button>
@@ -870,7 +905,12 @@ ENVIRONMENT:
                           MODE: import.meta.env.MODE
                         })
                       }}
-                      className="w-full text-left px-3 py-2 bg-purple-50 border border-purple-200 rounded text-sm text-purple-700 hover:bg-purple-100"
+                      className="w-full text-left px-3 py-2 rounded text-sm hover:opacity-80 transition-opacity"
+                      style={{ 
+                        backgroundColor: 'var(--accent-muted)', 
+                        color: 'var(--accent)',
+                        border: '1px solid var(--accent)'
+                      }}
                     >
                       📋 Log Environment
                     </button>
@@ -882,7 +922,12 @@ ENVIRONMENT:
                           addToolCall('testWeatherTool', 'result', { zipCode: '85001' }, { temperature: 75, condition: 'sunny' }, undefined, 150)
                         }, 1000)
                       }}
-                      className="w-full text-left px-3 py-2 bg-orange-50 border border-orange-200 rounded text-sm text-orange-700 hover:bg-orange-100"
+                      className="w-full text-left px-3 py-2 rounded text-sm hover:opacity-80 transition-opacity"
+                      style={{ 
+                        backgroundColor: 'var(--warn)', 
+                        color: 'white',
+                        border: '1px solid var(--warn)'
+                      }}
                     >
                       🧪 Test Tool Call
                     </button>
@@ -894,7 +939,12 @@ ENVIRONMENT:
                           addToolCall('testErrorTool', 'error', { test: 'error' }, undefined, 'Test error message', 500)
                         }, 500)
                       }}
-                      className="w-full text-left px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700 hover:bg-red-100"
+                      className="w-full text-left px-3 py-2 rounded text-sm hover:opacity-80 transition-opacity"
+                      style={{ 
+                        backgroundColor: 'var(--error)', 
+                        color: 'white',
+                        border: '1px solid var(--error)'
+                      }}
                     >
                       ❌ Test Error Call
                     </button>
@@ -903,23 +953,38 @@ ENVIRONMENT:
 
                 {/* Export Section */}
                 <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Export Data</h4>
+                  <h4 className="font-medium mb-2" style={{ color: 'var(--fg)' }}>Export Data</h4>
                   <div className="space-y-2">
                     <button
                       onClick={() => exportData('json')}
-                      className="w-full text-left px-3 py-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100"
+                      className="w-full text-left px-3 py-2 rounded text-sm hover:opacity-80 transition-opacity"
+                      style={{ 
+                        backgroundColor: 'var(--accent-muted)', 
+                        color: 'var(--accent)',
+                        border: '1px solid var(--accent)'
+                      }}
                     >
                       📄 Export as JSON
                     </button>
                     <button
                       onClick={() => exportData('csv')}
-                      className="w-full text-left px-3 py-2 bg-green-50 border border-green-200 rounded text-sm text-green-700 hover:bg-green-100"
+                      className="w-full text-left px-3 py-2 rounded text-sm hover:opacity-80 transition-opacity"
+                      style={{ 
+                        backgroundColor: 'var(--ok)', 
+                        color: 'white',
+                        border: '1px solid var(--ok)'
+                      }}
                     >
                       📊 Export as CSV
                     </button>
                     <button
                       onClick={() => exportData('txt')}
-                      className="w-full text-left px-3 py-2 bg-gray-50 border border-gray-200 rounded text-sm text-gray-700 hover:bg-gray-100"
+                      className="w-full text-left px-3 py-2 rounded text-sm hover:opacity-80 transition-opacity"
+                      style={{ 
+                        backgroundColor: 'var(--overlay)', 
+                        color: 'var(--fg)',
+                        border: '1px solid var(--border)'
+                      }}
                     >
                       📝 Export as Text
                     </button>
@@ -932,17 +997,19 @@ ENVIRONMENT:
             {activeTab === 'tools' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h4 className="font-medium text-gray-700">Tool Calls ({debugInfo.toolCalls.length})</h4>
+                  <h4 className="font-medium" style={{ color: 'var(--fg)' }}>Tool Calls ({debugInfo.toolCalls.length})</h4>
                   <div className="flex space-x-2">
                     <button
                       onClick={() => exportData('json')}
-                      className="text-xs text-blue-600 hover:text-blue-800"
+                      className="text-xs hover:opacity-70 transition-opacity"
+                      style={{ color: 'var(--accent)' }}
                     >
                       Export
                     </button>
                     <button
                       onClick={clearToolCalls}
-                      className="text-xs text-red-600 hover:text-red-800"
+                      className="text-xs hover:opacity-70 transition-opacity"
+                      style={{ color: 'var(--error)' }}
                     >
                       Clear All
                     </button>
@@ -950,46 +1017,58 @@ ENVIRONMENT:
                 </div>
                 <div className="space-y-2 max-h-80 overflow-y-auto">
                   {debugInfo.toolCalls.length === 0 ? (
-                    <div className="text-sm text-gray-500 text-center py-4">No tool calls yet</div>
+                    <div className="text-sm text-center py-4" style={{ color: 'var(--fg-subtle)' }}>No tool calls yet</div>
                   ) : (
                     debugInfo.toolCalls.map(call => (
-                      <div key={call.id} className="p-3 bg-gray-50 border border-gray-200 rounded">
+                      <div key={call.id} className="p-3 rounded border" style={{ 
+                        backgroundColor: 'var(--overlay)', 
+                        borderColor: 'var(--border)' 
+                      }}>
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center space-x-2">
                             <span>{getToolCallStatusIcon(call.status)}</span>
-                            <span className="font-medium text-sm">{call.toolName}</span>
+                            <span className="font-medium text-sm" style={{ color: 'var(--fg)' }}>{call.toolName}</span>
                           </div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs" style={{ color: 'var(--fg-subtle)' }}>
                             {call.timestamp.toLocaleTimeString()}
                           </div>
                         </div>
                         {call.duration && (
-                          <div className="text-xs text-gray-600 mb-1">
+                          <div className="text-xs mb-1" style={{ color: 'var(--fg-muted)' }}>
                             Duration: {formatDuration(call.duration)}
                           </div>
                         )}
                         {call.args && (
-                          <div className="text-xs text-gray-600 mt-1">
+                          <div className="text-xs mt-1" style={{ color: 'var(--fg-muted)' }}>
                             <details>
-                              <summary className="cursor-pointer hover:text-gray-800">Args</summary>
-                              <pre className="mt-1 text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+                              <summary className="cursor-pointer hover:opacity-70 transition-opacity" style={{ color: 'var(--fg)' }}>Args</summary>
+                              <pre className="mt-1 text-xs p-2 rounded overflow-x-auto" style={{ 
+                                backgroundColor: 'var(--overlay)',
+                                color: 'var(--fg)'
+                              }}>
                                 {JSON.stringify(call.args, null, 2)}
                               </pre>
                             </details>
                           </div>
                         )}
                         {call.result && (
-                          <div className="text-xs text-gray-600 mt-1">
+                          <div className="text-xs mt-1" style={{ color: 'var(--fg-muted)' }}>
                             <details>
-                              <summary className="cursor-pointer hover:text-gray-800">Result</summary>
-                              <pre className="mt-1 text-xs bg-green-50 p-2 rounded overflow-x-auto">
+                              <summary className="cursor-pointer hover:opacity-70 transition-opacity" style={{ color: 'var(--fg)' }}>Result</summary>
+                              <pre className="mt-1 text-xs p-2 rounded overflow-x-auto" style={{ 
+                                backgroundColor: 'var(--ok)',
+                                color: 'white'
+                              }}>
                                 {JSON.stringify(call.result, null, 2)}
                               </pre>
                             </details>
                           </div>
                         )}
                         {call.error && (
-                          <div className="text-xs text-red-600 mt-1 bg-red-50 p-2 rounded">
+                          <div className="text-xs mt-1 p-2 rounded" style={{ 
+                            color: 'white',
+                            backgroundColor: 'var(--error)'
+                          }}>
                             Error: {call.error}
                           </div>
                         )}
@@ -1004,29 +1083,34 @@ ENVIRONMENT:
             {activeTab === 'logs' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h4 className="font-medium text-gray-700">Recent Logs ({logs.length})</h4>
+                  <h4 className="font-medium" style={{ color: 'var(--fg)' }}>Recent Logs ({logs.length})</h4>
                   <div className="flex space-x-2">
                     <button
                       onClick={() => exportData('txt')}
-                      className="text-xs text-blue-600 hover:text-blue-800"
+                      className="text-xs hover:opacity-70 transition-opacity"
+                      style={{ color: 'var(--accent)' }}
                     >
                       Export
                     </button>
                     <button
                       onClick={clearLogs}
-                      className="text-xs text-red-600 hover:text-red-800"
+                      className="text-xs hover:opacity-70 transition-opacity"
+                      style={{ color: 'var(--error)' }}
                     >
                       Clear
                     </button>
                   </div>
                 </div>
-                <div className="bg-gray-50 border border-gray-200 rounded p-2 max-h-80 overflow-y-auto">
+                <div className="rounded p-2 max-h-80 overflow-y-auto" style={{ 
+                  backgroundColor: 'var(--overlay)',
+                  border: '1px solid var(--border)'
+                }}>
                   {logs.length === 0 ? (
-                    <div className="text-sm text-gray-500 text-center py-4">No logs yet</div>
+                    <div className="text-sm text-center py-4" style={{ color: 'var(--fg-subtle)' }}>No logs yet</div>
                   ) : (
                     <div className="space-y-1">
                       {logs.slice(-50).map((log, index) => (
-                        <div key={index} className="text-xs font-mono text-gray-700 break-words">
+                        <div key={index} className="text-xs font-mono break-words" style={{ color: 'var(--fg)' }}>
                           {log}
                         </div>
                       ))}
@@ -1040,53 +1124,69 @@ ENVIRONMENT:
             {activeTab === 'metrics' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h4 className="font-medium text-gray-700">Performance Metrics</h4>
+                  <h4 className="font-medium" style={{ color: 'var(--fg)' }}>Performance Metrics</h4>
                   <button
                     onClick={() => exportData('json')}
-                    className="text-xs text-blue-600 hover:text-blue-800"
+                    className="text-xs hover:opacity-70 transition-opacity"
+                    style={{ color: 'var(--accent)' }}
                   >
                     Export
                   </button>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 bg-blue-50 rounded border">
-                    <div className="text-2xl font-bold text-blue-700">{debugInfo.metrics.totalToolCalls}</div>
-                    <div className="text-sm text-blue-600">Total Tool Calls</div>
+                  <div className="p-3 rounded border" style={{ 
+                    backgroundColor: 'var(--accent-muted)',
+                    borderColor: 'var(--accent)'
+                  }}>
+                    <div className="text-2xl font-bold" style={{ color: 'var(--accent)' }}>{debugInfo.metrics.totalToolCalls}</div>
+                    <div className="text-sm" style={{ color: 'var(--accent)' }}>Total Tool Calls</div>
                   </div>
                   
-                  <div className="p-3 bg-green-50 rounded border">
-                    <div className="text-2xl font-bold text-green-700">{debugInfo.metrics.successfulCalls}</div>
-                    <div className="text-sm text-green-600">Successful</div>
+                  <div className="p-3 rounded border" style={{ 
+                    backgroundColor: 'var(--ok)',
+                    borderColor: 'var(--ok)'
+                  }}>
+                    <div className="text-2xl font-bold text-white">{debugInfo.metrics.successfulCalls}</div>
+                    <div className="text-sm text-white">Successful</div>
                   </div>
                   
-                  <div className="p-3 bg-red-50 rounded border">
-                    <div className="text-2xl font-bold text-red-700">{debugInfo.metrics.failedCalls}</div>
-                    <div className="text-sm text-red-600">Failed</div>
+                  <div className="p-3 rounded border" style={{ 
+                    backgroundColor: 'var(--error)',
+                    borderColor: 'var(--error)'
+                  }}>
+                    <div className="text-2xl font-bold text-white">{debugInfo.metrics.failedCalls}</div>
+                    <div className="text-sm text-white">Failed</div>
                   </div>
                   
-                  <div className="p-3 bg-purple-50 rounded border">
-                    <div className="text-2xl font-bold text-purple-700">
+                  <div className="p-3 rounded border" style={{ 
+                    backgroundColor: 'var(--overlay)',
+                    borderColor: 'var(--border)'
+                  }}>
+                    <div className="text-2xl font-bold" style={{ color: 'var(--fg)' }}>
                       {debugInfo.metrics.averageResponseTime > 0 
                         ? `${debugInfo.metrics.averageResponseTime.toFixed(0)}ms`
                         : `${debugInfo.serverInfo?.responseTime || 0}ms`
                       }
                     </div>
-                    <div className="text-sm text-purple-600">
+                    <div className="text-sm" style={{ color: 'var(--fg-muted)' }}>
                       {debugInfo.metrics.averageResponseTime > 0 ? 'Avg Response' : 'Last Response'}
                     </div>
                   </div>
                 </div>
 
                 {debugInfo.metrics.lastCallTime && (
-                  <div className="p-3 bg-gray-50 rounded border">
-                    <div className="text-sm text-gray-600">
-                      <strong>Last Tool Call:</strong> {debugInfo.metrics.lastCallTime.toLocaleString()}
+                  <div className="p-3 rounded border" style={{ 
+                    backgroundColor: 'var(--overlay)',
+                    borderColor: 'var(--border)'
+                  }}>
+                    <div className="text-sm" style={{ color: 'var(--fg-muted)' }}>
+                      <strong style={{ color: 'var(--fg)' }}>Last Tool Call:</strong> {debugInfo.metrics.lastCallTime.toLocaleString()}
                     </div>
                   </div>
                 )}
 
-                <div className="text-xs text-gray-500">
+                <div className="text-xs" style={{ color: 'var(--fg-subtle)' }}>
                   Success Rate: {debugInfo.metrics.totalToolCalls > 0 
                     ? ((debugInfo.metrics.successfulCalls / debugInfo.metrics.totalToolCalls) * 100).toFixed(1)
                     : 0}%
