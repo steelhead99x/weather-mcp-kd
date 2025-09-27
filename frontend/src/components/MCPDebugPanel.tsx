@@ -59,7 +59,7 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const toolCallInterceptorRef = useRef<Map<string, MCPToolCall>>(new Map())
 
-  // Optimized console log interceptor with tool call detection
+  // Memory-optimized console log interceptor with tool call detection
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return
 
@@ -67,22 +67,28 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
     const originalError = console.error
     const originalWarn = console.warn
 
-    // Debounce log updates to prevent excessive re-renders
+    // Debounce log updates to prevent excessive re-renders and memory issues
     let logUpdateTimeout: NodeJS.Timeout | null = null
     const pendingLogs: string[] = []
+    const maxLogs = 50 // Reduced from 100 to prevent memory issues
 
     const processPendingLogs = () => {
       if (pendingLogs.length > 0) {
-        setLogs(prev => [...prev.slice(-99), ...pendingLogs].slice(-100))
+        setLogs(prev => {
+          const newLogs = [...prev, ...pendingLogs]
+          return newLogs.slice(-maxLogs) // Keep only last 50 logs
+        })
         pendingLogs.length = 0
       }
     }
 
     const logInterceptor = (level: string, originalFn: typeof console.log) => {
       return (...args: any[]) => {
-        const message = `[${level}] ${new Date().toISOString()}: ${args.map(arg => 
-          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-        ).join(' ')}`
+        // Limit log message length to prevent memory issues
+        const message = `[${level}] ${new Date().toISOString()}: ${args.map(arg => {
+          const str = typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+          return str.length > 500 ? str.substring(0, 500) + '...' : str // Truncate long messages
+        }).join(' ')}`
         
         // Add to pending logs instead of immediate state update
         pendingLogs.push(message)
@@ -90,9 +96,9 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
         // Detect tool calls in logs (optimized)
         detectToolCallsInLogs(message, args)
         
-        // Debounce log updates
+        // Debounce log updates with longer delay to reduce memory pressure
         if (logUpdateTimeout) clearTimeout(logUpdateTimeout)
-        logUpdateTimeout = setTimeout(processPendingLogs, 100)
+        logUpdateTimeout = setTimeout(processPendingLogs, 200) // Increased delay
         
         originalFn(...args)
       }
@@ -110,9 +116,9 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
     }
   }, [])
 
-  // Optimized tool call detection function with debouncing
+  // Memory-optimized tool call detection function with debouncing
   const detectToolCallsInLogs = useCallback((message: string, args: any[]) => {
-    // Look for patterns that indicate tool calls
+    // Look for patterns that indicate tool calls - more specific patterns
     const toolCallPatterns = [
       /\[askWeatherAgent\]/,
       /\[streamVNext\]/,
@@ -137,9 +143,9 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
         args: args.length > 1 ? args.slice(1) : undefined
       }
 
-      // Use functional update to prevent unnecessary re-renders
+      // Use functional update to prevent unnecessary re-renders and limit memory usage
       setDebugInfo(prev => {
-        const newToolCalls = [toolCall, ...prev.toolCalls].slice(0, 50)
+        const newToolCalls = [toolCall, ...prev.toolCalls].slice(0, 25) // Reduced from 50 to 25
         return {
           ...prev,
           toolCalls: newToolCalls,
@@ -167,7 +173,7 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
     }
 
     setDebugInfo(prev => {
-      const newToolCalls = [toolCall, ...prev.toolCalls].slice(0, 50)
+      const newToolCalls = [toolCall, ...prev.toolCalls].slice(0, 25) // Reduced from 50 to 25
       
       // Update metrics based on status
       let newMetrics = { ...prev.metrics }
@@ -317,7 +323,8 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
         totalToolCalls: 0,
         successfulCalls: 0,
         failedCalls: 0,
-        averageResponseTime: 0
+        averageResponseTime: 0,
+        lastCallTime: undefined
       }
     }))
   }, [])

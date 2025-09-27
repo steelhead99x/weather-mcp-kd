@@ -83,6 +83,45 @@ const ToolCallDisplay = memo(({ toolCall }: { toolCall: ToolCallDebug }) => {
     }
   }
 
+  const formatToolResult = (data: unknown): string => {
+    if (data === null || data === undefined) return 'N/A'
+    
+    // Handle string results - add line breaks for better readability
+    if (typeof data === 'string') {
+      return data
+        .replace(/\n\n/g, '\n\n') // Preserve existing double line breaks
+        .replace(/\n/g, '\n') // Preserve single line breaks
+        .trim()
+    }
+    
+    // Handle object results - try to extract meaningful text
+    if (typeof data === 'object') {
+      // Try to extract text content from common properties
+      if ('content' in data && typeof data.content === 'string') {
+        return data.content
+      } else if ('text' in data && typeof data.text === 'string') {
+        return data.text
+      } else if ('message' in data && typeof data.message === 'string') {
+        return data.message
+      } else if ('summary' in data && typeof data.summary === 'string') {
+        return data.summary
+      } else if ('summaryText' in data && typeof data.summaryText === 'string') {
+        return data.summaryText
+      } else if ('result' in data && typeof data.result === 'string') {
+        return data.result
+      }
+      
+      // For complex objects, format as JSON with proper indentation
+      try {
+        return JSON.stringify(data, null, 2)
+      } catch (error) {
+        return '[Could not serialize data]'
+      }
+    }
+    
+    return String(data)
+  }
+
   return (
     <div className="border border-gray-200 rounded-md mb-2">
       <button
@@ -113,9 +152,9 @@ const ToolCallDisplay = memo(({ toolCall }: { toolCall: ToolCallDebug }) => {
           {toolCall.result !== undefined && (
             <div className="mb-3">
               <div className="text-xs font-semibold text-gray-700 mb-1">Result:</div>
-              <pre className="text-xs bg-green-50 p-2 rounded overflow-x-auto border border-green-200">
-                {formatToolData(toolCall.result)}
-              </pre>
+              <div className="text-xs bg-green-50 p-3 rounded border border-green-200 whitespace-pre-wrap">
+                {formatToolResult(toolCall.result)}
+              </div>
             </div>
           )}
         </div>
@@ -201,22 +240,22 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
         
         {/* Enhanced Tool Calls Debug Info */}
         {message.debugInfo?.toolCalls && message.debugInfo.toolCalls.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-gray-200">
+          <div className="mt-4 pt-3 border-t border-gray-200">
             <button
               onClick={() => setToolsExpanded(!toolsExpanded)}
-              className="flex items-center gap-2 text-xs text-gray-600 hover:text-gray-800 transition-colors mb-2"
+              className="flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900 transition-colors mb-3 w-full text-left"
             >
-              <span>🔧</span>
-              <span>
-                Used {message.debugInfo.toolCalls.length} tool{message.debugInfo.toolCalls.length > 1 ? 's' : ''}
+              <span className="text-lg">🔧</span>
+              <span className="font-medium">
+                Tool Results ({message.debugInfo.toolCalls.length})
               </span>
-              <span className="text-gray-400">
+              <span className="text-gray-400 ml-auto">
                 {toolsExpanded ? '▼' : '▶'}
               </span>
             </button>
             
             {toolsExpanded && (
-              <div className="mt-2 space-y-2">
+              <div className="space-y-3">
                 {message.debugInfo.toolCalls.map((toolCall) => (
                   <ToolCallDisplay key={toolCall.id} toolCall={toolCall} />
                 ))}
@@ -276,20 +315,44 @@ export default function WeatherChat() {
             return m
           })
         })
+        
+        // Also notify MCP Debug Panel if available
+        if (typeof window !== 'undefined' && (window as any).mcpDebugPanel) {
+          (window as any).mcpDebugPanel.addToolCall(
+            chunk.toolName || 'unknown',
+            'called',
+            chunk.toolArgs
+          )
+        }
       } else if (chunk.type === 'tool_result') {
-        // Handle tool results
+        // Handle tool results - store in debug info, don't add to main content
         setMessages((prev) => {
           const assistantId = prev[prev.length - 1]?.id
           return prev.map((m) => {
-            if (m.id === assistantId && m.debugInfo?.toolCalls) {
-              const updatedToolCalls = m.debugInfo.toolCalls.map((tc) => 
+            if (m.id === assistantId) {
+              // Update tool call status with result
+              const updatedToolCalls = m.debugInfo?.toolCalls?.map((tc) => 
                 tc.toolName === chunk.toolName ? { ...tc, result: chunk.toolResult, status: 'result' as const } : tc
-              )
-              return { ...m, debugInfo: { ...m.debugInfo, toolCalls: updatedToolCalls } }
+              ) || []
+              
+              return { 
+                ...m, 
+                debugInfo: { ...m.debugInfo, toolCalls: updatedToolCalls }
+              }
             }
             return m
           })
         })
+        
+        // Also notify MCP Debug Panel if available
+        if (typeof window !== 'undefined' && (window as any).mcpDebugPanel) {
+          (window as any).mcpDebugPanel.addToolCall(
+            chunk.toolName || 'unknown',
+            'result',
+            undefined,
+            chunk.toolResult
+          )
+        }
       }
     },
     onComplete: () => {
@@ -461,9 +524,35 @@ export default function WeatherChat() {
         ref={scrollRef}
       >
         <div className="space-y-3">
-          {messages.map((message) => (
-            <MessageComponent key={message.id} message={message} />
-          ))}
+          {messages.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="mb-4">
+                <span className="text-4xl">🌾</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                Welcome to WeatherAgent
+              </h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Get detailed weather forecasts tailored for farming decisions. Enter your ZIP code below to start.
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-blue-800 font-medium mb-2">
+                  What you'll get:
+                </p>
+                <ul className="text-xs text-blue-700 space-y-1 text-left">
+                  <li>• 7-day weather forecast with agricultural insights</li>
+                  <li>• Planting and irrigation recommendations</li>
+                  <li>• Pest and disease pressure alerts</li>
+                  <li>• Frost and heat stress warnings</li>
+                  <li>• Field access and spray condition updates</li>
+                </ul>
+              </div>
+            </div>
+          ) : (
+            messages.map((message) => (
+              <MessageComponent key={message.id} message={message} />
+            ))
+          )}
         </div>
       </div>
 
@@ -501,12 +590,12 @@ export default function WeatherChat() {
         <div className="flex-1">
           <input
             aria-describedby="error-message zip-help"
-            aria-label="Enter your 5-digit ZIP code"
+            aria-label="Enter your 5-digit ZIP code for weather forecast"
             autoComplete="postal-code"
             className={`input w-full ${!hasAssistantResponded && input && !/^\d{5}$/.test(input) ? 'border-red-300' : ''}`}
             inputMode="numeric"
             pattern="\\d{5}"
-            placeholder={hasAssistantResponded ? "Ask about weather..." : "Enter your 5-digit ZIP code"}
+            placeholder={hasAssistantResponded ? "Ask about weather..." : "Enter your ZIP code for detailed weather forecast..."}
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -533,10 +622,10 @@ export default function WeatherChat() {
           {streamState.isLoading ? (
             <span className="flex items-center gap-2">
               <span className="animate-spin">⏳</span>
-              Sending...
+              Please wait one moment...
             </span>
           ) : (
-            'Ask'
+            hasAssistantResponded ? 'Ask' : 'Get Forecast'
           )}
         </button>
       </div>
