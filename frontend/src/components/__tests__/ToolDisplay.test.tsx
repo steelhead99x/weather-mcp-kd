@@ -5,7 +5,7 @@ import WeatherChat from '../WeatherChat'
 // Mock the mastra client
 vi.mock('../../lib/mastraClient', () => ({
   mastra: {
-    getAgent: () => ({
+    getAgent: vi.fn().mockResolvedValue({
       streamVNext: async (message: string, options: any) => {
         // Mock a successful response with tool calls
         return {
