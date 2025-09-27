@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState, useEffect, memo } from 'react'
 import { mastra, getWeatherAgentId, getDisplayHost } from '../lib/mastraClient'
 import { useStreamVNext } from '../hooks/useStreamVNext'
 import type { StreamChunk } from '../types/streamVNext'
+import MuxSignedPlayer from './MuxSignedPlayer'
 
 /**
  * Enhanced WeatherChat Component with improved streamVNext implementation
@@ -132,6 +133,56 @@ ToolCallDisplay.displayName = 'ToolCallDisplay'
 const MessageComponent = memo(({ message }: { message: Message }) => {
   const [toolsExpanded, setToolsExpanded] = useState(false)
   
+  // Function to detect and extract Mux video URLs
+  const detectMuxVideo = (content: string) => {
+    const muxUrlPattern = /https:\/\/streamingportfolio\.com\/player\?assetId=([a-zA-Z0-9]+)/g
+    const matches = content.match(muxUrlPattern)
+    return matches ? matches[0] : null
+  }
+  
+  // Function to render content with URL detection
+  const renderContent = (content: string) => {
+    // Check for Mux video URL
+    const muxVideoUrl = detectMuxVideo(content)
+    
+    if (muxVideoUrl) {
+      // Extract assetId from URL
+      const url = new URL(muxVideoUrl)
+      const assetId = url.searchParams.get('assetId')
+      
+      if (assetId) {
+        return (
+          <div className="space-y-3">
+            <MuxSignedPlayer 
+              assetId={assetId}
+              className="w-full max-w-2xl mx-auto"
+            />
+            <div className="text-xs text-gray-500 text-center">
+              Video: {muxVideoUrl}
+            </div>
+          </div>
+        )
+      }
+    }
+    
+    // Check for iframe content
+    if (content.includes('<iframe')) {
+      return (
+        <div 
+          className="whitespace-pre-wrap leading-relaxed text-sm md:text-base"
+          dangerouslySetInnerHTML={{ __html: content }}
+        />
+      )
+    }
+    
+    // Regular text content
+    return (
+      <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
+        {content}
+      </span>
+    )
+  }
+  
   return (
     <div className={message.role === 'user' ? 'text-right' : 'text-left'}>
       <div
@@ -146,16 +197,7 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
           color: 'var(--fg)'
         }}
       >
-        {message.content.includes('<iframe') ? (
-          <div 
-            className="whitespace-pre-wrap leading-relaxed text-sm md:text-base"
-            dangerouslySetInnerHTML={{ __html: message.content }}
-          />
-        ) : (
-          <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
-            {message.content}
-          </span>
-        )}
+        {renderContent(message.content)}
         
         {/* Enhanced Tool Calls Debug Info */}
         {message.debugInfo?.toolCalls && message.debugInfo.toolCalls.length > 0 && (

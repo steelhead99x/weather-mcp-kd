@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { getMastraBaseUrl, mastra } from '../lib/mastraClient'
 
 interface MCPToolCall {
@@ -42,7 +42,7 @@ interface MCPDebugInfo {
   }
 }
 
-export default function MCPDebugPanel() {
+const MCPDebugPanel = memo(function MCPDebugPanel() {
   const [debugInfo, setDebugInfo] = useState<MCPDebugInfo>({
     connectionStatus: 'testing',
     toolCalls: [],
@@ -59,7 +59,7 @@ export default function MCPDebugPanel() {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const toolCallInterceptorRef = useRef<Map<string, MCPToolCall>>(new Map())
 
-  // Enhanced console log interceptor with tool call detection
+  // Optimized console log interceptor with tool call detection
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return
 
@@ -67,16 +67,32 @@ export default function MCPDebugPanel() {
     const originalError = console.error
     const originalWarn = console.warn
 
+    // Debounce log updates to prevent excessive re-renders
+    let logUpdateTimeout: NodeJS.Timeout | null = null
+    const pendingLogs: string[] = []
+
+    const processPendingLogs = () => {
+      if (pendingLogs.length > 0) {
+        setLogs(prev => [...prev.slice(-99), ...pendingLogs].slice(-100))
+        pendingLogs.length = 0
+      }
+    }
+
     const logInterceptor = (level: string, originalFn: typeof console.log) => {
       return (...args: any[]) => {
         const message = `[${level}] ${new Date().toISOString()}: ${args.map(arg => 
           typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
         ).join(' ')}`
         
-        setLogs(prev => [...prev.slice(-99), message]) // Keep last 100 logs
+        // Add to pending logs instead of immediate state update
+        pendingLogs.push(message)
         
-        // Detect tool calls in logs
+        // Detect tool calls in logs (optimized)
         detectToolCallsInLogs(message, args)
+        
+        // Debounce log updates
+        if (logUpdateTimeout) clearTimeout(logUpdateTimeout)
+        logUpdateTimeout = setTimeout(processPendingLogs, 100)
         
         originalFn(...args)
       }
@@ -87,13 +103,14 @@ export default function MCPDebugPanel() {
     console.warn = logInterceptor('WARN', originalWarn)
 
     return () => {
+      if (logUpdateTimeout) clearTimeout(logUpdateTimeout)
       console.log = originalLog
       console.error = originalError
       console.warn = originalWarn
     }
   }, [])
 
-  // Enhanced tool call detection function
+  // Optimized tool call detection function with debouncing
   const detectToolCallsInLogs = useCallback((message: string, args: any[]) => {
     // Look for patterns that indicate tool calls
     const toolCallPatterns = [
@@ -120,15 +137,19 @@ export default function MCPDebugPanel() {
         args: args.length > 1 ? args.slice(1) : undefined
       }
 
-      setDebugInfo(prev => ({
-        ...prev,
-        toolCalls: [toolCall, ...prev.toolCalls].slice(0, 50), // Keep last 50 calls
-        metrics: {
-          ...prev.metrics,
-          totalToolCalls: prev.metrics.totalToolCalls + 1,
-          lastCallTime: new Date()
+      // Use functional update to prevent unnecessary re-renders
+      setDebugInfo(prev => {
+        const newToolCalls = [toolCall, ...prev.toolCalls].slice(0, 50)
+        return {
+          ...prev,
+          toolCalls: newToolCalls,
+          metrics: {
+            ...prev.metrics,
+            totalToolCalls: prev.metrics.totalToolCalls + 1,
+            lastCallTime: new Date()
+          }
         }
-      }))
+      })
     }
   }, [])
 
@@ -267,16 +288,16 @@ export default function MCPDebugPanel() {
     }
   }, [])
 
-  // Setup polling intervals
+  // Setup optimized polling intervals
   useEffect(() => {
     testConnection()
     discoverMCPServers()
     
-    // Test connection every 30 seconds
-    const connectionInterval = setInterval(testConnection, 30000)
+    // Test connection every 60 seconds (reduced frequency)
+    const connectionInterval = setInterval(testConnection, 60000)
     
-    // Discover MCP servers every 60 seconds
-    const discoveryInterval = setInterval(discoverMCPServers, 60000)
+    // Discover MCP servers every 120 seconds (reduced frequency)
+    const discoveryInterval = setInterval(discoverMCPServers, 120000)
     
     pollingIntervalRef.current = connectionInterval
     
@@ -285,17 +306,6 @@ export default function MCPDebugPanel() {
       clearInterval(discoveryInterval)
     }
   }, [testConnection, discoverMCPServers])
-
-  // Expose addToolCall globally for integration with other components
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).mcpDebugPanel = {
-        addToolCall,
-        testConnection,
-        discoverMCPServers
-      }
-    }
-  }, [addToolCall, testConnection, discoverMCPServers])
 
   const clearLogs = () => setLogs([])
 
@@ -311,6 +321,142 @@ export default function MCPDebugPanel() {
       }
     }))
   }, [])
+
+  // Export functionality
+  const exportData = useCallback((format: 'json' | 'csv' | 'txt' = 'json') => {
+    const exportData = {
+      timestamp: new Date().toISOString(),
+      connectionStatus: debugInfo.connectionStatus,
+      serverInfo: debugInfo.serverInfo,
+      toolCalls: debugInfo.toolCalls,
+      metrics: debugInfo.metrics,
+      logs: logs,
+      environment: {
+        mode: import.meta.env.MODE,
+        weatherAgentId: import.meta.env.VITE_WEATHER_AGENT_ID,
+        mastraApiHost: import.meta.env.VITE_MASTRA_API_HOST
+      }
+    }
+
+    let content: string
+    let filename: string
+    let mimeType: string
+
+    switch (format) {
+      case 'json':
+        content = JSON.stringify(exportData, null, 2)
+        filename = `mcp-debug-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`
+        mimeType = 'application/json'
+        break
+      
+      case 'csv':
+        const csvRows = [
+          ['Type', 'Timestamp', 'Tool Name', 'Status', 'Duration (ms)', 'Args', 'Result', 'Error'],
+          ...debugInfo.toolCalls.map(call => [
+            'Tool Call',
+            call.timestamp.toISOString(),
+            call.toolName,
+            call.status,
+            call.duration || '',
+            call.args ? JSON.stringify(call.args) : '',
+            call.result ? JSON.stringify(call.result) : '',
+            call.error || ''
+          ]),
+          ...logs.map((log, index) => [
+            'Log',
+            new Date().toISOString(),
+            'Console',
+            'info',
+            '',
+            '',
+            '',
+            log
+          ])
+        ]
+        content = csvRows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
+        filename = `mcp-debug-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`
+        mimeType = 'text/csv'
+        break
+      
+      case 'txt':
+        content = `MCP Debug Panel Export
+Generated: ${new Date().toISOString()}
+
+CONNECTION STATUS: ${debugInfo.connectionStatus.toUpperCase()}
+${debugInfo.lastError ? `Last Error: ${debugInfo.lastError}` : ''}
+
+SERVER INFO:
+${debugInfo.serverInfo ? `
+  Host: ${debugInfo.serverInfo.host}
+  Agent ID: ${debugInfo.serverInfo.agentId}
+  Version: ${debugInfo.serverInfo.version}
+  Response Time: ${debugInfo.serverInfo.responseTime}ms
+  Last Ping: ${debugInfo.serverInfo.lastPing?.toISOString()}
+` : 'No server info available'}
+
+METRICS:
+  Total Tool Calls: ${debugInfo.metrics.totalToolCalls}
+  Successful: ${debugInfo.metrics.successfulCalls}
+  Failed: ${debugInfo.metrics.failedCalls}
+  Average Response Time: ${debugInfo.metrics.averageResponseTime.toFixed(2)}ms
+  Success Rate: ${debugInfo.metrics.totalToolCalls > 0 
+    ? ((debugInfo.metrics.successfulCalls / debugInfo.metrics.totalToolCalls) * 100).toFixed(1)
+    : 0}%
+  Last Call Time: ${debugInfo.metrics.lastCallTime?.toISOString() || 'Never'}
+
+TOOL CALLS:
+${debugInfo.toolCalls.length === 0 ? 'No tool calls recorded' : ''}
+${debugInfo.toolCalls.map((call, index) => `
+${index + 1}. [${call.status.toUpperCase()}] ${call.toolName}
+   Time: ${call.timestamp.toISOString()}
+   ${call.duration ? `Duration: ${call.duration}ms` : ''}
+   ${call.args ? `Args: ${JSON.stringify(call.args, null, 2)}` : ''}
+   ${call.result ? `Result: ${JSON.stringify(call.result, null, 2)}` : ''}
+   ${call.error ? `Error: ${call.error}` : ''}
+`).join('')}
+
+LOGS:
+${logs.length === 0 ? 'No logs recorded' : ''}
+${logs.map((log, index) => `${index + 1}. ${log}`).join('\n')}
+
+ENVIRONMENT:
+  Mode: ${import.meta.env.MODE}
+  Weather Agent ID: ${import.meta.env.VITE_WEATHER_AGENT_ID}
+  Mastra API Host: ${import.meta.env.VITE_MASTRA_API_HOST}
+`
+        filename = `mcp-debug-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`
+        mimeType = 'text/plain'
+        break
+    }
+
+    // Create and download file
+    const blob = new Blob([content], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    // Log the export
+    console.log(`[MCPDebug] Data exported as ${format.toUpperCase()}: ${filename}`)
+  }, [debugInfo, logs])
+
+  // Expose functions globally for integration with other components
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).mcpDebugPanel = {
+        addToolCall,
+        testConnection,
+        discoverMCPServers,
+        exportData,
+        clearToolCalls,
+        clearLogs
+      }
+    }
+  }, [addToolCall, testConnection, discoverMCPServers, exportData, clearToolCalls, clearLogs])
 
   const getStatusColor = (status: MCPDebugInfo['connectionStatus']) => {
     switch (status) {
@@ -536,6 +682,31 @@ export default function MCPDebugPanel() {
                     </button>
                   </div>
                 </div>
+
+                {/* Export Section */}
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-2">Export Data</h4>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => exportData('json')}
+                      className="w-full text-left px-3 py-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100"
+                    >
+                      📄 Export as JSON
+                    </button>
+                    <button
+                      onClick={() => exportData('csv')}
+                      className="w-full text-left px-3 py-2 bg-green-50 border border-green-200 rounded text-sm text-green-700 hover:bg-green-100"
+                    >
+                      📊 Export as CSV
+                    </button>
+                    <button
+                      onClick={() => exportData('txt')}
+                      className="w-full text-left px-3 py-2 bg-gray-50 border border-gray-200 rounded text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      📝 Export as Text
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -544,12 +715,20 @@ export default function MCPDebugPanel() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h4 className="font-medium text-gray-700">Tool Calls ({debugInfo.toolCalls.length})</h4>
-                  <button
-                    onClick={clearToolCalls}
-                    className="text-xs text-red-600 hover:text-red-800"
-                  >
-                    Clear All
-                  </button>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => exportData('json')}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Export
+                    </button>
+                    <button
+                      onClick={clearToolCalls}
+                      className="text-xs text-red-600 hover:text-red-800"
+                    >
+                      Clear All
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2 max-h-80 overflow-y-auto">
                   {debugInfo.toolCalls.length === 0 ? (
@@ -608,12 +787,20 @@ export default function MCPDebugPanel() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h4 className="font-medium text-gray-700">Recent Logs ({logs.length})</h4>
-                  <button
-                    onClick={clearLogs}
-                    className="text-xs text-red-600 hover:text-red-800"
-                  >
-                    Clear
-                  </button>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => exportData('txt')}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Export
+                    </button>
+                    <button
+                      onClick={clearLogs}
+                      className="text-xs text-red-600 hover:text-red-800"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
                 <div className="bg-gray-50 border border-gray-200 rounded p-2 max-h-80 overflow-y-auto">
                   {logs.length === 0 ? (
@@ -634,7 +821,15 @@ export default function MCPDebugPanel() {
             {/* Metrics Tab */}
             {activeTab === 'metrics' && (
               <div className="space-y-4">
-                <h4 className="font-medium text-gray-700">Performance Metrics</h4>
+                <div className="flex justify-between items-center">
+                  <h4 className="font-medium text-gray-700">Performance Metrics</h4>
+                  <button
+                    onClick={() => exportData('json')}
+                    className="text-xs text-blue-600 hover:text-blue-800"
+                  >
+                    Export
+                  </button>
+                </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-3 bg-blue-50 rounded border">
@@ -685,4 +880,6 @@ export default function MCPDebugPanel() {
       )}
     </div>
   )
-}
+})
+
+export default MCPDebugPanel

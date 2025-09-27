@@ -17,7 +17,8 @@ vi.mock('../../lib/mastraClient', () => ({
     getDynamicToolsets: vi.fn()
   },
   getMastraBaseUrl: () => 'http://localhost:3001',
-  getWeatherAgentId: () => 'weather'
+  getWeatherAgentId: () => 'weather',
+  getDisplayHost: () => 'localhost:3001'
 }))
 
 // Mock environment variables
@@ -197,7 +198,7 @@ describe('MCPDebugPanel', () => {
       fireEvent.click(button)
       
       // Switch to tools tab
-      const toolsTab = screen.getByText('🔧 Tool Calls')
+      const toolsTab = screen.getByRole('button', { name: /tool calls/i })
       fireEvent.click(toolsTab)
       
       await waitFor(() => {
@@ -225,7 +226,7 @@ describe('MCPDebugPanel', () => {
       const button = screen.getByRole('button', { name: /mcp debug/i })
       fireEvent.click(button)
       
-      const toolsTab = screen.getByText('🔧 Tool Calls')
+      const toolsTab = screen.getByRole('button', { name: /tool calls/i })
       fireEvent.click(toolsTab)
       
       await waitFor(() => {
@@ -245,7 +246,7 @@ describe('MCPDebugPanel', () => {
       const button = screen.getByRole('button', { name: /mcp debug/i })
       fireEvent.click(button)
       
-      const toolsTab = screen.getByText('🔧 Tool Calls')
+      const toolsTab = screen.getByRole('button', { name: /tool calls/i })
       fireEvent.click(toolsTab)
       
       await waitFor(() => {
@@ -273,7 +274,7 @@ describe('MCPDebugPanel', () => {
       const button = screen.getByRole('button', { name: /mcp debug/i })
       fireEvent.click(button)
       
-      const toolsTab = screen.getByText('🔧 Tool Calls')
+      const toolsTab = screen.getByRole('button', { name: /tool calls/i })
       fireEvent.click(toolsTab)
       
       await waitFor(() => {
@@ -300,7 +301,7 @@ describe('MCPDebugPanel', () => {
       const button = screen.getByRole('button', { name: /mcp debug/i })
       fireEvent.click(button)
       
-      const logsTab = screen.getByText('📝 Logs')
+      const logsTab = screen.getByRole('button', { name: /logs/i })
       fireEvent.click(logsTab)
       
       await waitFor(() => {
@@ -320,7 +321,7 @@ describe('MCPDebugPanel', () => {
       const button = screen.getByRole('button', { name: /mcp debug/i })
       fireEvent.click(button)
       
-      const logsTab = screen.getByText('📝 Logs')
+      const logsTab = screen.getByRole('button', { name: /logs/i })
       fireEvent.click(logsTab)
       
       await waitFor(() => {
@@ -348,7 +349,7 @@ describe('MCPDebugPanel', () => {
       const button = screen.getByRole('button', { name: /mcp debug/i })
       fireEvent.click(button)
       
-      const logsTab = screen.getByText('📝 Logs')
+      const logsTab = screen.getByRole('button', { name: /logs/i })
       fireEvent.click(logsTab)
       
       await waitFor(() => {
@@ -441,7 +442,7 @@ describe('MCPDebugPanel', () => {
       const button = screen.getByRole('button', { name: /mcp debug/i })
       fireEvent.click(button)
       
-      const metricsTab = screen.getByText('📈 Metrics')
+      const metricsTab = screen.getByRole('button', { name: /metrics/i })
       fireEvent.click(metricsTab)
       
       await waitFor(() => {
@@ -461,7 +462,7 @@ describe('MCPDebugPanel', () => {
       const button = screen.getByRole('button', { name: /mcp debug/i })
       fireEvent.click(button)
       
-      const metricsTab = screen.getByText('📈 Metrics')
+      const metricsTab = screen.getByRole('button', { name: /metrics/i })
       fireEvent.click(metricsTab)
       
       await waitFor(() => {
@@ -510,11 +511,11 @@ describe('MCPDebugPanel', () => {
       
       await waitFor(() => {
         // Tools tab should show badge
-        const toolsTab = screen.getByText('🔧 Tool Calls')
+        const toolsTab = screen.getByRole('button', { name: /tool calls/i })
         expect(toolsTab.parentElement).toHaveTextContent('1')
         
         // Logs tab should show badge
-        const logsTab = screen.getByText('📝 Logs')
+        const logsTab = screen.getByRole('button', { name: /logs/i })
         expect(logsTab.parentElement).toHaveTextContent('1')
       })
     })
@@ -600,7 +601,7 @@ describe('MCPDebugPanel', () => {
       const button = screen.getByRole('button', { name: /mcp debug/i })
       fireEvent.click(button)
       
-      const logsTab = screen.getByText('📝 Logs')
+      const logsTab = screen.getByRole('button', { name: /logs/i })
       fireEvent.click(logsTab)
       
       await waitFor(() => {

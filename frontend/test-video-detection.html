@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video URL Detection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #2563eb;
+        }
+        .url-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎥 Video URL Detection Test</h1>
+        <p>Test the Mux video URL detection functionality in the WeatherChat component.</p>
+        
+        <div>
+            <label for="videoUrl">Mux Video URL:</label>
+            <input 
+                type="text" 
+                id="videoUrl" 
+                class="url-input"
+                value="https://streamingportfolio.com/player?assetId=BmrQHufbaXc01IWtjaBM01TY6ZaF9ybNnyJpUmmvakbWM"
+                placeholder="Enter Mux video URL..."
+            />
+        </div>
+        
+        <button class="test-button" onclick="testUrlDetection()">🔍 Test URL Detection</button>
+        <button class="test-button" onclick="testInWeatherChat()">💬 Test in Weather Chat</button>
+        <button class="test-button" onclick="clearResults()">🗑️ Clear</button>
+        
+        <div id="results" class="result" style="display: none;">
+            <h3>Test Results:</h3>
+            <div id="resultContent"></div>
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <h3>Instructions:</h3>
+            <ol>
+                <li>Enter a Mux video URL in the input field above</li>
+                <li>Click "Test URL Detection" to verify the URL parsing</li>
+                <li>Click "Test in Weather Chat" to see how it would appear in the chat</li>
+                <li>Go to the main app and paste the URL in a chat message to see the video player</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        function testUrlDetection() {
+            const url = document.getElementById('videoUrl').value;
+            const results = document.getElementById('results');
+            const content = document.getElementById('resultContent');
+            
+            results.style.display = 'block';
+            
+            try {
+                // Test URL parsing
+                const urlObj = new URL(url);
+                const assetId = urlObj.searchParams.get('assetId');
+                
+                if (assetId) {
+                    content.innerHTML = `
+                        <div style="color: green;">
+                            ✅ <strong>URL Detection Successful!</strong><br>
+                            <strong>Asset ID:</strong> ${assetId}<br>
+                            <strong>Domain:</strong> ${urlObj.hostname}<br>
+                            <strong>Path:</strong> ${urlObj.pathname}<br>
+                            <strong>Query:</strong> ${urlObj.search}
+                        </div>
+                    `;
+                } else {
+                    content.innerHTML = `
+                        <div style="color: red;">
+                            ❌ <strong>No Asset ID found in URL</strong><br>
+                            Make sure the URL contains "assetId" parameter
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                content.innerHTML = `
+                    <div style="color: red;">
+                        ❌ <strong>Invalid URL:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        function testInWeatherChat() {
+            const url = document.getElementById('videoUrl').value;
+            const results = document.getElementById('results');
+            const content = document.getElementById('resultContent');
+            
+            results.style.display = 'block';
+            
+            // Simulate how the message would look in WeatherChat
+            const message = {
+                id: 'test-message',
+                role: 'assistant',
+                content: `Here's a video for you: ${url}`,
+                timestamp: Date.now()
+            };
+            
+            content.innerHTML = `
+                <div>
+                    <h4>Simulated WeatherChat Message:</h4>
+                    <div style="border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #f8f9fa;">
+                        <div style="text-align: left;">
+                            <div style="display: inline-block; padding: 12px; border-radius: 16px; background: #e3f2fd; border: 1px solid #2196f3; max-width: 100%; word-break: break-word;">
+                                <div style="white-space: pre-wrap; line-height: 1.5; font-size: 14px;">
+                                    Here's a video for you: <a href="${url}" target="_blank" style="color: #1976d2;">${url}</a>
+                                </div>
+                                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ccc;">
+                                    <div style="color: #666; font-size: 12px; text-align: center;">
+                                        🎥 Video would be embedded here using MuxSignedPlayer
+                                    </div>
+                                    <div style="color: #999; font-size: 11px; text-align: center; margin-top: 5px;">
+                                        Video: ${url}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function clearResults() {
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('resultContent').innerHTML = '';
+        }
+        
+        // Test on page load
+        window.addEventListener('load', () => {
+            testUrlDetection();
+        });
+    </script>
+</body>
+</html>

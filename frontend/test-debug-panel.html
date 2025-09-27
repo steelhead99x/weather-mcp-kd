@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Debug Panel Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #2563eb;
+        }
+        .test-button.success {
+            background: #10b981;
+        }
+        .test-button.error {
+            background: #ef4444;
+        }
+        .test-button.warning {
+            background: #f59e0b;
+        }
+        .log-output {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 MCP Debug Panel Test</h1>
+        <p>This page tests the MCP Debug Panel functionality. Make sure the frontend dev server is running on <code>http://localhost:3001</code></p>
+        
+        <div class="status success">
+            ✅ Frontend server detected at <strong>http://localhost:3001</strong>
+        </div>
+
+        <h2>Test Controls</h2>
+        <button class="test-button" onclick="testConsoleLogs()">📝 Test Console Log Detection</button>
+        <button class="test-button success" onclick="testToolCalls()">🔧 Test Tool Calls</button>
+        <button class="test-button error" onclick="testErrorCalls()">❌ Test Error Calls</button>
+        <button class="test-button warning" onclick="testMetrics()">📊 Test Metrics</button>
+        <button class="test-button" onclick="testExport()">📄 Test Export</button>
+        <button class="test-button" onclick="clearLogs()">🗑️ Clear Logs</button>
+
+        <h2>Instructions</h2>
+        <ol>
+            <li>Open the MCP Debug Panel (bottom-right corner of the main app)</li>
+            <li>Click the test buttons above to generate tool calls and logs</li>
+            <li>Check the <strong>Tools</strong> tab to see tool calls</li>
+            <li>Check the <strong>Logs</strong> tab to see console logs</li>
+            <li>Check the <strong>Metrics</strong> tab to see performance data</li>
+        </ol>
+
+        <h2>Test Log Output</h2>
+        <div id="logOutput" class="log-output">
+            <div>Ready to test MCP Debug Panel functionality...</div>
+        </div>
+    </div>
+
+    <script>
+        let logCount = 0;
+        
+        function addLog(message, type = 'info') {
+            const logOutput = document.getElementById('logOutput');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logEntry.style.color = type === 'error' ? '#fca5a5' : type === 'success' ? '#86efac' : '#f9fafb';
+            logOutput.appendChild(logEntry);
+            logOutput.scrollTop = logOutput.scrollHeight;
+            logCount++;
+        }
+
+        function testConsoleLogs() {
+            addLog('Testing console log detection...', 'info');
+            
+            // Generate various console logs that should be detected
+            console.log('[askWeatherAgent] Testing weather tool call');
+            console.log('[streamVNext] Streaming response for weather data');
+            console.log('[MCPDebug] Debug panel test message');
+            console.log('Tool call: weatherTool with args: {zipCode: "85001"}');
+            console.log('Agent response: Weather data retrieved successfully');
+            console.log('MCP server: weather-server connected');
+            console.warn('[MCPDebug] This is a warning message');
+            console.error('[MCPDebug] This is an error message for testing');
+            
+            addLog('✅ Console logs generated - check the Logs tab in debug panel', 'success');
+        }
+
+        function testToolCalls() {
+            addLog('Testing tool call functionality...', 'info');
+            
+            if (window.mcpDebugPanel && window.mcpDebugPanel.addToolCall) {
+                // Test successful tool call
+                window.mcpDebugPanel.addToolCall('weatherTool', 'called', { zipCode: '85001' });
+                
+                setTimeout(() => {
+                    window.mcpDebugPanel.addToolCall('weatherTool', 'result', 
+                        { zipCode: '85001' }, 
+                        { temperature: 75, condition: 'sunny', humidity: 45 }, 
+                        undefined, 150);
+                }, 1000);
+
+                // Test another tool call
+                window.mcpDebugPanel.addToolCall('muxTool', 'called', { videoId: 'test123' });
+                
+                setTimeout(() => {
+                    window.mcpDebugPanel.addToolCall('muxTool', 'result', 
+                        { videoId: 'test123' }, 
+                        { status: 'uploaded', url: 'https://example.com/video.mp4' }, 
+                        undefined, 2000);
+                }, 2000);
+
+                addLog('✅ Tool calls generated - check the Tools tab in debug panel', 'success');
+            } else {
+                addLog('❌ MCP Debug Panel not available - make sure the main app is loaded', 'error');
+            }
+        }
+
+        function testErrorCalls() {
+            addLog('Testing error tool calls...', 'info');
+            
+            if (window.mcpDebugPanel && window.mcpDebugPanel.addToolCall) {
+                // Test error tool call
+                window.mcpDebugPanel.addToolCall('errorTool', 'called', { test: 'error' });
+                
+                setTimeout(() => {
+                    window.mcpDebugPanel.addToolCall('errorTool', 'error', 
+                        { test: 'error' }, 
+                        undefined, 
+                        'Test error: Tool call failed', 
+                        500);
+                }, 500);
+
+                addLog('✅ Error tool calls generated - check the Tools tab for error details', 'success');
+            } else {
+                addLog('❌ MCP Debug Panel not available - make sure the main app is loaded', 'error');
+            }
+        }
+
+        function testMetrics() {
+            addLog('Testing metrics calculation...', 'info');
+            
+            if (window.mcpDebugPanel && window.mcpDebugPanel.addToolCall) {
+                // Generate multiple tool calls to test metrics
+                for (let i = 0; i < 5; i++) {
+                    window.mcpDebugPanel.addToolCall(`testTool${i}`, 'called', { iteration: i });
+                    
+                    setTimeout(() => {
+                        const success = Math.random() > 0.3; // 70% success rate
+                        if (success) {
+                            window.mcpDebugPanel.addToolCall(`testTool${i}`, 'result', 
+                                { iteration: i }, 
+                                { result: `Success ${i}` }, 
+                                undefined, 
+                                Math.random() * 1000 + 100);
+                        } else {
+                            window.mcpDebugPanel.addToolCall(`testTool${i}`, 'error', 
+                                { iteration: i }, 
+                                undefined, 
+                                `Error ${i}: Random failure`, 
+                                Math.random() * 500 + 200);
+                        }
+                    }, Math.random() * 2000 + 500);
+                }
+
+                addLog('✅ Multiple tool calls generated - check the Metrics tab for statistics', 'success');
+            } else {
+                addLog('❌ MCP Debug Panel not available - make sure the main app is loaded', 'error');
+            }
+        }
+
+        function testExport() {
+            addLog('Testing export functionality...', 'info');
+            
+            if (window.mcpDebugPanel && window.mcpDebugPanel.exportData) {
+                // Test JSON export
+                addLog('Testing JSON export...', 'info');
+                window.mcpDebugPanel.exportData('json');
+                
+                setTimeout(() => {
+                    addLog('Testing CSV export...', 'info');
+                    window.mcpDebugPanel.exportData('csv');
+                }, 1000);
+                
+                setTimeout(() => {
+                    addLog('Testing TXT export...', 'info');
+                    window.mcpDebugPanel.exportData('txt');
+                }, 2000);
+                
+                addLog('✅ Export tests completed - check your downloads folder', 'success');
+            } else {
+                addLog('❌ Export functionality not available - make sure the main app is loaded', 'error');
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('logOutput').innerHTML = '<div>Logs cleared...</div>';
+            logCount = 0;
+            addLog('Logs cleared - ready for new tests', 'info');
+        }
+
+        // Check if MCP Debug Panel is available
+        function checkDebugPanel() {
+            if (window.mcpDebugPanel) {
+                addLog('✅ MCP Debug Panel detected and ready!', 'success');
+            } else {
+                addLog('⏳ Waiting for MCP Debug Panel to load...', 'info');
+                setTimeout(checkDebugPanel, 1000);
+            }
+        }
+
+        // Start checking for debug panel
+        checkDebugPanel();
+    </script>
+</body>
+</html>

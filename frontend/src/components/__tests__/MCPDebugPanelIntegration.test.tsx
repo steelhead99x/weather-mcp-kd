@@ -21,7 +21,8 @@ vi.mock('../../lib/mastraClient', () => ({
     getDynamicToolsets: vi.fn()
   },
   getMastraBaseUrl: () => 'http://localhost:3001',
-  getWeatherAgentId: () => 'weather'
+  getWeatherAgentId: () => 'weather',
+  getDisplayHost: () => 'localhost:3001'
 }))
 
 // Mock environment variables
@@ -128,7 +129,7 @@ describe('MCPDebugPanel Integration Tests', () => {
       fireEvent.click(debugButton)
       
       // Switch to tools tab
-      const toolsTab = screen.getByText('🔧 Tool Calls')
+      const toolsTab = screen.getByRole('button', { name: /tool calls/i })
       fireEvent.click(toolsTab)
       
       // Verify tool calls are tracked
@@ -173,7 +174,7 @@ describe('MCPDebugPanel Integration Tests', () => {
       fireEvent.click(debugButton)
       
       // Switch to tools tab
-      const toolsTab = screen.getByText('🔧 Tool Calls')
+      const toolsTab = screen.getByRole('button', { name: /tool calls/i })
       fireEvent.click(toolsTab)
       
       // Verify all tool calls are tracked
@@ -217,7 +218,7 @@ describe('MCPDebugPanel Integration Tests', () => {
       fireEvent.click(debugButton)
       
       // Switch to logs tab
-      const logsTab = screen.getByText('📝 Logs')
+      const logsTab = screen.getByRole('button', { name: /logs/i })
       fireEvent.click(logsTab)
       
       // Verify logs are captured
@@ -260,7 +261,7 @@ describe('MCPDebugPanel Integration Tests', () => {
       fireEvent.click(debugButton)
       
       // Switch to metrics tab
-      const metricsTab = screen.getByText('📈 Metrics')
+      const metricsTab = screen.getByRole('button', { name: /metrics/i })
       fireEvent.click(metricsTab)
       
       // Verify metrics are updated
@@ -333,7 +334,7 @@ describe('MCPDebugPanel Integration Tests', () => {
       
       // Should show connected status
       await waitFor(() => {
-        expect(screen.getByText('connected')).toBeInTheDocument()
+        expect(screen.getByText(/connected/i)).toBeInTheDocument()
         expect(screen.getByText('🟢')).toBeInTheDocument()
       })
     })
@@ -354,8 +355,8 @@ describe('MCPDebugPanel Integration Tests', () => {
       
       // Should show error status
       await waitFor(() => {
-        expect(screen.getByText('error')).toBeInTheDocument()
-        expect(screen.getByText('🔴')).toBeInTheDocument()
+        expect(screen.getByText(/error/i)).toBeInTheDocument()
+        expect(screen.getAllByText('🔴')).toHaveLength(2) // Button and status
         expect(screen.getByText('Network error')).toBeInTheDocument()
       })
     })
@@ -389,8 +390,8 @@ describe('MCPDebugPanel Integration Tests', () => {
       
       // Should update to error status
       await waitFor(() => {
-        expect(screen.getByText('error')).toBeInTheDocument()
-        expect(screen.getByText('🔴')).toBeInTheDocument()
+        expect(screen.getByText(/error/i)).toBeInTheDocument()
+        expect(screen.getAllByText('🔴')).toHaveLength(2) // Button and status
       })
       
       vi.useRealTimers()
@@ -458,7 +459,7 @@ describe('MCPDebugPanel Integration Tests', () => {
       fireEvent.click(debugButton)
       
       // Switch to tools tab
-      const toolsTab = screen.getByText('🔧 Tool Calls')
+      const toolsTab = screen.getByRole('button', { name: /tool calls/i })
       fireEvent.click(toolsTab)
       
       // Should only show last 50 calls
@@ -483,7 +484,7 @@ describe('MCPDebugPanel Integration Tests', () => {
       fireEvent.click(debugButton)
       
       // Switch to logs tab
-      const logsTab = screen.getByText('📝 Logs')
+      const logsTab = screen.getByRole('button', { name: /logs/i })
       fireEvent.click(logsTab)
       
       // Should only show last 100 logs
