@@ -37,8 +37,8 @@ app.use(cors({
   credentials: false,
 }));
 
-// Handle preflight quickly
-app.options('*', cors());
+// Handle preflight quickly (Express 5 compat with path-to-regexp v6)
+app.options(/.*/, cors());
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
@@ -254,7 +254,7 @@ try {
   const frontendDist = resolve(process.cwd(), '../frontend/dist');
   app.use(express.static(frontendDist));
   // Fallback to index.html for non-API routes
-  app.get('*', (req, res, next) => {
+  app.get(/^(?!\/api).*/, (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     res.sendFile(join(frontendDist, 'index.html'));
   });
