@@ -1395,8 +1395,25 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
 
                 // Always show player URL if we have an assetId, even while HLS readies
                 if (playerUrl) {
-                    lines.push(`🎥 Player URL: ${playerUrl}`);
-                    lines.push(`⏳ Asset is processing... The player will be ready shortly.`);
+                    // Create an HTML iframe for the signed player
+                    const playerHtml = `
+<div style="margin: 20px 0; text-align: center;">
+  <iframe 
+    src="${playerUrl}" 
+    width="100%" 
+    height="400" 
+    frameborder="0" 
+    allowfullscreen
+    style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
+    onclick="navigator.clipboard.writeText('${playerUrl}').then(() => alert('Player URL copied to clipboard!'))"
+    title="Weather Video Player - Click to copy URL"
+  ></iframe>
+  <p style="margin-top: 10px; font-size: 14px; color: #666;">
+    ⏳ Asset is processing... The player will be ready shortly. 
+    <br>Click the video to copy the full URL to clipboard.
+  </p>
+</div>`;
+                    lines.push(playerHtml);
                 }
 
                 // Show HLS when available

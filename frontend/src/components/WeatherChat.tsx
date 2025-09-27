@@ -146,9 +146,16 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
           color: 'var(--fg)'
         }}
       >
-        <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
-          {message.content}
-        </span>
+        {message.content.includes('<iframe') ? (
+          <div 
+            className="whitespace-pre-wrap leading-relaxed text-sm md:text-base"
+            dangerouslySetInnerHTML={{ __html: message.content }}
+          />
+        ) : (
+          <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
+            {message.content}
+          </span>
+        )}
         
         {/* Enhanced Tool Calls Debug Info */}
         {message.debugInfo?.toolCalls && message.debugInfo.toolCalls.length > 0 && (
