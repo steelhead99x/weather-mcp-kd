@@ -25,6 +25,8 @@ const allowedOrigins = new Set([
   'http://localhost:5173', // Vite dev server
   'http://localhost:3000', // optional local
   'http://localhost:3001', // backend itself (when calling directly)
+  'https://stage-ai.streamingportfolio.com', // staging environment
+  'https://ai.streamingportfolio.com' // production environment
 ]);
 
 app.use(cors({
@@ -35,7 +37,7 @@ app.use(cors({
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false,
+  credentials: true, // Enable credentials for production domains
 }));
 
 // Handle preflight quickly (Express 5 compat with path-to-regexp v6)

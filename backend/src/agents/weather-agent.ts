@@ -647,25 +647,35 @@ const CONNECTION_TIMEOUT = 30000; // 30 seconds timeout
 // Mux MCP health check
 async function checkMuxMCPHealth(): Promise<{ healthy: boolean; error?: string }> {
     try {
+        console.debug("[HealthCheck] Starting Mux MCP health check...");
+        
         // Check environment variables first
         if (!process.env.MUX_TOKEN_ID || !process.env.MUX_TOKEN_SECRET) {
+            console.debug("[HealthCheck] Missing environment variables");
             return { healthy: false, error: 'Missing MUX_TOKEN_ID or MUX_TOKEN_SECRET' };
         }
 
+        console.debug("[HealthCheck] Environment variables OK, getting tools from upload client...");
         // Try to get tools from upload client
         const uploadTools = await uploadClient.getTools();
+        console.debug("[HealthCheck] Got upload tools:", Object.keys(uploadTools || {}));
+        
         if (!uploadTools || Object.keys(uploadTools).length === 0) {
+            console.debug("[HealthCheck] No tools available");
             return { healthy: false, error: 'No Mux MCP tools available' };
         }
 
         // Check for essential tools
         const hasCreateTool = uploadTools['create_video_uploads'] || uploadTools['video.uploads.create'];
         if (!hasCreateTool) {
+            console.debug("[HealthCheck] Missing create tool");
             return { healthy: false, error: 'Missing Mux upload creation tool' };
         }
 
+        console.debug("[HealthCheck] Health check passed");
         return { healthy: true };
     } catch (error) {
+        console.error("[HealthCheck] Health check failed:", error);
         return { 
             healthy: false, 
             error: `Mux MCP health check failed: ${error instanceof Error ? error.message : String(error)}` 
@@ -835,6 +845,53 @@ const zipMemoryTool = createTool({
             success: false,
             message: "Invalid action. Use 'store' or 'retrieve'"
         };
+    },
+});
+
+// Asset readiness check tool
+const assetReadinessTool = createTool({
+    id: "check-asset-readiness",
+    description: "Check if a Mux asset is ready for playback and return updated URLs",
+    inputSchema: z.object({
+        assetId: z.string().describe("Mux asset ID to check"),
+    }),
+    execute: async ({ context }) => {
+        const { assetId } = context as { assetId: string };
+        
+        if (!assetId) {
+            return {
+                success: false,
+                message: 'Asset ID is required'
+            };
+        }
+
+        try {
+            console.debug(`[check-asset-readiness] Checking asset ${assetId}...`);
+            const ready = await waitForMuxAssetReady(assetId, { 
+                pollMs: 2000, // Check every 2 seconds
+                timeoutMs: 10000 // 10 second timeout for quick checks
+            });
+            
+            return {
+                success: true,
+                assetId: ready.assetId,
+                status: ready.status,
+                playbackId: ready.playbackId,
+                hlsUrl: ready.hlsUrl,
+                playerUrl: ready.playerUrl,
+                message: `Asset ${assetId} is ready for playback`
+            };
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.debug(`[check-asset-readiness] Asset ${assetId} not ready: ${errorMsg}`);
+            
+            return {
+                success: false,
+                assetId,
+                message: `Asset ${assetId} is still processing: ${errorMsg}`,
+                playerUrl: `${STREAMING_PORTFOLIO_BASE_URL}/player?assetId=${assetId}`
+            };
+        }
     },
 });
 
@@ -1093,27 +1150,16 @@ const ttsWeatherTool = createTool({
                 playerUrl = `${STREAMING_PORTFOLIO_BASE_URL}/player?assetId=${assetId}`;
                 console.debug(`[tts-weather-upload] Player URL: ${playerUrl}`);
 
-                // Try to get HLS URL with improved error handling
-                try {
-                    if (assetId) {
-                        console.debug('[tts-weather-upload] Waiting for asset to be ready...');
-                        const ready = await waitForMuxAssetReady(assetId);
-                        playbackUrl = ready.hlsUrl;
-                        playbackId = ready.playbackId || undefined;
-                    } else {
-                        console.warn('[tts-weather-upload] No asset ID available for polling');
-                    }
-                    
-                    if (playbackUrl) {
-                        console.debug(`[tts-weather-upload] HLS URL: ${playbackUrl}`);
-                    }
-                    if (playbackId) {
-                        console.debug(`[tts-weather-upload] Playback ID: ${playbackId}`);
-                    }
-                } catch (pollError) {
-                    console.warn('[tts-weather-upload] Asset polling failed:', pollError instanceof Error ? pollError.message : String(pollError));
-                    console.warn('[tts-weather-upload] Continuing without HLS URL - player URL is still available');
-                    // Don't throw - we still have the player URL
+                // Start asset readiness polling in the background (non-blocking)
+                let assetReadyPromise: Promise<any> | null = null;
+                if (assetId) {
+                    console.debug('[tts-weather-upload] Starting background asset readiness polling...');
+                    assetReadyPromise = waitForMuxAssetReady(assetId).catch(error => {
+                        console.warn('[tts-weather-upload] Background asset polling failed:', error instanceof Error ? error.message : String(error));
+                        return null;
+                    });
+                } else {
+                    console.warn('[tts-weather-upload] No asset ID available for polling');
                 }
 
                 mux = {
@@ -1121,6 +1167,7 @@ const ttsWeatherTool = createTool({
                     playbackId,
                     hlsUrl: playbackUrl,
                     playerUrl,
+                    assetReadyPromise, // Include the promise for background polling
                 };
             } catch (e) {
                 const errorMsg = e instanceof Error ? e.message : String(e);
@@ -1214,6 +1261,9 @@ function buildSystemPrompt() {
         '- Always say "please wait one minute while i generate your visual weather forecast" before calling ttsWeatherTool',
         '- Use the stored ZIP code from memory when calling ttsWeatherTool',
         '- If no ZIP code is stored, ask for one first, then proceed with audio generation',
+        '- After generating a video, display the player URL immediately and mention that the asset is processing',
+        '- If a user asks about asset status or if the video is ready, use the check-asset-readiness tool to check the current status',
+        '- When an asset becomes ready, inform the user that the video is now fully available for playback',
     ].join(' ');
 }
 
@@ -1226,6 +1276,7 @@ export const weatherAgent: any = new Agent({
         weatherTool,
         ttsWeatherTool,
         zipMemoryTool,
+        assetReadinessTool,
     },
     memory: zipMemory,
 });
@@ -1343,14 +1394,24 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
                 lines.push(summary);
 
                 // Always show player URL if we have an assetId, even while HLS readies
-                if (playerUrl) lines.push(`Player URL: ${playerUrl}`);
+                if (playerUrl) {
+                    lines.push(`🎥 Player URL: ${playerUrl}`);
+                    lines.push(`⏳ Asset is processing... The player will be ready shortly.`);
+                }
 
                 // Show HLS when available
-                if (playbackUrl) lines.push(`HLS: ${playbackUrl}`);
+                if (playbackUrl) {
+                    lines.push(`🔗 HLS Stream: ${playbackUrl}`);
+                }
 
                 // Also surface IDs for debugging/deep links if needed by UI
                 if (playbackId) lines.push(`Playback ID: ${playbackId}`);
                 if (assetId) lines.push(`Asset ID: ${assetId}`);
+
+                // Add a note about background processing
+                if (r?.mux?.assetReadyPromise) {
+                    lines.push(`\n📡 Asset readiness is being checked in the background. The player will work once processing is complete.`);
+                }
 
                 return { text: lines.join(' ') };
             }

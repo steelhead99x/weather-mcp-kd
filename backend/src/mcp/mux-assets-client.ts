@@ -22,7 +22,7 @@ class Logger {
 class MuxAssetsMCPClient {
     private static readonly MIN_CONNECTION_TIMEOUT = 5000;
     private static readonly MAX_CONNECTION_TIMEOUT = 300000;
-    private static readonly DEFAULT_CONNECTION_TIMEOUT = 20000;
+    private static readonly DEFAULT_CONNECTION_TIMEOUT = 10000; // 10 seconds default (reduced for debugging)
 
     private client: Client | null = null;
     private transport: StdioClientTransport | null = null;
@@ -52,6 +52,7 @@ class MuxAssetsMCPClient {
         Logger.info("Connecting to Mux MCP (assets)...");
         console.debug(`MCP Args: ${mcpArgs.join(' ')}`);
 
+        console.debug("[MuxAssetsMCP] Creating StdioClientTransport...");
         this.transport = new StdioClientTransport({
             command: "npx",
             args: mcpArgs,
@@ -62,11 +63,21 @@ class MuxAssetsMCPClient {
             },
         });
 
+        console.debug("[MuxAssetsMCP] Creating MCP Client...");
         this.client = new Client({ name: "mux-assets-mastra-client", version: "1.0.0" }, { capabilities: {} });
 
         const connectionTimeout = this.getConnectionTimeout();
+        console.debug(`[MuxAssetsMCP] Starting connection with timeout: ${connectionTimeout}ms`);
+        
         const connectionPromise = this.client.connect(this.transport);
-        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Connection timeout after ${connectionTimeout}ms`)), connectionTimeout));
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => {
+                console.error(`[MuxAssetsMCP] Connection timeout after ${connectionTimeout}ms`);
+                reject(new Error(`Connection timeout after ${connectionTimeout}ms`));
+            }, connectionTimeout);
+        });
+        
+        console.debug("[MuxAssetsMCP] Waiting for connection...");
         await Promise.race([connectionPromise, timeoutPromise]);
         this.connected = true;
         Logger.info("Connected to Mux MCP (assets)");
