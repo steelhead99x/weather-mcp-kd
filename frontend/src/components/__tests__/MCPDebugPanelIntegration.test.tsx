@@ -355,7 +355,7 @@ describe('MCPDebugPanel Integration Tests', () => {
       
       // Should show error status
       await waitFor(() => {
-        expect(screen.getByText(/error/i)).toBeInTheDocument()
+        expect(screen.getByText('error')).toBeInTheDocument()
         expect(screen.getAllByText('🔴')).toHaveLength(2) // Button and status
         expect(screen.getByText('Network error')).toBeInTheDocument()
       })
@@ -390,7 +390,7 @@ describe('MCPDebugPanel Integration Tests', () => {
       
       // Should update to error status
       await waitFor(() => {
-        expect(screen.getByText(/error/i)).toBeInTheDocument()
+        expect(screen.getByText('error')).toBeInTheDocument()
         expect(screen.getAllByText('🔴')).toHaveLength(2) // Button and status
       })
       
