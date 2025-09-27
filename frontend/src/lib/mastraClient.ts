@@ -68,6 +68,10 @@ const baseUrl = buildBaseUrl(host)
 const directApiHost = 'http://localhost:3001'
 const finalBaseUrl = rawHost ? baseUrl : directApiHost
 
+// Environment-specific configuration
+const isProduction = import.meta.env.PROD
+const isDevelopment = import.meta.env.DEV
+
 console.log('[Mastra] Raw host from env:', rawHost)
 console.log('[Mastra] Sanitized host:', host)
 console.log('[Mastra] Base URL:', baseUrl)
@@ -76,8 +80,13 @@ console.log('[Mastra] Has path in hostname:', host.includes('/'))
 console.log('[Mastra] Removed /api from hostname:', rawHost?.includes('/api'))
 
 if (!rawHost) {
-  // eslint-disable-next-line no-console
-  console.warn('[Mastra] VITE_MASTRA_API_HOST is not set. Using direct API connection to:', directApiHost)
+  if (isDevelopment) {
+    // eslint-disable-next-line no-console
+    console.warn('[Mastra] VITE_MASTRA_API_HOST is not set. Using direct API connection to:', directApiHost)
+  } else {
+    // eslint-disable-next-line no-console
+    console.error('[Mastra] VITE_MASTRA_API_HOST is not set in production. This may cause connection issues.')
+  }
 }
 
 // Test connection on startup

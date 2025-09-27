@@ -257,14 +257,19 @@ export default function WeatherChat() {
   const [agent, setAgent] = useState<WeatherAgent | null>(null)
   const [agentError, setAgentError] = useState<string | null>(null)
 
-  // Load agent asynchronously
+  // Load agent asynchronously with retry logic
   useEffect(() => {
+    let retryCount = 0
+    const maxRetries = 3
+    const retryDelay = 1000
+
     const loadAgent = async () => {
       try {
         const agentId = getWeatherAgentId()
         const loadedAgent = await mastra.getAgent(agentId)
         setAgent(loadedAgent as WeatherAgent)
         setAgentError(null)
+        retryCount = 0 // Reset retry count on success
       } catch (error) {
         let errorMessage: string
         
@@ -284,6 +289,18 @@ export default function WeatherChat() {
           errorMessage = String(error) || 'Unknown error'
         }
         
+        // Retry logic for network errors
+        if (retryCount < maxRetries && (
+          errorMessage.includes('network') || 
+          errorMessage.includes('fetch') || 
+          errorMessage.includes('timeout')
+        )) {
+          retryCount++
+          console.warn(`[WeatherChat] Agent load failed, retrying ${retryCount}/${maxRetries}:`, errorMessage)
+          setTimeout(loadAgent, retryDelay * retryCount)
+          return
+        }
+        
         setAgentError(`Failed to load weather agent: ${errorMessage}`)
         setAgent(null)
       }
@@ -301,9 +318,12 @@ export default function WeatherChat() {
     }
   }, [])
 
-  // Auto-scroll when messages change
+  // Auto-scroll when messages change (with debounce)
   useEffect(() => {
-    scrollToBottom()
+    const timeoutId = setTimeout(() => {
+      scrollToBottom()
+    }, 100)
+    return () => clearTimeout(timeoutId)
   }, [messages, scrollToBottom])
 
 

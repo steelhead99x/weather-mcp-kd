@@ -22,7 +22,7 @@ export default function MuxSignedPlayer({
   type?: 'video'
   className?: string
 }) {
-  const DEFAULT_ASSET_ID = '00ixOU3x6YI02DXIzeQ00wEzTwAHyUojsiewp7fC4FNeNw'
+  const DEFAULT_ASSET_ID = import.meta.env.VITE_MUX_DEFAULT_ASSET_ID || '00ixOU3x6YI02DXIzeQ00wEzTwAHyUojsiewp7fC4FNeNw'
 
   // Allow URL query param override (?assetid=..., ?assetId=..., or ?assetID=...)
   const assetIdFromQuery = useMemo(() => {
@@ -38,7 +38,7 @@ export default function MuxSignedPlayer({
   }, [])
 
   const assetId = assetIdProp || assetID || assetid || assetIdFromQuery || import.meta.env.VITE_MUX_ASSET_ID || DEFAULT_ASSET_ID
-  const keyServerUrl = 'https://streamingportfolio.com/streamingportfolio-mux-keyserver/api/tokens'
+  const keyServerUrl = import.meta.env.VITE_MUX_KEY_SERVER_URL || 'https://streamingportfolio.com/streamingportfolio-mux-keyserver/api/tokens'
 
   const [state, setState] = useState<
     | { status: 'idle' | 'loading' }

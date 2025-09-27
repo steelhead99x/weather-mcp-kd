@@ -9,6 +9,7 @@ import express from 'express';
 import cors from 'cors';
 import { weatherAgent } from './agents/weather-agent.js';
 import { resolve, join } from 'path';
+import { existsSync } from 'fs';
 
 // Set telemetry flag to suppress warnings when not using Mastra server environment
 (globalThis as any).___MASTRA_TELEMETRY___ = true;
@@ -249,17 +250,24 @@ app.post('/api/agents/:agentId/stream/vnext', async (req, res) => {
   }
 });
 
-// Serve built frontend (SPA) from ../frontend/dist
+// Serve built frontend (SPA) from ../frontend/dist if it exists
 try {
   const frontendDist = resolve(process.cwd(), '../frontend/dist');
-  app.use(express.static(frontendDist));
-  // Fallback to index.html for non-API routes
-  app.get(/^(?!\/api).*/, (req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
-    res.sendFile(join(frontendDist, 'index.html'));
-  });
-} catch {
-  // ignore if dist not present
+  const indexHtml = join(frontendDist, 'index.html');
+  if (existsSync(frontendDist) && existsSync(indexHtml)) {
+    app.use(express.static(frontendDist));
+    // Fallback to index.html for non-API routes
+    app.get(/^(?!\/api).*/, (req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      res.sendFile(indexHtml);
+    });
+  } else {
+    // eslint-disable-next-line no-console
+    console.warn('[static] Skipping frontend static serving: dist not found');
+  }
+} catch (e) {
+  // eslint-disable-next-line no-console
+  console.warn('[static] Failed to initialize static frontend middleware:', e instanceof Error ? e.message : String(e));
 }
 
 const port = Number(process.env.PORT || 3001);
