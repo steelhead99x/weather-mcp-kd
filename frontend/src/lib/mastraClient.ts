@@ -11,7 +11,7 @@ function sanitizeHost(raw: string | undefined): string {
   try {
     if (!raw) {
       // In production, use the same domain (no subdomain needed)
-      return window.location.hostname || 'weather-mcp-kd.streamingportfolio.com'
+      return window.location.hostname || 'stage-ai.streamingportfolio.com'
     }
     let v = String(raw).trim()
 
@@ -32,12 +32,12 @@ function sanitizeHost(raw: string | undefined): string {
     // Validate hostname format (basic security check)
     if (v && !/^[a-zA-Z0-9.-]+$/.test(v)) {
       console.warn('[Mastra] Invalid hostname format detected, using current hostname')
-      return window.location.hostname || 'weather-mcp-kd.streamingportfolio.com'
+      return window.location.hostname || 'stage-ai.streamingportfolio.com'
     }
 
-    return v || window.location.hostname || 'weather-mcp-kd.streamingportfolio.com'
+    return v || window.location.hostname || 'stage-ai.streamingportfolio.com'
   } catch {
-    return window.location.hostname || 'weather-mcp-kd.streamingportfolio.com'
+    return window.location.hostname || 'stage-ai.streamingportfolio.com'
   }
 }
 
@@ -65,7 +65,7 @@ const host = sanitizeHost(rawHost)
 const baseUrl = buildBaseUrl(host)
 
 // Override for direct API connection if no env var is set
-const directApiHost = 'http://localhost:3001'
+const directApiHost = 'https://stage-ai.streamingportfolio.com'
 const finalBaseUrl = rawHost ? baseUrl : directApiHost
 
 // Environment-specific configuration

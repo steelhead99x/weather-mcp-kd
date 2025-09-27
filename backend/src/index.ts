@@ -21,13 +21,8 @@ const mastra = new Mastra({
 const app = express();
 
 // Configure CORS explicitly for dev and prod
-const allowedOrigins = new Set([
-  'http://localhost:5173', // Vite dev server
-  'http://localhost:3000', // optional local
-  'http://localhost:3001', // backend itself (when calling directly)
-  'https://stage-ai.streamingportfolio.com', // staging environment
-  'https://ai.streamingportfolio.com' // production environment
-]);
+const corsOrigins = process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000,http://localhost:3001,https://stage-ai.streamingportfolio.com,https://ai.streamingportfolio.com';
+const allowedOrigins = new Set(corsOrigins.split(',').map(origin => origin.trim()));
 
 app.use(cors({
   origin: (origin, callback) => {
