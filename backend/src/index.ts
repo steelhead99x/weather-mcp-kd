@@ -18,7 +18,15 @@ const mastra = new Mastra({
 });
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:3000', 
+    'http://localhost:5173',
+    'https://stage-ai.streamingportfolio.com',
+    'https://ai.streamingportfolio.com'
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
