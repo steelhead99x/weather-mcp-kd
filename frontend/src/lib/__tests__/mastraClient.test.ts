@@ -49,7 +49,8 @@ describe('Mastra Client Configuration', () => {
     const { getMastraBaseUrl } = await import('../mastraClient');
     
     const baseUrl = getMastraBaseUrl();
-    expect(baseUrl).toContain('localhost');
+    // Should contain the mocked localhost from the environment variable
+    expect(baseUrl).toContain('localhost:3000');
   });
 
   it('should handle connection test', async () => {
