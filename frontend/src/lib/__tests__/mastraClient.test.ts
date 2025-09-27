@@ -14,11 +14,16 @@ Object.defineProperty(window, 'location', {
 describe('Mastra Client Configuration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Clear module cache to ensure fresh imports
+    vi.resetModules();
+    
     // Mock import.meta.env before each test
     vi.stubGlobal('import.meta', {
       env: {
         VITE_MASTRA_API_HOST: 'http://localhost:3000',
-        VITE_WEATHER_AGENT_ID: 'weatherAgent'
+        VITE_WEATHER_AGENT_ID: 'weatherAgent',
+        PROD: false,
+        DEV: true
       }
     });
   });
@@ -53,9 +58,13 @@ describe('Mastra Client Configuration', () => {
     const { getMastraBaseUrl } = await import('../mastraClient');
     
     const baseUrl = getMastraBaseUrl();
+    console.log('Test - Base URL:', baseUrl);
+    console.log('Test - import.meta.env:', (import.meta as any)?.env);
+    
     // The base URL should be a valid URL (either localhost for dev or production domain)
     expect(baseUrl).toMatch(/^https?:\/\/.+/);
-    expect(baseUrl).toContain('streamingportfolio.com');
+    // In test environment with mocked VITE_MASTRA_API_HOST, should contain localhost
+    expect(baseUrl).toContain('localhost:3000');
   });
 
   it('should handle connection test', async () => {
