@@ -48,7 +48,7 @@ class MuxMCPClient {
     // Timeout configuration constants
     private static readonly MIN_CONNECTION_TIMEOUT = 5000;    // 5 seconds minimum
     private static readonly MAX_CONNECTION_TIMEOUT = 300000;  // 5 minutes maximum
-    private static readonly DEFAULT_CONNECTION_TIMEOUT = 20000; // 20 seconds default
+    private static readonly DEFAULT_CONNECTION_TIMEOUT = 10000; // 10 seconds default (reduced for debugging)
 
     private client: Client | null = null;
     private transport: StdioClientTransport | null = null;
@@ -130,6 +130,7 @@ class MuxMCPClient {
             console.debug("MUX_TOKEN_SECRET: [CONFIGURED]");
             console.debug(`MCP Args: ${mcpArgs.join(' ')}`);
 
+            console.debug("[MuxMCP] Creating StdioClientTransport...");
             this.transport = new StdioClientTransport({
                 command: "npx",
                 args: mcpArgs,
@@ -140,6 +141,7 @@ class MuxMCPClient {
                 },
             });
 
+            console.debug("[MuxMCP] Creating MCP Client...");
             this.client = new Client(
                 {
                     name: "mux-mastra-client",
@@ -152,11 +154,17 @@ class MuxMCPClient {
 
             // Use validated connection timeout
             const connectionTimeout = this.getConnectionTimeout();
+            console.debug(`[MuxMCP] Starting connection with timeout: ${connectionTimeout}ms`);
+            
             const connectionPromise = this.client.connect(this.transport);
             const timeoutPromise = new Promise<never>((_, reject) => {
-                setTimeout(() => reject(new Error(`Connection timeout: Failed to connect within ${connectionTimeout}ms`)), connectionTimeout);
+                setTimeout(() => {
+                    console.error(`[MuxMCP] Connection timeout after ${connectionTimeout}ms`);
+                    reject(new Error(`Connection timeout: Failed to connect within ${connectionTimeout}ms`));
+                }, connectionTimeout);
             });
 
+            console.debug("[MuxMCP] Waiting for connection...");
             await Promise.race([connectionPromise, timeoutPromise]);
 
             // Atomically update the connected state
