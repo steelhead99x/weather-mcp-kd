@@ -18,7 +18,27 @@ const mastra = new Mastra({
 });
 
 const app = express();
-app.use(cors());
+
+// Configure CORS explicitly for dev and prod
+const allowedOrigins = new Set([
+  'http://localhost:5173', // Vite dev server
+  'http://localhost:3000', // optional local
+  'http://localhost:3001', // backend itself (when calling directly)
+]);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // allow same-origin/non-browser tools
+    if (allowedOrigins.has(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,
+}));
+
+// Handle preflight quickly
+app.options('*', cors());
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
