@@ -3,6 +3,7 @@ import { mastra, getWeatherAgentId, getDisplayHost } from '../lib/mastraClient'
 import { useStreamVNext } from '../hooks/useStreamVNext'
 import type { StreamChunk } from '../types/streamVNext'
 import MuxSignedPlayer from './MuxSignedPlayer'
+import { useMuxAnalytics } from '../contexts/MuxAnalyticsContext'
 
 /**
  * Enhanced WeatherChat Component with improved streamVNext implementation
@@ -37,6 +38,8 @@ interface ToolCallDebug {
   args: Record<string, unknown>
   result?: unknown
   status: 'called' | 'result'
+  timestamp?: Date
+  duration?: number
 }
 
 /**
@@ -296,6 +299,15 @@ export default function WeatherChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [hasAssistantResponded, setHasAssistantResponded] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Optional Mux analytics - only use if provider is available
+  let muxAnalytics: any[] = []
+  try {
+    const { getAllAnalytics } = useMuxAnalytics()
+    muxAnalytics = getAllAnalytics()
+  } catch (error) {
+    // MuxAnalyticsProvider not available, continue without analytics
+    muxAnalytics = []
+  }
 
   // Enhanced streamVNext hook with better error handling and metrics
   const { state: streamState, streamVNext, retry } = useStreamVNext({
@@ -310,16 +322,20 @@ export default function WeatherChat() {
         setHasAssistantResponded(true)
       } else if (chunk.type === 'tool_call') {
         // Handle tool calls
+        const toolCallId = chunk.toolName || `tool-${Date.now()}`
+        const toolCallStartTime = Date.now()
+        
         setMessages((prev) => {
           const assistantId = prev[prev.length - 1]?.id
           return prev.map((m) => {
             if (m.id === assistantId) {
               const debugInfo: DebugInfo = {
                 toolCalls: [...(m.debugInfo?.toolCalls || []), {
-                  id: chunk.toolName || `tool-${Date.now()}`,
+                  id: toolCallId,
                   toolName: chunk.toolName || 'unknown',
                   args: chunk.toolArgs || {},
-                  status: 'called'
+                  status: 'called',
+                  timestamp: new Date(toolCallStartTime)
                 }]
               }
               return { ...m, debugInfo }
@@ -338,14 +354,25 @@ export default function WeatherChat() {
         }
       } else if (chunk.type === 'tool_result') {
         // Handle tool results - store in debug info, don't add to main content
+        const toolResultTime = Date.now()
+        
         setMessages((prev) => {
           const assistantId = prev[prev.length - 1]?.id
           return prev.map((m) => {
             if (m.id === assistantId) {
-              // Update tool call status with result
-              const updatedToolCalls = m.debugInfo?.toolCalls?.map((tc) => 
-                tc.toolName === chunk.toolName ? { ...tc, result: chunk.toolResult, status: 'result' as const } : tc
-              ) || []
+              // Update tool call status with result and calculate duration
+              const updatedToolCalls = m.debugInfo?.toolCalls?.map((tc) => {
+                if (tc.toolName === chunk.toolName) {
+                  const duration = tc.timestamp ? toolResultTime - tc.timestamp.getTime() : undefined
+                  return { 
+                    ...tc, 
+                    result: chunk.toolResult, 
+                    status: 'result' as const,
+                    duration
+                  }
+                }
+                return tc
+              }) || []
               
               return { 
                 ...m, 
@@ -358,12 +385,21 @@ export default function WeatherChat() {
         
         // Also notify MCP Debug Panel if available
         if (typeof window !== 'undefined' && (window as any).mcpDebugPanel) {
-          (window as any).mcpDebugPanel.addToolCall(
-            chunk.toolName || 'unknown',
-            'result',
-            undefined,
-            chunk.toolResult
-          )
+          // Calculate duration for debug panel
+          const toolCall = messages[messages.length - 1]?.debugInfo?.toolCalls?.find(tc => tc.toolName === chunk.toolName)
+          const duration: number | undefined = toolCall?.timestamp ? toolResultTime - toolCall.timestamp.getTime() : undefined
+          
+          const mcpDebugPanel = (window as any).mcpDebugPanel
+          if (mcpDebugPanel && typeof mcpDebugPanel.addToolCall === 'function') {
+            mcpDebugPanel.addToolCall(
+              chunk.toolName || 'unknown',
+              'result',
+              undefined,
+              chunk.toolResult,
+              undefined,
+              duration
+            )
+          }
         }
       }
     },
@@ -519,10 +555,16 @@ export default function WeatherChat() {
       {streamState.metrics && (
         <div className="text-xs" style={{ color: 'var(--fg-subtle)' }}>
           {streamState.isStreaming && (
-            <span>Streaming... ({streamState.metrics.chunksReceived} chunks, {streamState.metrics.bytesReceived} bytes)</span>
+            <div className="flex items-center gap-2">
+              <span className="animate-pulse">🌾</span>
+              <span>Gathering weather data from satellites and weather stations...</span>
+            </div>
           )}
           {streamState.retryCount > 0 && (
-            <span>Retrying... ({streamState.retryCount}/3)</span>
+            <div className="flex items-center gap-2">
+              <span className="animate-spin">🔄</span>
+              <span>Connection interrupted, reconnecting to weather services... ({streamState.retryCount}/3)</span>
+            </div>
           )}
         </div>
       )}
@@ -654,13 +696,123 @@ export default function WeatherChat() {
       {/* Debug Panel */}
       {streamState.metrics && (
         <details className="text-xs">
-          <summary className="cursor-pointer">📊 Stream Metrics</summary>
-          <div className="mt-2 p-2 bg-gray-50 rounded">
-            <div>Duration: {streamState.metrics.endTime ? streamState.metrics.endTime - streamState.metrics.startTime : 'N/A'}ms</div>
-            <div>Chunks: {streamState.metrics.chunksReceived}</div>
-            <div>Bytes: {streamState.metrics.bytesReceived}</div>
-            <div>Errors: {streamState.metrics.errors}</div>
-            <div>Retries: {streamState.metrics.retries}</div>
+          <summary className="cursor-pointer hover:text-gray-700 transition-colors">
+            🔧 Technical Details
+          </summary>
+          <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="space-y-3">
+              {/* Stream Metrics */}
+              <div className="space-y-2">
+                <h4 className="font-semibold text-gray-800 border-b border-gray-300 pb-1">Weather Data Stream</h4>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Response Time:</span>
+                  <span className="font-mono">
+                    {streamState.metrics.endTime 
+                      ? `${((streamState.metrics.endTime - streamState.metrics.startTime) / 1000).toFixed(1)}s`
+                      : 'In progress...'
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Data Sources:</span>
+                  <span className="font-mono">{streamState.metrics.chunksReceived} weather stations</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Data Size:</span>
+                  <span className="font-mono">
+                    {streamState.metrics.bytesReceived > 1024 
+                      ? `${(streamState.metrics.bytesReceived / 1024).toFixed(1)}KB`
+                      : `${streamState.metrics.bytesReceived}B`
+                    }
+                  </span>
+                </div>
+                {streamState.metrics.errors > 0 && (
+                  <div className="flex justify-between text-red-600">
+                    <span>Connection Issues:</span>
+                    <span className="font-mono">{streamState.metrics.errors}</span>
+                  </div>
+                )}
+                {streamState.metrics.retries > 0 && (
+                  <div className="flex justify-between text-yellow-600">
+                    <span>Reconnection Attempts:</span>
+                    <span className="font-mono">{streamState.metrics.retries}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Mux Video Analytics */}
+              {(() => {
+                const hasVideoAnalytics = muxAnalytics.length > 0
+                
+                if (!hasVideoAnalytics) return null
+                
+                return (
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-gray-800 border-b border-gray-300 pb-1">Video Analytics</h4>
+                    {muxAnalytics.map((analytics, index) => (
+                      <div key={analytics.assetId || index} className="space-y-1 pl-2 border-l-2 border-blue-200">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Asset ID:</span>
+                          <span className="font-mono text-xs">{analytics.assetId?.substring(0, 8)}...</span>
+                        </div>
+                        {analytics.videoDuration && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Duration:</span>
+                            <span className="font-mono">{Math.round(analytics.videoDuration)}s</span>
+                          </div>
+                        )}
+                        {analytics.currentTime !== undefined && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Current Time:</span>
+                            <span className="font-mono">{Math.round(analytics.currentTime)}s</span>
+                          </div>
+                        )}
+                        {analytics.completionRate > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Completion:</span>
+                            <span className="font-mono">{analytics.completionRate.toFixed(1)}%</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Play Events:</span>
+                          <span className="font-mono">{analytics.playEvents}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Pause Events:</span>
+                          <span className="font-mono">{analytics.pauseEvents}</span>
+                        </div>
+                        {analytics.bufferingEvents > 0 && (
+                          <div className="flex justify-between text-yellow-600">
+                            <span>Buffering Events:</span>
+                            <span className="font-mono">{analytics.bufferingEvents}</span>
+                          </div>
+                        )}
+                        {analytics.seekingEvents > 0 && (
+                          <div className="flex justify-between text-blue-600">
+                            <span>Seek Events:</span>
+                            <span className="font-mono">{analytics.seekingEvents}</span>
+                          </div>
+                        )}
+                        {analytics.errorEvents > 0 && (
+                          <div className="flex justify-between text-red-600">
+                            <span>Video Errors:</span>
+                            <span className="font-mono">{analytics.errorEvents}</span>
+                          </div>
+                        )}
+                        {analytics.lastEventTime && (
+                          <div className="flex justify-between text-gray-500">
+                            <span>Last Activity:</span>
+                            <span className="font-mono text-xs">
+                              {analytics.lastEventTime.toLocaleTimeString()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
           </div>
         </details>
       )}

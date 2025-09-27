@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import WeatherChat from './components/WeatherChat'
 import ThemeToggle from './components/ThemeToggle'
 import MCPDebugPanel from './components/MCPDebugPanel'
+import { MuxAnalyticsProvider } from './contexts/MuxAnalyticsContext'
 
 // Lazy load components to reduce initial bundle size
 const MuxSignedPlayer = lazy(() => import('./components/MuxSignedPlayer'))
@@ -9,7 +10,8 @@ const ErrorBoundary = lazy(() => import('./components/ErrorBoundary'))
 
 export default function App() {
   return (
-    <div className="min-h-screen">
+    <MuxAnalyticsProvider>
+      <div className="min-h-screen">
       <div className="absolute inset-0 pointer-events-none">
         {/* Soft background textures using tokens for theme compatibility */}
         <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%)' }} />
@@ -91,6 +93,7 @@ export default function App() {
 
       {/* Debug Panel */}
       <MCPDebugPanel />
-    </div>
+      </div>
+    </MuxAnalyticsProvider>
   )
 }

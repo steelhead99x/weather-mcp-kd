@@ -54,29 +54,50 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
     }
   })
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isDebugEnabled, setIsDebugEnabled] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<'status' | 'tools' | 'logs' | 'metrics'>('status')
+  const [performanceWarning, setPerformanceWarning] = useState(false)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const toolCallInterceptorRef = useRef<Map<string, MCPToolCall>>(new Map())
+  const originalConsoleRef = useRef<{
+    log: typeof console.log
+    error: typeof console.error
+    warn: typeof console.warn
+  } | null>(null)
+  const performanceMonitorRef = useRef<{
+    logCount: number
+    toolCallCount: number
+    lastCheck: number
+  }>({ logCount: 0, toolCallCount: 0, lastCheck: Date.now() })
 
-  // Memory-optimized console log interceptor with tool call detection
+  // Store original console methods
   useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return
+    if (!originalConsoleRef.current) {
+      originalConsoleRef.current = {
+        log: console.log,
+        error: console.error,
+        warn: console.warn
+      }
+    }
+  }, [])
 
-    const originalLog = console.log
-    const originalError = console.error
-    const originalWarn = console.warn
+  // Toggleable console interceptor - always active but conditionally processes
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development' || !originalConsoleRef.current) return
+
+    const { log: originalLog, error: originalError, warn: originalWarn } = originalConsoleRef.current
 
     // Debounce log updates to prevent excessive re-renders and memory issues
     let logUpdateTimeout: NodeJS.Timeout | null = null
     const pendingLogs: string[] = []
-    const maxLogs = 50 // Reduced from 100 to prevent memory issues
+    const maxLogs = 30 // Further reduced to prevent memory issues
 
     const processPendingLogs = () => {
       if (pendingLogs.length > 0) {
         setLogs(prev => {
           const newLogs = [...prev, ...pendingLogs]
-          return newLogs.slice(-maxLogs) // Keep only last 50 logs
+          return newLogs.slice(-maxLogs) // Keep only last 30 logs
         })
         pendingLogs.length = 0
       }
@@ -84,23 +105,30 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
 
     const logInterceptor = (level: string, originalFn: typeof console.log) => {
       return (...args: any[]) => {
-        // Limit log message length to prevent memory issues
-        const message = `[${level}] ${new Date().toISOString()}: ${args.map(arg => {
-          const str = typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-          return str.length > 500 ? str.substring(0, 500) + '...' : str // Truncate long messages
-        }).join(' ')}`
-        
-        // Add to pending logs instead of immediate state update
-        pendingLogs.push(message)
-        
-        // Detect tool calls in logs (optimized)
-        detectToolCallsInLogs(message, args)
-        
-        // Debounce log updates with longer delay to reduce memory pressure
-        if (logUpdateTimeout) clearTimeout(logUpdateTimeout)
-        logUpdateTimeout = setTimeout(processPendingLogs, 200) // Increased delay
-        
+        // Always call original function first
         originalFn(...args)
+        
+        // Only process logs when debug is enabled (check current state)
+        if (isDebugEnabled) {
+          // Track performance
+          performanceMonitorRef.current.logCount++
+          
+          // Limit log message length to prevent memory issues
+          const message = `[${level}] ${new Date().toISOString()}: ${args.map(arg => {
+            const str = typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            return str.length > 300 ? str.substring(0, 300) + '...' : str // Further truncate
+          }).join(' ')}`
+          
+          // Add to pending logs instead of immediate state update
+          pendingLogs.push(message)
+          
+          // Detect tool calls in logs (optimized)
+          detectToolCallsInLogs(message, args)
+          
+          // Debounce log updates with longer delay to reduce memory pressure
+          if (logUpdateTimeout) clearTimeout(logUpdateTimeout)
+          logUpdateTimeout = setTimeout(processPendingLogs, 500) // Increased delay
+        }
       }
     }
 
@@ -110,14 +138,20 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
 
     return () => {
       if (logUpdateTimeout) clearTimeout(logUpdateTimeout)
-      console.log = originalLog
-      console.error = originalError
-      console.warn = originalWarn
+      // Restore original console methods
+      if (originalConsoleRef.current) {
+        console.log = originalConsoleRef.current.log
+        console.error = originalConsoleRef.current.error
+        console.warn = originalConsoleRef.current.warn
+      }
     }
-  }, [])
+  }, [isDebugEnabled])
 
   // Memory-optimized tool call detection function with debouncing
   const detectToolCallsInLogs = useCallback((message: string, args: any[]) => {
+    // Only detect tool calls when debug is enabled
+    if (!isDebugEnabled) return
+
     // Look for patterns that indicate tool calls - more specific patterns
     const toolCallPatterns = [
       /\[askWeatherAgent\]/,
@@ -145,7 +179,7 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
 
       // Use functional update to prevent unnecessary re-renders and limit memory usage
       setDebugInfo(prev => {
-        const newToolCalls = [toolCall, ...prev.toolCalls].slice(0, 25) // Reduced from 50 to 25
+        const newToolCalls = [toolCall, ...prev.toolCalls].slice(0, 20) // Further reduced to 20
         return {
           ...prev,
           toolCalls: newToolCalls,
@@ -157,10 +191,16 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
         }
       })
     }
-  }, [])
+  }, [isDebugEnabled])
 
   // Function to manually add tool calls (for integration with actual MCP operations)
   const addToolCall = useCallback((toolName: string, status: 'called' | 'result' | 'error' | 'pending' = 'called', args?: any, result?: any, error?: string, duration?: number) => {
+    // Only add tool calls when debug is enabled
+    if (!isDebugEnabled) return
+
+    // Track performance
+    performanceMonitorRef.current.toolCallCount++
+
     const toolCall: MCPToolCall = {
       id: `tool-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       toolName,
@@ -173,7 +213,7 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
     }
 
     setDebugInfo(prev => {
-      const newToolCalls = [toolCall, ...prev.toolCalls].slice(0, 25) // Reduced from 50 to 25
+      const newToolCalls = [toolCall, ...prev.toolCalls].slice(0, 20) // Further reduced to 20
       
       // Update metrics based on status
       let newMetrics = { ...prev.metrics }
@@ -199,7 +239,7 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
         metrics: newMetrics
       }
     })
-  }, [])
+  }, [isDebugEnabled])
 
   const extractToolName = (message: string): string => {
     const patterns = [
@@ -294,8 +334,17 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
     }
   }, [])
 
-  // Setup optimized polling intervals
+  // Setup optimized polling intervals - only when debug is enabled
   useEffect(() => {
+    if (!isDebugEnabled) {
+      // Clear any existing intervals when debug is disabled
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+      return
+    }
+
     testConnection()
     discoverMCPServers()
     
@@ -310,10 +359,17 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
     return () => {
       clearInterval(connectionInterval)
       clearInterval(discoveryInterval)
+      pollingIntervalRef.current = null
     }
-  }, [testConnection, discoverMCPServers])
+  }, [testConnection, discoverMCPServers, isDebugEnabled])
 
-  const clearLogs = () => setLogs([])
+  const clearLogs = useCallback(() => {
+    setLogs([])
+    // Force garbage collection if available
+    if (typeof window !== 'undefined' && (window as any).gc) {
+      (window as any).gc()
+    }
+  }, [])
 
   const clearToolCalls = useCallback(() => {
     setDebugInfo(prev => ({
@@ -327,7 +383,105 @@ const MCPDebugPanel = memo(function MCPDebugPanel() {
         lastCallTime: undefined
       }
     }))
+    // Force garbage collection if available
+    if (typeof window !== 'undefined' && (window as any).gc) {
+      (window as any).gc()
+    }
   }, [])
+
+  // Auto-cleanup function to prevent memory leaks
+  const autoCleanup = useCallback(() => {
+    if (!isDebugEnabled) return
+
+    // Clean up old logs (keep only last 20)
+    setLogs(prev => prev.slice(-20))
+    
+    // Clean up old tool calls (keep only last 15)
+    setDebugInfo(prev => ({
+      ...prev,
+      toolCalls: prev.toolCalls.slice(-15)
+    }))
+  }, [isDebugEnabled])
+
+  // Auto-cleanup every 30 seconds when debug is enabled
+  useEffect(() => {
+    if (!isDebugEnabled) return
+
+    const cleanupInterval = setInterval(autoCleanup, 30000)
+    return () => clearInterval(cleanupInterval)
+  }, [isDebugEnabled, autoCleanup])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Clear all intervals
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+      
+      // Restore original console methods
+      if (originalConsoleRef.current) {
+        console.log = originalConsoleRef.current.log
+        console.error = originalConsoleRef.current.error
+        console.warn = originalConsoleRef.current.warn
+      }
+    }
+  }, [])
+
+  // Performance monitoring
+  useEffect(() => {
+    if (!isDebugEnabled) {
+      setPerformanceWarning(false)
+      // Reset performance counters when debug is disabled
+      performanceMonitorRef.current = {
+        logCount: 0,
+        toolCallCount: 0,
+        lastCheck: Date.now()
+      }
+      return
+    }
+
+    const checkPerformance = () => {
+      const now = Date.now()
+      const timeDiff = now - performanceMonitorRef.current.lastCheck
+      const logRate = performanceMonitorRef.current.logCount / (timeDiff / 1000)
+      const toolCallRate = performanceMonitorRef.current.toolCallCount / (timeDiff / 1000)
+      
+      // Warn if we're processing more than 10 logs per second or 5 tool calls per second
+      const isHighLoad = logRate > 10 || toolCallRate > 5
+      setPerformanceWarning(isHighLoad)
+      
+      // Reset counters
+      performanceMonitorRef.current = {
+        logCount: 0,
+        toolCallCount: 0,
+        lastCheck: now
+      }
+    }
+
+    const performanceInterval = setInterval(checkPerformance, 5000) // Check every 5 seconds
+    return () => clearInterval(performanceInterval)
+  }, [isDebugEnabled])
+
+  // Reset debug state when disabled
+  useEffect(() => {
+    if (!isDebugEnabled) {
+      // Clear logs and tool calls when debug is disabled
+      setLogs([])
+      setDebugInfo(prev => ({
+        ...prev,
+        toolCalls: [],
+        metrics: {
+          totalToolCalls: 0,
+          successfulCalls: 0,
+          failedCalls: 0,
+          averageResponseTime: 0,
+          lastCallTime: undefined
+        }
+      }))
+    }
+  }, [isDebugEnabled])
 
   // Export functionality
   const exportData = useCallback((format: 'json' | 'csv' | 'txt' = 'json') => {
@@ -503,25 +657,50 @@ ENVIRONMENT:
 
   return (
     <div className="fixed bottom-4 right-4 z-50">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-blue-700 transition-colors relative"
-      >
-        <span className="mr-2">{getStatusIcon(debugInfo.connectionStatus)}</span>
-        MCP Debug
-        {debugInfo.toolCalls.length > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-            {debugInfo.toolCalls.length}
-          </span>
-        )}
-      </button>
+      <div className="flex flex-col items-end space-y-2">
+        {/* Debug Toggle Button */}
+        <button
+          onClick={() => setIsDebugEnabled(!isDebugEnabled)}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+            isDebugEnabled 
+              ? 'bg-green-600 text-white hover:bg-green-700' 
+              : 'bg-red-600 text-white hover:bg-red-700'
+          }`}
+          title={isDebugEnabled ? 'Debug enabled - click to disable' : 'Debug disabled - click to enable'}
+        >
+          {isDebugEnabled ? '🟢 Debug ON' : '🔴 Debug OFF'}
+        </button>
+        
+        {/* Main Debug Panel Button */}
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-blue-700 transition-colors relative"
+        >
+          <span className="mr-2">{getStatusIcon(debugInfo.connectionStatus)}</span>
+          MCP Debug
+          {isDebugEnabled && debugInfo.toolCalls.length > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+              {debugInfo.toolCalls.length}
+            </span>
+          )}
+        </button>
+      </div>
       
       {isExpanded && (
         <div className="absolute bottom-12 right-0 w-[500px] max-h-[600px] bg-white border border-gray-300 rounded-lg shadow-xl overflow-hidden">
           {/* Header */}
           <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
             <div className="flex justify-between items-center">
-              <h3 className="font-semibold text-gray-800">MCP Debug Panel</h3>
+              <div className="flex items-center space-x-2">
+                <h3 className="font-semibold text-gray-800">MCP Debug Panel</h3>
+                <span className={`text-xs px-2 py-1 rounded ${
+                  isDebugEnabled 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  {isDebugEnabled ? '🟢 ACTIVE' : '🔴 INACTIVE'}
+                </span>
+              </div>
               <div className="flex items-center space-x-2">
                 <div className="text-xs text-gray-600">
                   {debugInfo.serverInfo?.responseTime && `${debugInfo.serverInfo.responseTime}ms`}
@@ -567,6 +746,38 @@ ENVIRONMENT:
           </div>
           
           <div className="p-4 max-h-96 overflow-y-auto">
+            {/* Debug Status Warning */}
+            {!isDebugEnabled && (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                <div className="flex items-center space-x-2">
+                  <span>⚠️</span>
+                  <div>
+                    <strong>Debug Mode Disabled</strong>
+                    <p className="text-xs mt-1">
+                      Enable debug mode to see real-time tool calls, logs, and metrics. 
+                      Debug mode may impact performance when enabled.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Performance Warning */}
+            {isDebugEnabled && performanceWarning && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-800">
+                <div className="flex items-center space-x-2">
+                  <span>🚨</span>
+                  <div>
+                    <strong>High Debug Load Detected</strong>
+                    <p className="text-xs mt-1">
+                      Debug mode is processing a high volume of logs/tool calls. 
+                      Consider disabling debug mode to improve performance.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Status Tab */}
             {activeTab === 'status' && (
               <div className="space-y-4">

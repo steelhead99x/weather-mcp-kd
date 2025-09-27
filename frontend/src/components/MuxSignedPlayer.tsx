@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, Suspense, lazy, useRef } from 'react'
+import { useMuxAnalytics } from '../contexts/MuxAnalyticsContext'
 
 // Lazy load MuxPlayer to reduce initial bundle size
 const MuxPlayer = lazy(() => import('@mux/mux-player-react').then(module => ({ default: module.default })))
@@ -23,6 +24,7 @@ export default function MuxSignedPlayer({
   className?: string
 }) {
   const DEFAULT_ASSET_ID = import.meta.env.VITE_MUX_DEFAULT_ASSET_ID || '00ixOU3x6YI02DXIzeQ00wEzTwAHyUojsiewp7fC4FNeNw'
+  const { updateAnalytics } = useMuxAnalytics()
 
   // Allow URL query param override (?assetid=..., ?assetId=..., or ?assetID=...)
   const assetIdFromQuery = useMemo(() => {
@@ -156,6 +158,23 @@ export default function MuxSignedPlayer({
         
         console.log('[MuxSignedPlayer] Successfully obtained tokens, setting ready state')
         setState({ status: 'ready', playbackId, token, thumbnailToken, width, height })
+        
+        // Initialize analytics data
+        updateAnalytics(assetId, {
+          playbackId,
+          videoDuration: undefined,
+          currentTime: 0,
+          playbackRate: 1,
+          volume: 1,
+          quality: 'auto',
+          bufferingEvents: 0,
+          seekingEvents: 0,
+          playEvents: 0,
+          pauseEvents: 0,
+          errorEvents: 0,
+          totalWatchTime: 0,
+          completionRate: 0
+        })
       } catch (e: any) {
         console.error('[MuxSignedPlayer] Error during token fetch:', e)
         console.error('[MuxSignedPlayer] Error stack:', e?.stack)
@@ -219,6 +238,48 @@ export default function MuxSignedPlayer({
           }}
           streamType="on-demand"
           autoPlay={false}
+          onLoadStart={() => {
+            const loadStartTime = Date.now()
+            updateAnalytics(assetId, { loadTime: loadStartTime })
+          }}
+          onLoadedData={() => {
+            const firstFrameTime = Date.now()
+            updateAnalytics(assetId, { firstFrameTime })
+          }}
+          onPlay={() => {
+            updateAnalytics(assetId, {
+              playEvents: 1
+            })
+          }}
+          onPause={() => {
+            updateAnalytics(assetId, {
+              pauseEvents: 1
+            })
+          }}
+          onSeeking={() => {
+            updateAnalytics(assetId, {
+              seekingEvents: 1
+            })
+          }}
+          onWaiting={() => {
+            updateAnalytics(assetId, {
+              bufferingEvents: 1
+            })
+          }}
+          onTimeUpdate={(event: any) => {
+            const currentTime = event.target?.currentTime || 0
+            const duration = event.target?.duration || 0
+            const volume = event.target?.volume || 0
+            const playbackRate = event.target?.playbackRate || 1
+            
+            updateAnalytics(assetId, {
+              currentTime,
+              videoDuration: duration,
+              volume,
+              playbackRate,
+              totalWatchTime: currentTime
+            })
+          }}
           onError={(error: any) => {
             // Handle MuxPlayer errors gracefully
             if (error && typeof error === 'object' && error.message) {
@@ -228,6 +289,11 @@ export default function MuxSignedPlayer({
                 return // Don't propagate WritableStream errors
               }
             }
+            
+            updateAnalytics(assetId, {
+              errorEvents: 1
+            })
+            
             console.error('[MuxPlayer] Player error:', error)
           }}
           style={{
