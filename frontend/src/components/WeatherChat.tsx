@@ -126,36 +126,41 @@ const ToolCallDisplay = memo(({ toolCall }: { toolCall: ToolCallDebug }) => {
   }
 
   return (
-    <div className="border border-gray-200 rounded-md mb-2">
+    <div className="border border-gray-200 rounded-md mb-1 tool-call-container">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full text-left p-2 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between"
+        className="w-full text-left p-2 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between group tool-call-expand"
       >
         <div className="flex items-center gap-2">
-          <span>{getStatusIcon(toolCall.status)}</span>
-          <span className="font-medium text-sm">{toolCall.toolName}</span>
+          <span className="group-hover:scale-110 transition-transform">{getStatusIcon(toolCall.status)}</span>
+          <span className="font-medium text-xs">{toolCall.toolName}</span>
           <span className="text-xs text-gray-500">({toolCall.status})</span>
+          {toolCall.duration && (
+            <span className="text-xs text-gray-400">
+              {toolCall.duration < 1000 ? `${toolCall.duration}ms` : `${(toolCall.duration / 1000).toFixed(1)}s`}
+            </span>
+          )}
         </div>
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">
           {isExpanded ? '▼' : '▶'}
         </span>
       </button>
       
       {isExpanded && (
-        <div className="p-3 border-t border-gray-200 bg-white">
+        <div className="p-2 border-t border-gray-200 bg-white">
           {toolCall.args && Object.keys(toolCall.args).length > 0 && (
-            <div className="mb-3">
+            <div className="mb-2">
               <div className="text-xs font-semibold text-gray-700 mb-1">Arguments:</div>
-              <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+              <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto max-h-32">
                 {formatToolData(toolCall.args)}
               </pre>
             </div>
           )}
           
           {toolCall.result !== undefined && (
-            <div className="mb-3">
+            <div className="mb-2">
               <div className="text-xs font-semibold text-gray-700 mb-1">Result:</div>
-              <div className="text-xs bg-green-50 p-3 rounded border border-green-200 whitespace-pre-wrap">
+              <div className="text-xs tool-call-result whitespace-pre-wrap">
                 {formatToolResult(toolCall.result)}
               </div>
             </div>
@@ -182,6 +187,19 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
     return matches ? matches[0] : null
   }
   
+  // Function to format text content for better readability
+  const formatTextContent = (text: string) => {
+    return text
+      // Normalize line breaks
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      // Handle multiple consecutive line breaks
+      .replace(/\n{3,}/g, '\n\n')
+      // Clean up extra spaces
+      .replace(/[ \t]+/g, ' ')
+      .trim()
+  }
+
   // Function to render content with URL detection
   const renderContent = (content: string) => {
     // Check for Mux video URL
@@ -200,9 +218,11 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
           <div className="space-y-3">
             {/* Render text content first */}
             {textContent && (
-              <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base block">
-                {textContent}
-              </span>
+              <div className="prose prose-sm max-w-none chat-message">
+                <div className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
+                  {formatTextContent(textContent)}
+                </div>
+              </div>
             )}
             {/* Then render the video player */}
             <div className="mt-3 border-t border-gray-200 pt-3">
@@ -229,11 +249,13 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
       )
     }
     
-    // Regular text content
+    // Regular text content with improved formatting
     return (
-      <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
-        {content}
-      </span>
+      <div className="prose prose-sm max-w-none chat-message">
+        <div className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
+          {formatTextContent(content)}
+        </div>
+      </div>
     )
   }
   
@@ -253,24 +275,24 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
       >
         {renderContent(message.content)}
         
-        {/* Enhanced Tool Calls Debug Info */}
+        {/* Enhanced Tool Calls Debug Info - Collapsed by default */}
         {message.debugInfo?.toolCalls && message.debugInfo.toolCalls.length > 0 && (
-          <div className="mt-4 pt-3 border-t border-gray-200">
+          <div className="mt-3 pt-3 border-t border-gray-200">
             <button
               onClick={() => setToolsExpanded(!toolsExpanded)}
-              className="flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900 transition-colors mb-3 w-full text-left"
+              className="flex items-center gap-2 text-xs text-gray-600 hover:text-gray-800 transition-colors mb-2 w-full text-left group"
             >
-              <span className="text-lg">🔧</span>
+              <span className="text-sm group-hover:scale-110 transition-transform">🔧</span>
               <span className="font-medium">
                 Tool Results ({message.debugInfo.toolCalls.length})
               </span>
-              <span className="text-gray-400 ml-auto">
+              <span className="text-gray-400 ml-auto group-hover:text-gray-600 transition-colors">
                 {toolsExpanded ? '▼' : '▶'}
               </span>
             </button>
             
             {toolsExpanded && (
-              <div className="space-y-3">
+              <div className="space-y-2 max-h-64 overflow-y-auto">
                 {message.debugInfo.toolCalls.map((toolCall) => (
                   <ToolCallDisplay key={toolCall.id} toolCall={toolCall} />
                 ))}

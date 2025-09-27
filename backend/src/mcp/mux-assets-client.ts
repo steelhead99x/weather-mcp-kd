@@ -173,9 +173,12 @@ class MuxAssetsMCPClient {
                         // const path = idVal ? { ASSET_ID: idVal } : undefined;
                         // Filter out problematic arguments that cause union type issues
                         const filteredCtx = { ...ctx };
-                        if (filteredCtx.new_asset_settings) {
+                        // Only filter out new_asset_settings if it's not explicitly needed for playback policy
+                        if (filteredCtx.new_asset_settings && !filteredCtx.new_asset_settings.playback_policies) {
                             console.debug(`[invoke_api_endpoint] Filtering out new_asset_settings to avoid union type bug`);
                             delete filteredCtx.new_asset_settings;
+                        } else if (filteredCtx.new_asset_settings?.playback_policies) {
+                            console.debug(`[invoke_api_endpoint] Keeping new_asset_settings for playback policy: ${filteredCtx.new_asset_settings.playback_policies}`);
                         }
                         
                         const attemptArgs = [

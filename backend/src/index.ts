@@ -252,6 +252,19 @@ app.post('/api/agents/:agentId/stream/vnext', async (req, res) => {
   }
 });
 
+// Serve static files from public directory
+try {
+  const publicDir = resolve(process.cwd(), 'src/public');
+  if (existsSync(publicDir)) {
+    app.use('/files', express.static(publicDir));
+    console.log('[static] Serving files from:', publicDir);
+  } else {
+    console.warn('[static] Public directory not found:', publicDir);
+  }
+} catch (e) {
+  console.warn('[static] Failed to initialize public file serving:', e instanceof Error ? e.message : String(e));
+}
+
 // Serve built frontend (SPA) from ../frontend/dist if it exists
 try {
   const frontendDist = resolve(process.cwd(), '../frontend/dist');

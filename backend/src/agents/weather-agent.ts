@@ -12,6 +12,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client.js';
 import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client.js';
+import { generateTemperatureChartFromForecast, getChartUrl } from '../utils/chartGenerator.js';
 
 // Pre-warm MCP on module load (non-blocking, best-effort) - DISABLED to prevent overload
 // (async () => {
@@ -730,6 +731,18 @@ const ttsWeatherTool = createTool({
             await fs.writeFile(resolve(audioPath), audioBuffer);
             console.debug(`[tts-weather-upload] Audio saved: ${audioPath} (${audioBuffer.length} bytes)`);
 
+            // Generate temperature chart if we have weather data
+            let chartUrl: string | undefined;
+            if (weatherData && Array.isArray(weatherData.forecast)) {
+                try {
+                    const chartPath = await generateTemperatureChartFromForecast(weatherData.forecast);
+                    chartUrl = await getChartUrl(chartPath);
+                    console.debug(`[tts-weather-upload] Generated temperature chart: ${chartUrl}`);
+                } catch (chartError) {
+                    console.warn('[tts-weather-upload] Failed to generate temperature chart:', chartError instanceof Error ? chartError.message : String(chartError));
+                }
+            }
+
             // Background image or fallback - get URL instead of local path
             let imageUrl: string;
             try {
@@ -782,6 +795,7 @@ const ttsWeatherTool = createTool({
                 }
 
                 // Use new audio_only_with_image convenience parameter
+                const playbackPolicy = process.env.MUX_PLAYBACK_POLICY || 'signed';
                 const createArgs = {
                     cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com',
                     audio_only_with_image: {
@@ -790,7 +804,7 @@ const ttsWeatherTool = createTool({
                         image_fit: 'fill' as const
                     },
                     new_asset_settings: {
-                        playback_policies: ['public'],
+                        playback_policies: [playbackPolicy],
                         inputs: [
                             {
                                 type: 'audio',
@@ -1017,13 +1031,14 @@ const ttsWeatherTool = createTool({
                 zipCode: zip,
                 summaryText: finalText,
                 localAudioFile: audioPath,
+                chartUrl,
                 mux,
                 playbackUrl,
                 playerUrl,
                 assetId,
                 playbackId,
                 message: success 
-                    ? 'Audio weather report with static image generated successfully'
+                    ? 'Audio weather report with static image and temperature chart generated successfully'
                     : 'Audio generated but Mux upload failed - check local files'
             };
 
@@ -1058,7 +1073,9 @@ function buildSystemPrompt() {
         '- Always say "please wait one minute while i generate your visual weather forecast" before calling ttsWeatherTool',
         '- Use the stored ZIP code from memory when calling ttsWeatherTool',
         '- If no ZIP code is stored, ask for one first, then proceed with audio generation',
+        '- The ttsWeatherTool will automatically generate both a random background image AND a temperature trend chart for the next 7 days',
         '- After generating a video, display the player URL immediately and mention that the asset is processing',
+        '- Always display the temperature chart image in your response when available',
         '- If a user asks about asset status or if the video is ready, use the check-asset-readiness tool to check the current status',
         '- When an asset becomes ready, inform the user that the video is now fully available for playback',
     ].join(' ');
@@ -1189,6 +1206,12 @@ async function textShim(args: { messages: Array<{ role: string; content: string 
                 const lines: string[] = [];
                 lines.push(`Agricultural Weather Insights for ${currentZipCode}:`);
                 lines.push(summary);
+
+                // Add temperature chart if available
+                if (r.chartUrl) {
+                    lines.push(`\n📊 Temperature Trend Chart:`);
+                    lines.push(`<img src="${r.chartUrl}" alt="7-Day Temperature Forecast" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />`);
+                }
 
                 // Always show player URL if we have an assetId, even while HLS readies
                 if (playerUrl) {

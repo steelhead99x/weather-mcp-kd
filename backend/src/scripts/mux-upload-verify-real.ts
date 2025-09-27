@@ -81,17 +81,22 @@ async function uploadFileToMux(uploadUrl: string, filePath: string): Promise<voi
  */
 async function main() {
     try {
+    console.log('🚀 Starting Mux Upload Verification Process...');
+    
     const preferredPath = process.env.MUX_SAMPLE_FILE || 'files/uploads/samples/mux-sample.mp4';
     let absPath = resolve(preferredPath);
 
     // Validate environment
+    console.log('🔐 Validating environment variables...');
     const id = process.env.MUX_TOKEN_ID;
     const secret = process.env.MUX_TOKEN_SECRET;
     if (!id || !secret) {
         throw new Error('Missing MUX_TOKEN_ID or MUX_TOKEN_SECRET in environment');
     }
+    console.log('✅ Environment variables validated');
 
     // Validate file exists or fallback to WAV if present
+    console.log('📁 Checking for sample file...');
     let exists = true;
     try {
         await fs.access(absPath);
@@ -103,19 +108,23 @@ async function main() {
         const wavPath = 'files/uploads/samples/mux-sample.wav';
         try {
             await fs.access(wavPath);
-            console.warn(`[mux-upload-verify-real] WARNING: Preferred file not found: ${absPath}. Falling back to ${wavPath}. Set MUX_SAMPLE_FILE to override.`);
+            console.log(`⚠️  Preferred file not found: ${absPath}`);
+            console.log(`🔄 Falling back to: ${wavPath}`);
             absPath = resolve(wavPath);
         } catch {
             throw new Error(`Sample file not found. Tried: ${absPath} and ${resolve(wavPath)}.`);
         }
     }
 
-    console.log('[mux-upload-verify-real] Using file:', absPath);
+    console.log(`✅ Using file: ${absPath}`);
 
     // 1) Create upload via MCP (real)
+    console.log('🔌 Connecting to Mux MCP server...');
     const uploadTools = await uploadClient.getTools();
+    console.log('✅ Connected to Mux MCP server');
 
     // Try to use the direct endpoint first
+    console.log('🔍 Looking for upload creation tool...');
     let create = uploadTools['create_video_uploads'];
     if (!create) {
         // Fallback to the dotted notation
@@ -141,23 +150,22 @@ async function main() {
             }
         };
     }
+    console.log('✅ Upload creation tool found');
 
-    console.log('[mux-upload-verify-real] Creating upload via MCP...');
+    console.log('⚙️  Configuring upload parameters...');
     const createArgs: any = {
         cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com'
     };
     
-    // TEMPORARY WORKAROUND: Skip new_asset_settings entirely to avoid union type bug
-    // TODO: Remove this workaround when Mux MCP server fixes union type validation
-    console.log('[mux-upload-verify-real] Using minimal args to avoid MCP union type bug');
+    // Add playback policy configuration
+    const playbackPolicy = process.env.MUX_PLAYBACK_POLICY || 'signed';
+    console.log(`🔐 Using playback policy: ${playbackPolicy}`);
     
-    // Comment out the problematic new_asset_settings until MCP SDK is fixed
-    // const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
-    // if (playbackPolicy === 'signed') {
-    //     createArgs.new_asset_settings = {
-    //         playback_policies: ['signed']
-    //     };
-    // }
+    // Add new_asset_settings with playback policy
+    createArgs.new_asset_settings = {
+        playback_policies: [playbackPolicy]
+    };
+    console.log('✅ Upload parameters configured');
     if (process.env.MUX_UPLOAD_TEST === 'true') createArgs.test = true;
 
     // Add timeout if specified (Mux expects SECONDS, not ms)
@@ -177,11 +185,13 @@ async function main() {
         console.log('[mux-upload-verify-real] Create arguments:', JSON.stringify(createArgs, null, 2));
     }
 
+    console.log('📤 Creating upload with Mux...');
     const createRes = await create.execute({ context: createArgs });
+    console.log('✅ Upload created successfully');
 
     // Print response blocks for visibility
     const blocks = Array.isArray(createRes) ? createRes : [createRes];
-    console.log('[mux-upload-verify-real] upload.create response blocks:');
+    console.log('📋 Upload response details:');
     for (const block of blocks) {
         try {
             const text = (block && typeof block === 'object' && 'text' in block) ? (block as any).text : String(block);
@@ -216,15 +226,17 @@ async function main() {
     console.log(`MUX_ASSET_ID=${assetId ?? ''}`);
 
     if (uploadUrl) {
-        console.log('[mux-upload-verify-real] upload_url provided by Mux:', uploadUrl);
-        console.log('[mux-upload-verify-real] Starting file upload to Mux endpoint...');
+        console.log('📤 Upload URL provided by Mux');
+        console.log('📁 Starting file upload to Mux endpoint...');
+        console.log(`📄 Uploading file: ${absPath}`);
         
         // Upload the file using Mux's direct upload protocol
         try {
             await uploadFileToMux(uploadUrl, absPath);
+            console.log('✅ File uploaded successfully');
             
             // Wait a bit for Mux to process the upload
-            console.log('[mux-upload-verify-real] Waiting for Mux to process the uploaded file...');
+            console.log('⏳ Waiting for Mux to process the uploaded file...');
             await delay(10000); // Wait 10 seconds for processing to start
             
             // Now try to get the upload info again to get the asset_id
@@ -322,25 +334,30 @@ async function main() {
             return;
         }
     } else {
-        console.warn('[mux-upload-verify-real] No upload URL provided - cannot upload file');
+        console.error('❌ No upload URL provided - cannot upload file');
+        throw new Error('No upload URL provided - cannot upload file');
     }
 
-    // Update the machine-readable asset ID line
-    console.log(`MUX_ASSET_ID=${assetId ?? ''}`);
+    console.log('📊 Upload Summary:');
+    console.log(`   Upload ID: ${uploadId}`);
+    console.log(`   Asset ID: ${assetId || 'Not yet available'}`);
 
     if (!assetId) {
-        console.warn('[mux-upload-verify-real] No asset_id available after upload. This may be normal if asset creation is still in progress.');
-        console.warn('[mux-upload-verify-real] You can run asset verification later using the upload_id or check the Mux dashboard.');
+        console.warn('⚠️  No asset_id available after upload. This may be normal if asset creation is still in progress.');
+        console.warn('💡 You can run asset verification later using the upload_id or check the Mux dashboard.');
         return;
     }
 
     // Always output player URL now that we have assetId
-    console.log(`MUX_PLAYER_URL=https://streamingportfolio.com/player?assetId=${assetId}`);
+    console.log(`🎬 Player URL: https://streamingportfolio.com/player?assetId=${assetId}`);
 
     // 2) Poll asset status via assets client until ready/errored
+    console.log('🔍 Connecting to Mux Assets MCP server...');
     const assetsTools = await assetsClient.getTools();
+    console.log('✅ Connected to Mux Assets MCP server');
 
     // Try multiple possible tool names for getting asset
+    console.log('🔍 Looking for asset retrieval tool...');
     let getAsset = assetsTools['get_video_assets'] ||
         assetsTools['retrieve_video_assets'] ||
         assetsTools['video.assets.get'] ||
@@ -364,12 +381,15 @@ async function main() {
             }
         };
     }
+    console.log('✅ Asset retrieval tool found');
 
     const validStatuses = new Set(['preparing', 'processing', 'ready', 'errored']);
     const pollMs = Math.max(1000, parseInt(process.env.MUX_VERIFY_POLL_MS || '5000', 10) || 5000);
     const timeoutMs = Math.min(30 * 60 * 1000, Math.max(10_000, parseInt(process.env.MUX_VERIFY_TIMEOUT_MS || '300000', 10) || 300000));
 
-    console.log(`[mux-upload-verify-real] Polling asset ${assetId} until ready (every ${pollMs}ms, timeout ${timeoutMs}ms)...`);
+    console.log(`⏳ Polling asset ${assetId} until ready...`);
+    console.log(`   Poll interval: ${pollMs}ms`);
+    console.log(`   Timeout: ${Math.round(timeoutMs / 1000)}s`);
 
     const start = Date.now();
     let finalStatus: string | undefined;
@@ -420,13 +440,21 @@ async function main() {
         throw new Error(`Asset did not reach ready state (final: ${finalStatus}). Last payload: ${JSON.stringify(lastPayload)}`);
     }
 
+    console.log('🎉 Asset processing completed successfully!');
+
     // Output final, machine-readable summary
     const playbackId = Array.isArray(lastPayload?.playback_ids) && lastPayload.playback_ids.length > 0
         ? (lastPayload.playback_ids[0]?.id as string | undefined)
         : undefined;
 
-    console.log(`MUX_ASSET_ID=${assetId}`);
-    if (playbackId) console.log(`MUX_PLAYBACK_ID=${playbackId}`);
+    console.log('📋 Final Results:');
+    console.log(`   Asset ID: ${assetId}`);
+    if (playbackId) {
+        console.log(`   Playback ID: ${playbackId}`);
+        console.log(`   HLS URL: https://stream.mux.com/${playbackId}.m3u8`);
+    } else {
+        console.log('   ⚠️  No playback ID found - asset may not have playback URLs');
+    }
 
     console.log('✅ Mux upload and verification succeeded. Asset is ready.');
     if (playbackId) {
