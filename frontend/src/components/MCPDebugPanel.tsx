@@ -93,7 +93,7 @@ export default function MCPDebugPanel() {
     }
   }, [])
 
-  // Tool call detection function
+  // Enhanced tool call detection function
   const detectToolCallsInLogs = useCallback((message: string, args: any[]) => {
     // Look for patterns that indicate tool calls
     const toolCallPatterns = [
@@ -102,7 +102,11 @@ export default function MCPDebugPanel() {
       /\[MCPDebug\]/,
       /Tool call:/,
       /Agent response:/,
-      /MCP server/
+      /MCP server/,
+      /weather.*tool/i,
+      /mux.*tool/i,
+      /tool.*call/i,
+      /agent.*call/i
     ]
 
     const isToolCall = toolCallPatterns.some(pattern => pattern.test(message))
@@ -126,6 +130,48 @@ export default function MCPDebugPanel() {
         }
       }))
     }
+  }, [])
+
+  // Function to manually add tool calls (for integration with actual MCP operations)
+  const addToolCall = useCallback((toolName: string, status: 'called' | 'result' | 'error' | 'pending' = 'called', args?: any, result?: any, error?: string, duration?: number) => {
+    const toolCall: MCPToolCall = {
+      id: `tool-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      toolName,
+      timestamp: new Date(),
+      status,
+      args,
+      result,
+      error,
+      duration
+    }
+
+    setDebugInfo(prev => {
+      const newToolCalls = [toolCall, ...prev.toolCalls].slice(0, 50)
+      
+      // Update metrics based on status
+      let newMetrics = { ...prev.metrics }
+      if (status === 'called') {
+        newMetrics.totalToolCalls += 1
+        newMetrics.lastCallTime = new Date()
+      } else if (status === 'result') {
+        newMetrics.successfulCalls += 1
+        if (duration) {
+          // Update average response time
+          const totalCalls = newMetrics.successfulCalls + newMetrics.failedCalls
+          newMetrics.averageResponseTime = totalCalls > 0 
+            ? (newMetrics.averageResponseTime * (totalCalls - 1) + duration) / totalCalls
+            : duration
+        }
+      } else if (status === 'error') {
+        newMetrics.failedCalls += 1
+      }
+
+      return {
+        ...prev,
+        toolCalls: newToolCalls,
+        metrics: newMetrics
+      }
+    })
   }, [])
 
   const extractToolName = (message: string): string => {
@@ -239,6 +285,17 @@ export default function MCPDebugPanel() {
       clearInterval(discoveryInterval)
     }
   }, [testConnection, discoverMCPServers])
+
+  // Expose addToolCall globally for integration with other components
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).mcpDebugPanel = {
+        addToolCall,
+        testConnection,
+        discoverMCPServers
+      }
+    }
+  }, [addToolCall, testConnection, discoverMCPServers])
 
   const clearLogs = () => setLogs([])
 
@@ -453,6 +510,30 @@ export default function MCPDebugPanel() {
                     >
                       📋 Log Environment
                     </button>
+                    <button
+                      onClick={() => {
+                        // Test tool call functionality
+                        addToolCall('testWeatherTool', 'called', { zipCode: '85001' })
+                        setTimeout(() => {
+                          addToolCall('testWeatherTool', 'result', { zipCode: '85001' }, { temperature: 75, condition: 'sunny' }, undefined, 150)
+                        }, 1000)
+                      }}
+                      className="w-full text-left px-3 py-2 bg-orange-50 border border-orange-200 rounded text-sm text-orange-700 hover:bg-orange-100"
+                    >
+                      🧪 Test Tool Call
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Test error tool call
+                        addToolCall('testErrorTool', 'called', { test: 'error' })
+                        setTimeout(() => {
+                          addToolCall('testErrorTool', 'error', { test: 'error' }, undefined, 'Test error message', 500)
+                        }, 500)
+                      }}
+                      className="w-full text-left px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700 hover:bg-red-100"
+                    >
+                      ❌ Test Error Call
+                    </button>
                   </div>
                 </div>
               </div>
@@ -496,6 +577,16 @@ export default function MCPDebugPanel() {
                               <summary className="cursor-pointer hover:text-gray-800">Args</summary>
                               <pre className="mt-1 text-xs bg-gray-100 p-2 rounded overflow-x-auto">
                                 {JSON.stringify(call.args, null, 2)}
+                              </pre>
+                            </details>
+                          </div>
+                        )}
+                        {call.result && (
+                          <div className="text-xs text-gray-600 mt-1">
+                            <details>
+                              <summary className="cursor-pointer hover:text-gray-800">Result</summary>
+                              <pre className="mt-1 text-xs bg-green-50 p-2 rounded overflow-x-auto">
+                                {JSON.stringify(call.result, null, 2)}
                               </pre>
                             </details>
                           </div>
@@ -563,9 +654,14 @@ export default function MCPDebugPanel() {
                   
                   <div className="p-3 bg-purple-50 rounded border">
                     <div className="text-2xl font-bold text-purple-700">
-                      {debugInfo.serverInfo?.responseTime || 0}ms
+                      {debugInfo.metrics.averageResponseTime > 0 
+                        ? `${debugInfo.metrics.averageResponseTime.toFixed(0)}ms`
+                        : `${debugInfo.serverInfo?.responseTime || 0}ms`
+                      }
                     </div>
-                    <div className="text-sm text-purple-600">Last Response</div>
+                    <div className="text-sm text-purple-600">
+                      {debugInfo.metrics.averageResponseTime > 0 ? 'Avg Response' : 'Last Response'}
+                    </div>
                   </div>
                 </div>
 
