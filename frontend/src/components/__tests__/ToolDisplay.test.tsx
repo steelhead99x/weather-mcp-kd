@@ -67,7 +67,7 @@ vi.mock('../../hooks/useStreamVNext', () => ({
     }
 
     const mockStreamVNext = async (agent: any, message: string) => {
-      // Simulate the tool call flow
+      // Simulate the tool call flow with proper timing
       const chunks = [
         {
           type: 'tool_call',
@@ -95,13 +95,21 @@ vi.mock('../../hooks/useStreamVNext', () => ({
         }
       ]
 
-      // Process chunks through the onChunk callback
+      // Process chunks through the onChunk callback with proper async handling
       for (const chunk of chunks) {
-        options.onChunk?.(chunk)
-        await new Promise(resolve => setTimeout(resolve, 10))
+        if (options.onChunk) {
+          await act(async () => {
+            options.onChunk(chunk)
+          })
+        }
+        await new Promise(resolve => setTimeout(resolve, 50))
       }
       
-      options.onComplete?.()
+      if (options.onComplete) {
+        await act(async () => {
+          options.onComplete()
+        })
+      }
     }
 
     return {
