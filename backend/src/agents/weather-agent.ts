@@ -7,7 +7,7 @@ import { Agent } from "@mastra/core";
 import { anthropic } from "@ai-sdk/anthropic";
 import { weatherTool } from "../tools/weather.js";
 import { promises as fs } from 'fs';
-import { resolve, dirname, join } from 'path';
+import { resolve, dirname, join, basename } from 'path';
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { muxMcpClient as uploadClient } from '../mcp/mux-upload-client.js';
@@ -27,10 +27,6 @@ import { muxMcpClient as assetsClient } from '../mcp/mux-assets-client.js';
 // })();
 import { Memory } from "@mastra/memory";
 import { InMemoryStore } from "@mastra/core/storage";
-import ffmpeg from 'fluent-ffmpeg';
-import { existsSync } from 'fs';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
 // Type definitions for better type safety
 interface WeatherForecast {
@@ -91,243 +87,17 @@ interface MuxAssetResponse {
 //     message?: string;
 // }
 
-const execFileAsync = promisify(execFile);
 
 // Configurable URLs with environment variable support
 const MUX_HLS_BASE_URL = process.env.MUX_HLS_BASE_URL || 'https://stream.mux.com';
 const STREAMING_PORTFOLIO_BASE_URL = process.env.STREAMING_PORTFOLIO_BASE_URL || 'https://streamingportfolio.com';
 
-// Memory optimization configuration
-const VIDEO_MAX_WIDTH = parseInt(process.env.VIDEO_MAX_WIDTH || '1920');
-const VIDEO_MAX_HEIGHT = parseInt(process.env.VIDEO_MAX_HEIGHT || '1080');
-const FFMPEG_PRESET = process.env.FFMPEG_PRESET || 'fast'; // ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
-const FFMPEG_CRF = parseInt(process.env.FFMPEG_CRF || '23'); // 0-51, lower = better quality
-const FFMPEG_THREADS = process.env.FFMPEG_THREADS || '0'; // 0 = auto-detect
+// Memory optimization configuration removed - now using Mux direct upload
 
-// Memory monitoring utilities
-function logMemoryUsage(context: string) {
-    const memUsage = process.memoryUsage();
-    console.debug(`[${context}] Memory usage: RSS=${Math.round(memUsage.rss / 1024 / 1024)}MB, Heap=${Math.round(memUsage.heapUsed / 1024 / 1024)}MB/${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`);
-}
+// FFmpeg functions removed - now using Mux direct upload for audio-only with static image
 
-// Force garbage collection if available
-function forceGC() {
-    if (typeof global !== 'undefined' && global.gc) {
-        try {
-            global.gc();
-            console.debug('[memory] Forced garbage collection');
-        } catch (error) {
-            console.debug('[memory] GC failed:', error instanceof Error ? error.message : String(error));
-        }
-    }
-}
 
-// Alternative streaming approach for very large files
-async function createVideoFromAudioAndImageStreaming(
-    audioPath: string,
-    imagePath: string,
-    outputPath: string
-): Promise<void> {
-    logMemoryUsage('createVideo-streaming-start');
-    
-    return new Promise((resolvePromise, reject) => {
-        ffmpeg()
-            .input(imagePath)
-            .inputOptions(['-loop 1'])
-            .input(audioPath)
-            .audioCodec('aac')
-            .videoCodec('libx264')
-            .outputOptions([
-                '-b:a 128k',
-                '-pix_fmt yuv420p',
-                '-shortest',
-                '-movflags +faststart',
-                // Streaming-optimized options
-                `-threads ${FFMPEG_THREADS}`,
-                `-preset ${FFMPEG_PRESET}`,
-                `-crf ${FFMPEG_CRF}`,
-                '-max_muxing_queue_size 512', // Smaller buffer for streaming
-                '-avoid_negative_ts make_zero',
-                '-fflags +genpts', // Generate presentation timestamps
-                '-vsync cfr', // Constant frame rate
-                '-r 30', // Limit frame rate to reduce memory
-            ])
-            .output(outputPath)
-            .on('start', (cmd: string) => console.debug(`[createVideo-streaming] FFmpeg: ${cmd}`))
-            .on('stderr', (line: string) => console.debug(`[createVideo-streaming][stderr] ${line}`))
-            .on('end', () => {
-                logMemoryUsage('createVideo-streaming-end');
-                forceGC();
-                resolvePromise();
-            })
-            .on('error', (err: Error) => {
-                console.error(`[createVideo-streaming] Error: ${err.message}`);
-                reject(new Error(`FFmpeg streaming failed: ${err.message}`));
-            })
-            .run();
-    });
-}
 
-// Configure FFmpeg path: use packaged ffmpeg binaries first, then system fallback
-(function configureFfmpeg() {
-    // Try packaged binaries first
-    const packagedCandidates: string[] = [];
-    
-    // Try ffmpeg-static package
-    try {
-        const ffmpegStatic = require('ffmpeg-static');
-        if (ffmpegStatic && typeof ffmpegStatic === 'string') {
-            packagedCandidates.push(ffmpegStatic);
-        }
-    } catch {
-        // ffmpeg-static not available
-    }
-    
-    // Try @ffmpeg-installer/ffmpeg package
-    try {
-        const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
-        if (ffmpegInstaller?.path) {
-            packagedCandidates.push(ffmpegInstaller.path);
-        }
-    } catch {
-        // @ffmpeg-installer/ffmpeg not available
-    }
-
-    // System ffmpeg fallback candidates
-    const systemCandidates = [
-        '/usr/bin/ffmpeg',
-        '/usr/local/bin/ffmpeg',
-        '/opt/homebrew/bin/ffmpeg',  // Homebrew on Apple Silicon
-        '/bin/ffmpeg',
-    ];
-
-    // Also check for Homebrew Intel installations
-    try {
-        const { execSync } = require('child_process');
-        const homebrewPrefix = execSync('brew --prefix', { encoding: 'utf8', timeout: 5000 }).trim();
-        if (homebrewPrefix) {
-            systemCandidates.push(`${homebrewPrefix}/bin/ffmpeg`);
-        }
-    } catch {
-        // Ignore if brew command fails
-    }
-
-    // Combine all candidates (packaged first, then system)
-    const allCandidates = [...packagedCandidates, ...systemCandidates];
-
-    const found = allCandidates.find(p => {
-        try { return existsSync(p); } catch { return false; }
-    });
-
-    if (found) {
-        ffmpeg.setFfmpegPath(found);
-        const source = packagedCandidates.includes(found) ? 'packaged' : 'system';
-        console.debug(`[ffmpeg] Using ${source} ffmpeg at: ${found}`);
-        try {
-            // Expose resolved path for other checks/logging
-            process.env.FFMPEG_PATH = found;
-        } catch {}
-    } else {
-        console.warn('[ffmpeg] No ffmpeg binary found in expected locations. Video features may fail.');
-        console.warn('[ffmpeg] Searched paths:', allCandidates);
-    }
-})();
-
-// Log ffmpeg version once at startup to verify runtime binary
-(async () => {
-    try {
-        const ffmpegPathForVersion = process.env.FFMPEG_PATH || 'ffmpeg';
-        const { stdout } = await execFileAsync(ffmpegPathForVersion, ['-version']);
-        console.debug('[ffmpeg] Version:\n' + stdout.split('\n').slice(0, 3).join('\n'));
-    } catch (e) {
-        console.warn('[ffmpeg] Unable to run ffmpeg -version:', e instanceof Error ? e.message : String(e));
-    }
-})();
-
-// Resize image to reduce memory usage
-async function resizeImageForVideo(inputPath: string, outputPath: string, maxWidth: number = VIDEO_MAX_WIDTH, maxHeight: number = VIDEO_MAX_HEIGHT): Promise<void> {
-    return new Promise((resolvePromise, reject) => {
-        ffmpeg()
-            .input(inputPath)
-            .outputOptions([
-                '-vf', `scale='min(${maxWidth},iw)':'min(${maxHeight},ih)':force_original_aspect_ratio=decrease`,
-                '-q:v', '2', // High quality but compressed
-                '-f', 'image2'
-            ])
-            .output(outputPath)
-            .on('start', (cmd: string) => console.debug(`[resizeImage] FFmpeg: ${cmd}`))
-            .on('stderr', (line: string) => console.debug(`[resizeImage][stderr] ${line}`))
-            .on('end', () => resolvePromise())
-            .on('error', (err: Error) => {
-                console.error(`[resizeImage] Error: ${err.message}`);
-                reject(new Error(`Image resize failed: ${err.message}`));
-            })
-            .run();
-    });
-}
-
-// Create video from audio and image with memory optimization
-async function createVideoFromAudioAndImage(
-    audioPath: string,
-    imagePath: string,
-    outputPath: string
-): Promise<void> {
-    logMemoryUsage('createVideo-start');
-    
-    // Create a temporary resized image to reduce memory usage
-    const tempImagePath = `${imagePath}.resized.jpg`;
-    
-    try {
-        // Resize image first to reduce memory footprint
-        await resizeImageForVideo(imagePath, tempImagePath);
-        console.debug(`[createVideo] Resized image: ${imagePath} -> ${tempImagePath}`);
-        logMemoryUsage('createVideo-after-resize');
-        
-        return new Promise((resolvePromise, reject) => {
-            ffmpeg()
-                .input(tempImagePath)
-                .inputOptions(['-loop 1'])
-                .input(audioPath)
-                .audioCodec('aac')
-                .videoCodec('libx264')
-                .outputOptions([
-                    '-b:a 128k',
-                    '-pix_fmt yuv420p',
-                    '-shortest',
-                    '-movflags +faststart',
-                    // Memory optimization options
-                    `-threads ${FFMPEG_THREADS}`, // Use configured thread count
-                    `-preset ${FFMPEG_PRESET}`, // Configurable encoding preset
-                    `-crf ${FFMPEG_CRF}`, // Configurable quality/size balance
-                    '-max_muxing_queue_size 1024', // Limit buffer size
-                    '-avoid_negative_ts make_zero', // Avoid timestamp issues
-                ])
-                .output(outputPath)
-                .on('start', (cmd: string) => console.debug(`[createVideo] FFmpeg: ${cmd}`))
-                .on('stderr', (line: string) => console.debug(`[createVideo][stderr] ${line}`))
-                .on('end', () => {
-                    // Clean up temporary file
-                    fs.unlink(tempImagePath).catch(err => 
-                        console.warn(`[createVideo] Failed to cleanup temp image: ${err.message}`)
-                    );
-                    logMemoryUsage('createVideo-end');
-                    forceGC(); // Force garbage collection after processing
-                    resolvePromise();
-                })
-                .on('error', (err: Error) => {
-                    // Clean up temporary file on error
-                    fs.unlink(tempImagePath).catch(() => {});
-                    console.error(`[createVideo] Error: ${err.message}`);
-                    reject(new Error(`FFmpeg failed: ${err.message}`));
-                })
-                .run();
-        });
-    } catch (error) {
-        // Clean up temporary file on error
-        fs.unlink(tempImagePath).catch(() => {});
-        throw error;
-    }
-}
 
 // Generate TTS with Deepgram (fixed format parameters)
 async function synthesizeWithDeepgramTTS(text: string): Promise<Buffer> {
@@ -933,52 +703,29 @@ const ttsWeatherTool = createTool({
             // Synthesize TTS (Deepgram)
             const audioBuffer = await synthesizeWithDeepgramTTS(finalText);
 
-            // Temp paths
+            // Temp paths for audio only
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
             const baseDir = process.env.TTS_TMP_DIR || '/tmp/tts';
             const audioPath = join(baseDir, `weather-${timestamp}-${zip}.wav`);
-            const videoPath = join(baseDir, `weather-${timestamp}-${zip}.mp4`);
 
             await fs.mkdir(dirname(resolve(audioPath)), { recursive: true });
             await fs.writeFile(resolve(audioPath), audioBuffer);
             console.debug(`[tts-weather-upload] Audio saved: ${audioPath} (${audioBuffer.length} bytes)`);
 
-            // Background image or fallback
-            let finalImagePath: string;
+            // Background image or fallback - get URL instead of local path
+            let imageUrl: string;
             try {
-                finalImagePath = await getRandomBackgroundImage();
+                const finalImagePath = await getRandomBackgroundImage();
                 console.debug(`[tts-weather-upload] Using background image: ${finalImagePath}`);
+                // Convert local path to URL - assuming images are served from public directory
+                imageUrl = `${process.env.STREAMING_PORTFOLIO_BASE_URL || 'https://weather-mcp-kd.streamingportfolio.com'}/files/images/${basename(finalImagePath)}`;
             } catch {
-                finalImagePath = await getFallbackBackgroundPng();
-                console.debug(`[tts-weather-upload] Using fallback background: ${finalImagePath}`);
+                const fallbackPath = await getFallbackBackgroundPng();
+                console.debug(`[tts-weather-upload] Using fallback background: ${fallbackPath}`);
+                imageUrl = `${process.env.STREAMING_PORTFOLIO_BASE_URL || 'https://weather-mcp-kd.streamingportfolio.com'}/files/images/${basename(fallbackPath)}`;
             }
 
-            console.debug(`[tts-weather-upload] Creating video...`);
-            
-            // Choose processing method based on image size
-            const imageStats = await fs.stat(finalImagePath);
-            const imageSizeMB = imageStats.size / (1024 * 1024);
-            const audioSizeMB = audioBuffer.length / (1024 * 1024);
-            
-            console.debug(`[tts-weather-upload] Image size: ${imageSizeMB.toFixed(2)}MB, Audio size: ${audioSizeMB.toFixed(2)}MB`);
-            
-            // Use streaming mode for large files (>5MB total)
-            if (imageSizeMB + audioSizeMB > 5) {
-                console.debug(`[tts-weather-upload] Using streaming mode for large files`);
-                await createVideoFromAudioAndImageStreaming(
-                    resolve(audioPath),
-                    finalImagePath,
-                    resolve(videoPath)
-                );
-            } else {
-                console.debug(`[tts-weather-upload] Using optimized mode for smaller files`);
-                await createVideoFromAudioAndImage(
-                    resolve(audioPath),
-                    finalImagePath,
-                    resolve(videoPath)
-                );
-            }
-            console.debug(`[tts-weather-upload] Video created: ${videoPath}`);
+            console.debug(`[tts-weather-upload] Image URL: ${imageUrl}`);
 
             // Upload to Mux and get streaming URLs
             let mux: any = null;
@@ -1016,22 +763,35 @@ const ttsWeatherTool = createTool({
                     throw new Error(`Mux MCP missing upload tool. Available tools: ${availableTools.join(', ')}`);
                 }
 
-                // Simplified argument structure - avoid union type issues by using minimal args
+                // Use new audio_only_with_image convenience parameter
                 const createArgs = {
-                    cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com'
+                    cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com',
+                    audio_only_with_image: {
+                        image_url: imageUrl,
+                        image_duration: 'audio_duration' as const,
+                        image_fit: 'fill' as const
+                    },
+                    new_asset_settings: {
+                        playback_policies: ['public'],
+                        inputs: [
+                            {
+                                type: 'audio',
+                                // Audio file will be uploaded via direct upload
+                            },
+                            {
+                                type: 'video', // This is the key - use 'video' type for images
+                                url: imageUrl,
+                                overlay_settings: {
+                                    width: '100%',
+                                    height: '100%',
+                                    horizontal_align: 'center',
+                                    vertical_align: 'middle',
+                                    opacity: '100%'
+                                }
+                            }
+                        ]
+                    }
                 };
-                
-                // TEMPORARY WORKAROUND: Skip new_asset_settings entirely to avoid union type bug
-                // TODO: Remove this workaround when Mux MCP server fixes union type validation
-                console.debug('[tts-weather-upload] Using minimal args to avoid MCP union type bug');
-                
-                // Comment out the problematic new_asset_settings until MCP SDK is fixed
-                // const playbackPolicy = (process.env.MUX_SIGNED_PLAYBACK === 'true' || process.env.MUX_PLAYBACK_POLICY === 'signed') ? 'signed' : 'public';
-                // if (playbackPolicy === 'signed') {
-                //     (createArgs as any).new_asset_settings = {
-                //         playback_policies: ['signed']
-                //     };
-                // }
                 
                 // Add test flag if specified
                 if (process.env.MUX_UPLOAD_TEST === 'true') {
@@ -1090,9 +850,9 @@ const ttsWeatherTool = createTool({
                 if (uploadId) console.debug(`[tts-weather-upload] Upload ID: ${uploadId}`);
                 if (assetId) console.debug(`[tts-weather-upload] Asset ID: ${assetId}`);
 
-                console.debug('[tts-weather-upload] Uploading file to Mux...');
-                await putFileToMux(uploadUrl, resolve(videoPath));
-                console.debug('[tts-weather-upload] File upload completed');
+                console.debug('[tts-weather-upload] Uploading audio file to Mux...');
+                await putFileToMux(uploadUrl, resolve(audioPath));
+                console.debug('[tts-weather-upload] Audio file upload completed');
 
                 // Simplified asset retrieval - only if we don't already have assetId
                 if (!assetId && uploadId) {
@@ -1193,12 +953,6 @@ const ttsWeatherTool = createTool({
                 } catch (cleanupError) {
                     console.warn('[tts-weather-upload] Failed to cleanup audio file:', cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
                 }
-                try { 
-                    await fs.unlink(resolve(videoPath)); 
-                    console.debug('[tts-weather-upload] Cleaned up video file:', videoPath);
-                } catch (cleanupError) {
-                    console.warn('[tts-weather-upload] Failed to cleanup video file:', cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
-                }
                 console.debug('[tts-weather-upload] Cleanup completed');
             }
 
@@ -1219,14 +973,13 @@ const ttsWeatherTool = createTool({
                 zipCode: zip,
                 summaryText: finalText,
                 localAudioFile: audioPath,
-                localVideoFile: videoPath,
                 mux,
                 playbackUrl,
                 playerUrl,
                 assetId,
                 playbackId,
                 message: success 
-                    ? 'Audio weather report generated successfully'
+                    ? 'Audio weather report with static image generated successfully'
                     : 'Audio generated but Mux upload failed - check local files'
             };
 

@@ -551,7 +551,7 @@ class MuxMCPClient {
                 };
 
                 // Primary snake_case IDs (match MCP endpoint names exactly)
-                addWrapper('create_video_uploads', 'create_video_uploads', 'Creates a new direct upload for video content');
+                addWrapper('create_video_uploads', 'create_video_uploads', 'Creates a new direct upload for video content, audio-only assets with static images, or other media to be ingested to Mux.');
                 addWrapper('retrieve_video_uploads', 'retrieve_video_uploads', 'Fetches information about a single direct upload');
                 addWrapper('list_video_uploads', 'list_video_uploads', 'Lists direct uploads');
                 addWrapper('cancel_video_uploads', 'cancel_video_uploads', 'Cancels a direct upload in waiting state');
@@ -651,6 +651,28 @@ class MuxMCPClient {
         // Fallback schema with correct parameter names
         return z.object({
             UPLOAD_ID: z.string().optional().describe("Upload ID"),
+            cors_origin: z.string().optional().describe("If the upload URL will be used in a browser, you must specify the origin in order for the signed URL to have the correct CORS headers."),
+            new_asset_settings: z.object({
+                playback_policies: z.array(z.string()).optional().describe("Playback policies for the asset"),
+                inputs: z.array(z.object({
+                    type: z.string().describe("Type of input (audio, video, etc.)"),
+                    url: z.string().optional().describe("URL for the input"),
+                    overlay_settings: z.object({
+                        width: z.string().optional(),
+                        height: z.string().optional(),
+                        horizontal_align: z.string().optional(),
+                        vertical_align: z.string().optional(),
+                        opacity: z.string().optional()
+                    }).optional().describe("Overlay settings for video inputs")
+                })).optional().describe("Input configuration for the asset")
+            }).optional().describe("Settings for the new asset"),
+            test: z.boolean().optional().describe("Indicates if this is a test Direct Upload"),
+            timeout: z.number().optional().describe("Max time in seconds for the signed upload URL to be valid"),
+            audio_only_with_image: z.object({
+                image_url: z.string().describe("URL of the static image to display for the duration of the audio. Maximum size is 4096x4096."),
+                image_duration: z.enum(['audio_duration', '30s', '1m', '2m', '5m', '10m']).default('audio_duration').describe("How long the image should be displayed"),
+                image_fit: z.enum(['fill', 'contain', 'cover']).default('fill').describe("How the image should fit in the video frame")
+            }).optional().describe("Convenience option for creating audio-only assets with a static image"),
             limit: z.number().optional().describe("Number of items to return"),
             offset: z.number().optional().describe("Number of items to skip"),
         });
