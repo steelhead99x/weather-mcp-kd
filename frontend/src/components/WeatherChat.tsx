@@ -190,14 +190,26 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
       const assetId = url.searchParams.get('assetId')
       
       if (assetId) {
+        // Remove the video URL from the text content
+        const textContent = content.replace(muxVideoUrl, '').trim()
+        
         return (
           <div className="space-y-3">
-            <MuxSignedPlayer 
-              assetId={assetId}
-              className="w-full max-w-2xl mx-auto"
-            />
-            <div className="text-xs text-gray-500 text-center">
-              Video: {muxVideoUrl}
+            {/* Render text content first */}
+            {textContent && (
+              <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base block">
+                {textContent}
+              </span>
+            )}
+            {/* Then render the video player */}
+            <div className="mt-3 border-t border-gray-200 pt-3">
+              <MuxSignedPlayer 
+                assetId={assetId}
+                className="w-full max-w-lg mx-auto rounded-lg overflow-hidden"
+              />
+              <div className="text-xs text-gray-500 text-center mt-2">
+                📹 Video: {muxVideoUrl}
+              </div>
             </div>
           </div>
         )
