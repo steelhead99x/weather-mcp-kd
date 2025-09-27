@@ -47,13 +47,14 @@ class Logger {
 class MuxMCPClient {
     // Timeout configuration constants
     private static readonly MIN_CONNECTION_TIMEOUT = 5000;    // 5 seconds minimum
-    private static readonly MAX_CONNECTION_TIMEOUT = 300000;  // 5 minutes maximum
-    private static readonly DEFAULT_CONNECTION_TIMEOUT = 10000; // 10 seconds default (reduced for debugging)
+    private static readonly MAX_CONNECTION_TIMEOUT = 600000;  // 10 minutes maximum
+    private static readonly DEFAULT_CONNECTION_TIMEOUT = 120000; // 2 minutes default
 
     private client: Client | null = null;
     private transport: StdioClientTransport | null = null;
     private connected = false;
     private connectionPromise: Promise<void> | null = null;
+    private keepAliveInterval: NodeJS.Timeout | null = null;
 
     /**
      * Get connection timeout with bounds validation
@@ -170,6 +171,9 @@ class MuxMCPClient {
             // Atomically update the connected state
             this.connected = true;
             Logger.info("Connected to Mux MCP server successfully");
+            
+            // Start keep-alive mechanism
+            this.startKeepAlive();
 
         } catch (error) {
             Logger.error("Failed to connect to Mux MCP server:", error);
@@ -187,6 +191,39 @@ class MuxMCPClient {
             this.client = null;
 
             throw error;
+        }
+    }
+
+    /**
+     * Start keep-alive mechanism to prevent connection timeouts
+     */
+    private startKeepAlive(): void {
+        // Clear any existing keep-alive interval
+        if (this.keepAliveInterval) {
+            clearInterval(this.keepAliveInterval);
+        }
+        
+        // Send a ping every 30 seconds to keep the connection alive
+        this.keepAliveInterval = setInterval(async () => {
+            if (this.connected && this.client) {
+                try {
+                    // Send a simple ping by listing tools (lightweight operation)
+                    await this.client.listTools();
+                } catch (error) {
+                    console.debug('[MuxMCP] Keep-alive ping failed:', error);
+                    // Don't throw here, just log the error
+                }
+            }
+        }, 30000); // 30 seconds
+    }
+
+    /**
+     * Stop keep-alive mechanism
+     */
+    private stopKeepAlive(): void {
+        if (this.keepAliveInterval) {
+            clearInterval(this.keepAliveInterval);
+            this.keepAliveInterval = null;
         }
     }
 
@@ -517,7 +554,7 @@ class MuxMCPClient {
                             // }
 
                             // Filter out problematic arguments that cause union type issues
-                            const filteredCtx = { ...ctx };
+                            const filteredCtx = { ...ctx } as any;
                             // Only filter out new_asset_settings if it's not explicitly needed for playback policy
                             if (filteredCtx.new_asset_settings && !filteredCtx.new_asset_settings.playback_policies) {
                                 console.debug(`[invoke_api_endpoint] Filtering out new_asset_settings to avoid union type bug`);
@@ -683,6 +720,9 @@ class MuxMCPClient {
 
     async disconnect(): Promise<void> {
         this.connected = false;
+        
+        // Stop keep-alive mechanism
+        this.stopKeepAlive();
 
         if (this.transport) {
             try {

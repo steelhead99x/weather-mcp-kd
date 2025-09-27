@@ -462,14 +462,15 @@ async function main() {
     }
     } finally {
         try {
+            console.log('🔌 Disconnecting from MCP servers...');
             await Promise.allSettled([
                 uploadClient.disconnect(),
                 assetsClient.disconnect(),
             ]);
-            if (process.env.DEBUG) {
-                console.log('[mux-upload-verify-real] Disconnected MCP clients.');
-            }
-        } catch {}
+            console.log('✅ Disconnected from MCP servers');
+        } catch (error) {
+            console.warn('⚠️  Error during disconnect:', error instanceof Error ? error.message : String(error));
+        }
     }
 }
 

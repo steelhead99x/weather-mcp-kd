@@ -3,8 +3,31 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install ffmpeg for Alpine runtime
-RUN apk add --no-cache ffmpeg
+# Install system dependencies needed for native modules (canvas, etc.)
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    giflib-dev \
+    pixman-dev \
+    pangomm-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    cairo \
+    jpeg \
+    pango \
+    giflib \
+    pixman \
+    pangomm \
+    libjpeg-turbo \
+    freetype \
+    ffmpeg
+
+# Ensure Python is available for node-gyp
+RUN ln -sf python3 /usr/bin/python
 
 # Copy package files
 COPY package*.json ./

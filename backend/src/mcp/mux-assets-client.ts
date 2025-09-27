@@ -21,13 +21,14 @@ class Logger {
 
 class MuxAssetsMCPClient {
     private static readonly MIN_CONNECTION_TIMEOUT = 5000;
-    private static readonly MAX_CONNECTION_TIMEOUT = 300000;
-    private static readonly DEFAULT_CONNECTION_TIMEOUT = 10000; // 10 seconds default (reduced for debugging)
+    private static readonly MAX_CONNECTION_TIMEOUT = 600000;  // 10 minutes maximum
+    private static readonly DEFAULT_CONNECTION_TIMEOUT = 120000; // 2 minutes default
 
     private client: Client | null = null;
     private transport: StdioClientTransport | null = null;
     private connected = false;
     private connectionPromise: Promise<void> | null = null;
+    private keepAliveInterval: NodeJS.Timeout | null = null;
 
     private getConnectionTimeout(): number {
         const envTimeout = process.env.MUX_CONNECTION_TIMEOUT;
@@ -81,6 +82,42 @@ class MuxAssetsMCPClient {
         await Promise.race([connectionPromise, timeoutPromise]);
         this.connected = true;
         Logger.info("Connected to Mux MCP (assets)");
+        
+        // Start keep-alive mechanism
+        this.startKeepAlive();
+    }
+
+    /**
+     * Start keep-alive mechanism to prevent connection timeouts
+     */
+    private startKeepAlive(): void {
+        // Clear any existing keep-alive interval
+        if (this.keepAliveInterval) {
+            clearInterval(this.keepAliveInterval);
+        }
+        
+        // Send a ping every 30 seconds to keep the connection alive
+        this.keepAliveInterval = setInterval(async () => {
+            if (this.connected && this.client) {
+                try {
+                    // Send a simple ping by listing tools (lightweight operation)
+                    await this.client.listTools();
+                } catch (error) {
+                    console.debug('[MuxAssetsMCP] Keep-alive ping failed:', error);
+                    // Don't throw here, just log the error
+                }
+            }
+        }, 30000); // 30 seconds
+    }
+
+    /**
+     * Stop keep-alive mechanism
+     */
+    private stopKeepAlive(): void {
+        if (this.keepAliveInterval) {
+            clearInterval(this.keepAliveInterval);
+            this.keepAliveInterval = null;
+        }
     }
 
     private parseMcpArgs(envValue: string | undefined): string[] {
@@ -258,6 +295,10 @@ class MuxAssetsMCPClient {
 
     async disconnect(): Promise<void> {
         this.connected = false;
+        
+        // Stop keep-alive mechanism
+        this.stopKeepAlive();
+        
         if (this.transport) { try { await this.transport.close(); } catch {} this.transport = null; }
         this.client = null;
     }

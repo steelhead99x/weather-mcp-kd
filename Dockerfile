@@ -1,6 +1,20 @@
 # Multi-stage build for production
 FROM node:20-alpine AS base
 
+# Install system dependencies needed for native modules (canvas, etc.)
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    giflib-dev \
+    pixman-dev \
+    pangomm-dev \
+    libjpeg-turbo-dev \
+    freetype-dev
+
 # Install dependencies only when needed
 FROM base AS deps
 WORKDIR /app
@@ -17,6 +31,9 @@ RUN npm ci --workspaces --omit=dev
 # Build the application
 FROM base AS builder-deps
 WORKDIR /app
+
+# Ensure Python is available for node-gyp
+RUN ln -sf python3 /usr/bin/python
 
 # Copy package files
 COPY package*.json ./
@@ -57,8 +74,17 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 weatheruser
 
-# Install ffmpeg for runtime (Alpine)
-RUN apk add --no-cache ffmpeg
+# Install runtime dependencies (ffmpeg + canvas runtime libs)
+RUN apk add --no-cache \
+    ffmpeg \
+    cairo \
+    jpeg \
+    pango \
+    giflib \
+    pixman \
+    pangomm \
+    libjpeg-turbo \
+    freetype
 
 # Copy built application
 COPY --from=build-backend --chown=weatheruser:nodejs /app/backend/dist ./backend/dist
