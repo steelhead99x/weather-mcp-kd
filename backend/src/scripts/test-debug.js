@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { weatherAgent, weatherAgentTestWrapper } from '../agents/weather-agent';
+import { weatherAgent, weatherAgentTestWrapper } from '../agents/weather-agent.js';
 
 async function debugAgent() {
     console.log('🔍 Debugging Weather Agent...\n');
@@ -29,7 +29,7 @@ async function debugAgent() {
     // Test 3: Tool direct call
     console.log('\n=== Test 3: Direct Tool Call ===');
     try {
-        const { weatherTool } = await import('../tools/weather');
+        const { weatherTool } = await import('../tools/weather.js');
         const result = await weatherTool.execute({ context: { zipCode: '10001' } } as any);
         console.log('Direct tool result:', result);
     } catch (error) {

@@ -1,8 +1,8 @@
-import { weatherAgent } from '../agents/weather-agent'
-import { weatherTool } from '../tools/weather'
-import { weatherMcpServer } from '../mcp/weather-server'
+import { weatherAgent } from '../agents/weather-agent.js'
+import { weatherTool } from '../tools/weather.js'
+import { weatherMcpServer } from '../mcp/weather-server.js'
 
-export { default as mastra } from '../index'
+export { default as mastra } from '../index.js'
 
 export const agents = { weatherAgent }
 export const tools = { weatherTool }

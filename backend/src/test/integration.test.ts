@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import cors from 'cors';
-import { weatherTool } from '../tools/weather';
+import { weatherTool } from '../tools/weather.js';
 
 // Mock external dependencies
 vi.mock('../agents/weather-agent.js', () => ({
@@ -33,7 +33,7 @@ describe('Integration Tests', () => {
     app.use(cors());
     app.use(express.json());
     
-    const { weatherAgent } = await import('../agents/weather-agent');
+    const { weatherAgent } = await import('../agents/weather-agent.js');
     
     app.get('/health', (_req, res) => {
       res.json({ ok: true, service: 'weather-mcp-server', timestamp: new Date().toISOString() });

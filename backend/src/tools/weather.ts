@@ -1,5 +1,5 @@
 import { createTool } from "@mastra/core";
-import { WeatherRequestSchema, WeatherDataSchema } from "../types/weather";
+import { WeatherRequestSchema, WeatherDataSchema } from "../types/weather.js";
 
 const USER_AGENT = process.env.WEATHER_MCP_USER_AGENT || "WeatherAgent/1.0 (weather-agent@streamingportfolio.com)";
 
