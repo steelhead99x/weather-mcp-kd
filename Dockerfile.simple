@@ -47,6 +47,13 @@ RUN cd shared && npm run build
 # Build the application
 RUN npm run build
 
+# Fix the dist structure - move the nested files to the correct location
+RUN mkdir -p /app/backend/dist && \
+    if [ -d /app/backend/dist/backend/src ]; then \
+        cp -r /app/backend/dist/backend/src/* /app/backend/dist/ && \
+        rm -rf /app/backend/dist/backend; \
+    fi
+
 # Set working directory to backend
 WORKDIR /app/backend
 

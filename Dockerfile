@@ -92,6 +92,13 @@ COPY --from=build-frontend --chown=weatheruser:nodejs /app/frontend/dist ./front
 COPY --from=build-shared --chown=weatheruser:nodejs /app/shared/dist ./shared/dist
 COPY --from=build-backend --chown=weatheruser:nodejs /app/backend/files ./backend/files
 
+# Fix the dist structure - move the nested files to the correct location
+RUN mkdir -p /app/backend/dist && \
+    if [ -d /app/backend/dist/backend/src ]; then \
+        cp -r /app/backend/dist/backend/src/* /app/backend/dist/ && \
+        rm -rf /app/backend/dist/backend; \
+    fi
+
 # (No Mastra CLI output copied)
 
 # Copy production dependencies (hoisted workspaces install)

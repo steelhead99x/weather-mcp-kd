@@ -17,7 +17,7 @@
  *   MUX_TOKEN_ID + MUX_TOKEN_SECRET
  */
 import 'dotenv/config';
-import { weatherAgentTestWrapper as weatherAgent } from '../agents/weather-agent.js';
+import { weatherAgentTestWrapper as weatherAgent } from '../agents/weather-agent';
 import { promises as fs } from 'fs';
 import { resolve } from 'path';
 

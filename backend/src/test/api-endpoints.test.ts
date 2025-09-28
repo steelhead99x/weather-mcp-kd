@@ -22,7 +22,7 @@ const createTestApp = async () => {
   app.use(express.json());
   
   // Import after mocking
-  const { weatherAgent } = await import('../agents/weather-agent.js');
+  const { weatherAgent } = await import('../agents/weather-agent');
   
   app.get('/health', (_req, res) => {
     res.json({ ok: true, service: 'weather-mcp-server', timestamp: new Date().toISOString() });

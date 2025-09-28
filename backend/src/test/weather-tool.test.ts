@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { weatherTool } from '../tools/weather.js';
+import { weatherTool } from '../tools/weather';
 
 // Mock fetch for testing
 global.fetch = vi.fn();
