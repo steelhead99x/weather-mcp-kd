@@ -32,7 +32,7 @@
     "@mastra/core": "^0.17.1",
     "@mastra/mcp": "^0.13.1",
     "@mastra/memory": "0.15.2",
-    "@modelcontextprotocol/sdk": "1.11.5",
+    "@modelcontextprotocol/sdk": "^1.17.5",
     "@mux/mcp": "^12.8.0",
     "ai": "^5.0.0",
     "canvas": "^3.2.0",

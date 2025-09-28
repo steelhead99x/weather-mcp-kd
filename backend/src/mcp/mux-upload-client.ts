@@ -473,17 +473,23 @@ class MuxMCPClient {
                                         arguments: context || {},
                                     })).content;
                                 } catch (error) {
-                                    // Handle union type errors from MCP SDK
-                                    if (error instanceof Error && error.message.includes('union is not a function')) {
-                                        console.error(`MCP Union error for tool ${tool.name}:`, {
+                                    // Handle union type errors from MCP SDK version conflicts
+                                    if (error instanceof Error && (
+                                        error.message.includes('union is not a function') ||
+                                        error.message.includes('evaluatedProperties.union') ||
+                                        error.message.includes('needle.evaluatedProperties')
+                                    )) {
+                                        console.error(`MCP SDK version conflict error for tool ${tool.name}:`, {
                                             toolName: tool.name,
                                             context,
                                             error: error.message,
-                                            stack: error.stack
+                                            stack: error.stack,
+                                            sdkVersion: '1.17.5+',
+                                            suggestion: 'This error indicates a version conflict in @modelcontextprotocol/sdk. Please ensure all dependencies are updated.'
                                         });
                                         
-                                        // Return a more user-friendly error
-                                        throw new Error(`MCP tool ${tool.name} failed due to schema validation error. This is a known issue with the MCP SDK version. Please try again or contact support.`);
+                                        // Return a more user-friendly error with actionable information
+                                        throw new Error(`MCP tool ${tool.name} failed due to SDK version conflict. The @modelcontextprotocol/sdk version needs to be updated to 1.17.5 or higher to resolve this issue.`);
                                     }
                                     throw error;
                                 }
