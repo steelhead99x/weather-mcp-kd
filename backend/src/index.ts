@@ -21,7 +21,7 @@ const mastra = new Mastra({
 const app = express();
 
 // Configure CORS explicitly for dev and prod
-const corsOrigins = process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000,http://localhost:3001,https://stage-ai.streamingportfolio.com,https://ai.streamingportfolio.com';
+const corsOrigins = process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000,http://localhost:3001,https://stage-ai.streamingportfolio.com,https://ai.streamingportfolio.com,https://stage-farmagent-vc2i4.ondigitalocean.app';
 const allowedOrigins = new Set(corsOrigins.split(',').map(origin => origin.trim()));
 
 app.use(cors({
@@ -262,30 +262,70 @@ try {
 
 // Serve built frontend (SPA) from ../frontend/dist if it exists
 try {
-  const frontendDist = resolve(process.cwd(), '../frontend/dist');
-  const indexHtml = join(frontendDist, 'index.html');
-  if (existsSync(frontendDist) && existsSync(indexHtml)) {
+  // Try multiple possible locations for frontend dist
+  const possiblePaths = [
+    resolve(process.cwd(), '../frontend/dist'),  // Local development
+    resolve(process.cwd(), './frontend/dist'),   // Docker container (backend/frontend/dist)
+    resolve(process.cwd(), '../frontend/dist'),  // Alternative path
+  ];
+  
+  let frontendDist = null;
+  let indexHtml = null;
+  
+  for (const path of possiblePaths) {
+    const indexPath = join(path, 'index.html');
+    if (existsSync(path) && existsSync(indexPath)) {
+      frontendDist = path;
+      indexHtml = indexPath;
+      console.log('[static] Found frontend dist at:', path);
+      break;
+    }
+  }
+  
+  if (frontendDist && indexHtml) {
     app.use(express.static(frontendDist));
+    console.log('[static] Serving frontend from:', frontendDist);
+    
     // Fallback to index.html for non-API routes
     app.get(/^(?!\/api).*/, (req, res, next) => {
       if (req.path.startsWith('/api')) return next();
       res.sendFile(indexHtml);
     });
   } else {
-    // eslint-disable-next-line no-console
-    console.warn('[static] Skipping frontend static serving: dist not found');
+    console.warn('[static] Frontend dist not found in any expected location');
+    console.warn('[static] Searched paths:', possiblePaths);
   }
 } catch (e) {
-  // eslint-disable-next-line no-console
   console.warn('[static] Failed to initialize static frontend middleware:', e instanceof Error ? e.message : String(e));
 }
 
 const port = Number(process.env.PORT || 3001);
 const host = process.env.HOST || '0.0.0.0';
 
+// Add error handling middleware
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error('[ERROR] Unhandled error:', err);
+  res.status(500).json({
+    error: 'Internal server error',
+    message: err.message || 'Unknown error',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Add 404 handler for API routes
+app.use('/api', (req, res) => {
+  res.status(404).json({
+    error: 'API endpoint not found',
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
+});
+
 app.listen(port, host, () => {
-  // eslint-disable-next-line no-console
   console.log(`Weather MCP server listening on http://${host}:${port}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Working directory: ${process.cwd()}`);
 });
 
 export default mastra;
