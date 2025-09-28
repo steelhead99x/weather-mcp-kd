@@ -1,63 +1,13 @@
 import { createTool } from "@mastra/core";
-import { z } from "zod";
+import { WeatherRequestSchema, WeatherDataSchema } from "@/shared/types/weather";
 
 const USER_AGENT = process.env.WEATHER_MCP_USER_AGENT || "WeatherAgent/1.0 (weather-agent@streamingportfolio.com)";
 
 export const weatherTool: any = createTool({
     id: "get-weather",
     description: "Get comprehensive weather information for a specific ZIP code using the National Weather Service API (api.weather.gov)",
-    inputSchema: z.object({
-        zipCode: z.string().describe("5-digit ZIP code for weather lookup"),
-        includeHourly: z.boolean().optional().describe("Include hourly forecast (default: false)"),
-        includeAlerts: z.boolean().optional().describe("Include active weather alerts (default: false)"),
-    }),
-    outputSchema: z.object({
-        location: z.object({
-            displayName: z.string(),
-            latitude: z.number(),
-            longitude: z.number(),
-            timezone: z.string().optional(),
-            forecastOffice: z.string().optional(),
-        }),
-        forecast: z.array(z.object({
-            name: z.string(),
-            temperature: z.number(),
-            temperatureUnit: z.string(),
-            windSpeed: z.string(),
-            windDirection: z.string(),
-            shortForecast: z.string(),
-            detailedForecast: z.string(),
-            startTime: z.string(),
-            endTime: z.string(),
-            probabilityOfPrecipitation: z.object({
-                value: z.number().nullable(),
-                unitCode: z.string(),
-            }).optional(),
-        })),
-        hourlyForecast: z.array(z.object({
-            time: z.string(),
-            temperature: z.number(),
-            temperatureUnit: z.string(),
-            windSpeed: z.string(),
-            windDirection: z.string(),
-            shortForecast: z.string(),
-            probabilityOfPrecipitation: z.object({
-                value: z.number().nullable(),
-                unitCode: z.string(),
-            }).optional(),
-        })).optional(),
-        alerts: z.array(z.object({
-            id: z.string(),
-            event: z.string(),
-            headline: z.string(),
-            description: z.string(),
-            severity: z.string(),
-            urgency: z.string(),
-            areas: z.array(z.string()),
-            effective: z.string(),
-            expires: z.string(),
-        })).optional(),
-    }),
+    inputSchema: WeatherRequestSchema,
+    outputSchema: WeatherDataSchema,
     execute: async (toolCtx: any, options: any) => {
         const { context } = toolCtx as any;
         const abortSignal = (options as any)?.signal;

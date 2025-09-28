@@ -1,5 +1,5 @@
 # Multi-stage build for production
-FROM node:20-alpine AS base
+FROM node:20.18-alpine AS base
 
 # Install system dependencies needed for native modules (canvas, etc.)
 RUN apk add --no-cache \
