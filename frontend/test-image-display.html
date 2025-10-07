@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Display Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .message {
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+        }
+        .message img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin: 10px 0;
+        }
+        .alt-text {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+            margin-top: 5px;
+        }
+        .error-fallback {
+            background: #f0f0f0;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Display Functionality Test</h1>
+    
+    <div class="message">
+        <h3>Test 1: Markdown Image Syntax</h3>
+        <p>Here is a temperature chart:</p>
+        <p>![Temperature Chart](https://weather-mcp-kd.streamingportfolio.com/files/charts/temperature-chart-2025-10-07T08-14-03.png)</p>
+        <p>This shows the 7-day trend for your area.</p>
+    </div>
+
+    <div class="message">
+        <h3>Test 2: Direct Image URL</h3>
+        <p>Check out this chart: https://weather-mcp-kd.streamingportfolio.com/files/charts/temperature-chart-2025-10-07T08-14-03.png</p>
+    </div>
+
+    <div class="message">
+        <h3>Test 3: Multiple Images</h3>
+        <p>Here are two charts:</p>
+        <p>![Chart 1](https://weather-mcp-kd.streamingportfolio.com/files/charts/temperature-chart-2025-10-07T08-14-03.png)</p>
+        <p>![Chart 2](https://weather-mcp-kd.streamingportfolio.com/files/charts/temperature-chart-2025-10-07T08-16-38.png)</p>
+    </div>
+
+    <div class="message">
+        <h3>Test 4: Non-image URLs (should not be rendered as images)</h3>
+        <p>Check out this website: https://example.com/page.html and this PDF: https://example.com/document.pdf</p>
+    </div>
+
+    <script>
+        // Simulate the image detection and rendering logic
+        function detectImages(content) {
+            // Pattern for markdown images: ![alt text](url)
+            const markdownImagePattern = /!\[([^\]]*)\]\(([^)]+)\)/g
+            const markdownMatches = Array.from(content.matchAll(markdownImagePattern))
+            
+            // Pattern for direct image URLs (common image extensions)
+            const imageUrlPattern = /https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff)(\?[^\s]*)?/gi
+            const urlMatches = Array.from(content.matchAll(imageUrlPattern))
+            
+            const images = []
+            
+            // Process markdown images
+            for (const match of markdownMatches) {
+                images.push({
+                    type: 'markdown',
+                    alt: match[1] || '',
+                    url: match[2],
+                    fullMatch: match[0]
+                })
+            }
+            
+            // Process direct URL images (avoid duplicates from markdown)
+            for (const match of urlMatches) {
+                const url = match[0]
+                const isAlreadyInMarkdown = images.some(img => img.url === url)
+                if (!isAlreadyInMarkdown) {
+                    images.push({
+                        type: 'url',
+                        alt: '',
+                        url: url,
+                        fullMatch: url
+                    })
+                }
+            }
+            
+            return images
+        }
+
+        function renderImages(content, container) {
+            const images = detectImages(content)
+            
+            if (images.length > 0) {
+                // Remove image references from text content
+                let textContent = content
+                images.forEach(img => {
+                    textContent = textContent.replace(img.fullMatch, '').trim()
+                })
+                
+                // Create image elements
+                images.forEach((img, index) => {
+                    const imgElement = document.createElement('img')
+                    imgElement.src = img.url
+                    imgElement.alt = img.alt || 'Image'
+                    imgElement.style.maxWidth = '100%'
+                    imgElement.style.height = 'auto'
+                    imgElement.style.borderRadius = '8px'
+                    imgElement.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
+                    imgElement.style.margin = '10px 0'
+                    
+                    imgElement.onerror = function() {
+                        // Fallback for broken images
+                        this.style.display = 'none'
+                        const fallbackDiv = document.createElement('div')
+                        fallbackDiv.className = 'error-fallback'
+                        fallbackDiv.textContent = `🖼️ Image failed to load: ${img.url}`
+                        this.parentNode.insertBefore(fallbackDiv, this.nextSibling)
+                    }
+                    
+                    container.appendChild(imgElement)
+                    
+                    if (img.alt) {
+                        const altDiv = document.createElement('div')
+                        altDiv.className = 'alt-text'
+                        altDiv.textContent = img.alt
+                        container.appendChild(altDiv)
+                    }
+                })
+            }
+        }
+
+        // Process all message containers
+        document.querySelectorAll('.message').forEach(messageContainer => {
+            const paragraphs = messageContainer.querySelectorAll('p')
+            paragraphs.forEach(p => {
+                renderImages(p.textContent, p)
+            })
+        })
+    </script>
+</body>
+</html>

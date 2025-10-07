@@ -193,6 +193,45 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
     const matches = content.match(muxUrlPattern)
     return matches ? matches[0] : null
   }
+
+  // Function to detect and extract image URLs
+  const detectImages = (content: string) => {
+    // Pattern for markdown images: ![alt text](url)
+    const markdownImagePattern = /!\[([^\]]*)\]\(([^)]+)\)/g
+    const markdownMatches = Array.from(content.matchAll(markdownImagePattern))
+    
+    // Pattern for direct image URLs (common image extensions)
+    const imageUrlPattern = /https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff)(\?[^\s]*)?/gi
+    const urlMatches = Array.from(content.matchAll(imageUrlPattern))
+    
+    const images = []
+    
+    // Process markdown images
+    for (const match of markdownMatches) {
+      images.push({
+        type: 'markdown',
+        alt: match[1] || '',
+        url: match[2],
+        fullMatch: match[0]
+      })
+    }
+    
+    // Process direct URL images (avoid duplicates from markdown)
+    for (const match of urlMatches) {
+      const url = match[0]
+      const isAlreadyInMarkdown = images.some(img => img.url === url)
+      if (!isAlreadyInMarkdown) {
+        images.push({
+          type: 'url',
+          alt: '',
+          url: url,
+          fullMatch: url
+        })
+      }
+    }
+    
+    return images
+  }
   
   // Function to format text content for better readability
   const formatTextContent = (text: string) => {
@@ -244,6 +283,57 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
           </div>
         )
       }
+    }
+    
+    // Check for images
+    const images = detectImages(content)
+    
+    if (images.length > 0) {
+      // Remove image references from text content
+      let textContent = content
+      images.forEach(img => {
+        textContent = textContent.replace(img.fullMatch, '').trim()
+      })
+      
+      return (
+        <div className="space-y-3">
+          {/* Render text content first */}
+          {textContent && (
+            <div className="prose prose-sm max-w-none chat-message">
+              <div className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
+                {formatTextContent(textContent)}
+              </div>
+            </div>
+          )}
+          {/* Then render the images */}
+          <div className="space-y-3">
+            {images.map((img, index) => (
+              <div key={index} className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+                <img
+                  src={img.url}
+                  alt={img.alt || 'Image'}
+                  className="w-full max-w-lg mx-auto rounded-lg shadow-sm"
+                  style={{ maxHeight: '400px', objectFit: 'contain' }}
+                  onError={(e) => {
+                    // Fallback for broken images
+                    const target = e.target as HTMLImageElement
+                    target.style.display = 'none'
+                    const fallbackDiv = document.createElement('div')
+                    fallbackDiv.className = 'w-full max-w-lg mx-auto rounded-lg bg-gray-100 flex items-center justify-center p-8 text-gray-500 text-sm'
+                    fallbackDiv.textContent = `🖼️ Image failed to load: ${img.url}`
+                    target.parentNode?.insertBefore(fallbackDiv, target.nextSibling)
+                  }}
+                />
+                {img.alt && (
+                  <div className="text-xs text-center mt-2" style={{ color: 'var(--fg-subtle)' }}>
+                    {img.alt}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )
     }
     
     // Check for iframe content
