@@ -29,8 +29,8 @@ function sanitizeHost(raw: string | undefined): string {
     // Final trim
     v = v.trim()
 
-    // Validate hostname format (basic security check)
-    if (v && !/^[a-zA-Z0-9.-]+$/.test(v)) {
+    // Validate hostname format (basic security check) - allow colons for port numbers
+    if (v && !/^[a-zA-Z0-9.-]+(:[0-9]+)?$/.test(v)) {
       console.warn('[Mastra] Invalid hostname format detected, using current hostname')
       return window.location.hostname || 'stage-ai.streamingportfolio.com'
     }
@@ -42,7 +42,8 @@ function sanitizeHost(raw: string | undefined): string {
 }
 
 function buildBaseUrl(hostname: string): string {
-  const isLocal = /^(localhost|127\.0\.0\.1)/.test(hostname)
+  // Check if it's a local address (with or without port)
+  const isLocal = /^(localhost|127\.0\.0\.1)(:[0-9]+)?/.test(hostname)
   let url = `${isLocal ? 'http' : 'https'}://${hostname}`
   
   // Check if the hostname already includes a path

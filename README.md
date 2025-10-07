@@ -109,7 +109,7 @@ MUX_TOKEN_SECRET=your_mux_token_secret_here
 
 # Frontend Configuration
 VITE_MASTRA_API_HOST=http://localhost:3001
-VITE_WEATHER_AGENT_ID=weatherAgent
+VITE_WEATHER_AGENT_ID=weather
 ```
 
 ### API Keys Required

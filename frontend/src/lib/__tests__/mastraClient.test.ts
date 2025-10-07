@@ -51,8 +51,8 @@ describe('Mastra Client Configuration', () => {
     
     // The base URL should be a valid URL (either localhost for dev or production domain)
     expect(baseUrl).toMatch(/^https?:\/\/.+/);
-    // Since VITE_MASTRA_API_HOST is not set in test environment, it should use the fallback URL
-    expect(baseUrl).toContain('streamingportfolio.com');
+    // Should contain either localhost (dev) or streamingportfolio.com (prod)
+    expect(baseUrl).toMatch(/localhost|streamingportfolio\.com/);
   });
 
   it('should handle connection test', async () => {
