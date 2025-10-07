@@ -61,34 +61,34 @@ function buildBaseUrl(hostname: string): string {
   return url
 }
 
-const rawHost = (import.meta as any)?.env?.VITE_MASTRA_API_HOST as string | undefined
-const host = sanitizeHost(rawHost)
-const baseUrl = buildBaseUrl(host)
-
-// Override for direct API connection if no env var is set
-const directApiHost = 'http://localhost:3001'
-const finalBaseUrl = rawHost ? baseUrl : directApiHost
-
 // Environment-specific configuration
 const isProduction = import.meta.env.PROD
 const isDevelopment = import.meta.env.DEV
 
-console.log('[Mastra] Raw host from env:', rawHost)
-console.log('[Mastra] Sanitized host:', host)
-console.log('[Mastra] Base URL:', baseUrl)
-console.log('[Mastra] Final Base URL:', finalBaseUrl)
-console.log('[Mastra] Has path in hostname:', host.includes('/'))
-console.log('[Mastra] Removed /api from hostname:', rawHost?.includes('/api'))
+// Get the raw host from env
+const rawHost = (import.meta as any)?.env?.VITE_MASTRA_API_HOST as string | undefined
 
-if (!rawHost) {
-  if (isDevelopment) {
-    // eslint-disable-next-line no-console
-    console.warn('[Mastra] VITE_MASTRA_API_HOST is not set. Using direct API connection to:', directApiHost)
-  } else {
-    // eslint-disable-next-line no-console
-    console.error('[Mastra] VITE_MASTRA_API_HOST is not set in production. This may cause connection issues.')
-  }
+// Determine the final base URL
+let finalBaseUrl: string
+
+if (rawHost) {
+  // Use explicitly configured host
+  const host = sanitizeHost(rawHost)
+  finalBaseUrl = buildBaseUrl(host)
+  console.log('[Mastra] Using configured host:', rawHost, '→', finalBaseUrl)
+} else if (isProduction) {
+  // In production without explicit config, use the same origin as the frontend
+  // This assumes backend is served on the same domain
+  finalBaseUrl = window.location.origin + '/'
+  console.log('[Mastra] Production mode - using same origin:', finalBaseUrl)
+} else {
+  // In development without explicit config, default to localhost:3001
+  finalBaseUrl = 'http://localhost:3001'
+  console.log('[Mastra] Development mode - using localhost:', finalBaseUrl)
 }
+
+console.log('[Mastra] Final Base URL:', finalBaseUrl)
+console.log('[Mastra] Environment:', { isProduction, isDevelopment })
 
 // Test connection on startup
 async function testConnection() {
@@ -157,7 +157,13 @@ export function getWeatherAgentId() {
 
 // Optional helper for UI/status displays
 export function getDisplayHost() {
-  return host
+  try {
+    // Extract hostname from finalBaseUrl
+    const url = new URL(finalBaseUrl)
+    return url.host
+  } catch {
+    return finalBaseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')
+  }
 }
 
 // Expose resolved base URL for other UI components (e.g., debug panels)
