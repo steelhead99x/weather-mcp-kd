@@ -167,8 +167,68 @@ async function getRandomBackgroundImage(): Promise<string> {
 }
 
 
-// Pronounce ZIP digits clearly as spaced digits
+/**
+ * Normalize text for natural TTS pronunciation
+ * Expands abbreviations, converts symbols, and ensures smooth speech
+ */
+function normalizeForTTS(text: string): string {
+    let normalized = text;
+    
+    // Expand common abbreviations
+    normalized = normalized.replace(/\bZIP\b/gi, 'zip code');
+    normalized = normalized.replace(/\bUS\b/g, 'United States');
+    normalized = normalized.replace(/\bUSA\b/g, 'United States');
+    normalized = normalized.replace(/\bN\b(?=\s|$)/g, 'North');
+    normalized = normalized.replace(/\bS\b(?=\s|$)/g, 'South');
+    normalized = normalized.replace(/\bE\b(?=\s|$)/g, 'East');
+    normalized = normalized.replace(/\bW\b(?=\s|$)/g, 'West');
+    normalized = normalized.replace(/\bNE\b/g, 'Northeast');
+    normalized = normalized.replace(/\bNW\b/g, 'Northwest');
+    normalized = normalized.replace(/\bSE\b/g, 'Southeast');
+    normalized = normalized.replace(/\bSW\b/g, 'Southwest');
+    normalized = normalized.replace(/\bNNE\b/g, 'North-Northeast');
+    normalized = normalized.replace(/\bENE\b/g, 'East-Northeast');
+    normalized = normalized.replace(/\bESE\b/g, 'East-Southeast');
+    normalized = normalized.replace(/\bSSE\b/g, 'South-Southeast');
+    normalized = normalized.replace(/\bSSW\b/g, 'South-Southwest');
+    normalized = normalized.replace(/\bWSW\b/g, 'West-Southwest');
+    normalized = normalized.replace(/\bWNW\b/g, 'West-Northwest');
+    normalized = normalized.replace(/\bNNW\b/g, 'North-Northwest');
+    
+    // Temperature units
+    normalized = normalized.replace(/(\d+)\s*°F/g, '$1 degrees Fahrenheit');
+    normalized = normalized.replace(/(\d+)\s*°C/g, '$1 degrees Celsius');
+    normalized = normalized.replace(/(\d+)\s*F\b/g, '$1 degrees Fahrenheit');
+    normalized = normalized.replace(/(\d+)\s*C\b/g, '$1 degrees Celsius');
+    
+    // Speed units
+    normalized = normalized.replace(/(\d+)\s*mph/gi, '$1 miles per hour');
+    normalized = normalized.replace(/(\d+)\s*kph/gi, '$1 kilometers per hour');
+    
+    // Distance units
+    normalized = normalized.replace(/(\d+)\s*ft\b/gi, '$1 feet');
+    normalized = normalized.replace(/(\d+)\s*mi\b/gi, '$1 miles');
+    normalized = normalized.replace(/(\d+)\s*km\b/gi, '$1 kilometers');
+    
+    // Percentage
+    normalized = normalized.replace(/(\d+)%/g, '$1 percent');
+    
+    // Time abbreviations
+    normalized = normalized.replace(/\bAM\b/g, 'A.M.');
+    normalized = normalized.replace(/\bPM\b/g, 'P.M.');
+    
+    // Clean up multiple spaces
+    normalized = normalized.replace(/\s{2,}/g, ' ');
+    
+    return normalized.trim();
+}
+
+/**
+ * Pronounce ZIP code digits clearly with spacing for TTS
+ * Now returns natural "zip code" followed by spaced digits
+ */
 function speakZip(zip: string): string {
+    // Return spaced digits for clear pronunciation
     return zip.split('').join(' ');
 }
 
@@ -182,23 +242,29 @@ function buildAgriSpeechFromForecast(zip: string, weatherData: WeatherData): str
 
     const sayZip = speakZip(zip);
 
-    // Helper to simplify wind
+    // Helper to simplify wind with proper TTS formatting
     const windPhrase = (p: WeatherForecast) => {
         if (!p?.windSpeed) return '';
-        return `Winds ${String(p.windSpeed).replace(/\s+/g, ' ')} ${p.windDirection || ''}`.trim() + '.';
+        const speed = String(p.windSpeed).replace(/\s+/g, ' ');
+        const direction = p.windDirection || '';
+        const phrase = `Winds ${speed} ${direction}`.trim();
+        return normalizeForTTS(phrase) + '.';
     };
 
     const parts: string[] = [];
-    parts.push(`Agriculture weather for ${loc}. ZIP ${sayZip}.`);
+    parts.push(`Agriculture weather for ${loc}. Zip code ${sayZip}.`);
 
     if (today) {
-        parts.push(`${today.name}: ${today.shortForecast.toLowerCase()}. Temperature around ${today.temperature} degrees ${today.temperatureUnit}. ${windPhrase(today)}`);
+        const todayText = `${today.name}: ${today.shortForecast.toLowerCase()}. Temperature around ${today.temperature} degrees ${today.temperatureUnit}. ${windPhrase(today)}`;
+        parts.push(normalizeForTTS(todayText));
     }
     if (tonightOrNext) {
-        parts.push(`${tonightOrNext.name}: ${tonightOrNext.shortForecast.toLowerCase()}. Near ${tonightOrNext.temperature} degrees ${tonightOrNext.temperatureUnit}.`);
+        const tonightText = `${tonightOrNext.name}: ${tonightOrNext.shortForecast.toLowerCase()}. Near ${tonightOrNext.temperature} degrees ${tonightOrNext.temperatureUnit}.`;
+        parts.push(normalizeForTTS(tonightText));
     }
     if (tomorrow) {
-        parts.push(`Looking to ${tomorrow.name.toLowerCase()}: ${tomorrow.shortForecast.toLowerCase()}, about ${tomorrow.temperature} degrees ${tomorrow.temperatureUnit}.`);
+        const tomorrowText = `Looking to ${tomorrow.name.toLowerCase()}: ${tomorrow.shortForecast.toLowerCase()}, about ${tomorrow.temperature} degrees ${tomorrow.temperatureUnit}.`;
+        parts.push(normalizeForTTS(tomorrowText));
     }
 
     // Simple ag guidance (temp-focused). In a real system, add precip/soil moisture/evapotranspiration.
@@ -220,8 +286,11 @@ function buildAgriSpeechFromForecast(zip: string, weatherData: WeatherData): str
         }
     }
 
-    parts.push(`Check back before spraying or harvesting—conditions can shift quickly.`);
-    return parts.join(' ');
+    parts.push(`Check back before spraying or harvesting, conditions can shift quickly.`);
+    
+    // Final normalization pass for the entire speech
+    const finalSpeech = parts.join(' ');
+    return normalizeForTTS(finalSpeech);
 }
 
 // Upload local file to Mux direct upload URL (PUT)
@@ -623,6 +692,194 @@ const zipMemoryTool = createTool({
     },
 });
 
+/**
+ * Create a Mux upload using either MCP or REST API based on USE_MUX_MCP env variable
+ * @returns Upload data with id, url, and asset_id
+ */
+async function createMuxUpload(): Promise<{ uploadId?: string; uploadUrl?: string; assetId?: string }> {
+    const useMcp = process.env.USE_MUX_MCP === 'true';
+    const corsOrigin = process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com';
+    const playbackPolicy = process.env.MUX_PLAYBACK_POLICY;
+    
+    if (useMcp) {
+        console.debug('[createMuxUpload] Using Mux MCP for upload creation');
+        
+        try {
+            const uploadTools = await uploadClient.getTools();
+            let createTool = uploadTools['create_video_uploads'] || uploadTools['video.uploads.create'];
+            
+            // If no direct tool, try invoke_api_endpoint
+            if (!createTool) {
+                const invokeTool = uploadTools['invoke_api_endpoint'];
+                if (!invokeTool) {
+                    throw new Error('Mux MCP did not expose any upload tools or invoke_api_endpoint');
+                }
+                
+                createTool = {
+                    execute: async ({ context }: { context: any }) => {
+                        return await invokeTool.execute({ 
+                            context: { 
+                                endpoint_name: 'create_video_uploads',
+                                arguments: context 
+                            } 
+                        });
+                    }
+                };
+            }
+            
+            const createArgs: any = {
+                cors_origin: corsOrigin
+            };
+            
+            // Add playback policy if specified
+            if (playbackPolicy && playbackPolicy !== 'public') {
+                createArgs.new_asset_settings = {
+                    playback_policies: [playbackPolicy]
+                };
+            }
+            
+            console.debug('[createMuxUpload] Creating upload via MCP');
+            const createRes = await createTool.execute({ context: createArgs });
+            
+            // Parse MCP response
+            const blocks = Array.isArray(createRes) ? createRes : [createRes];
+            let uploadId: string | undefined;
+            let uploadUrl: string | undefined;
+            let assetId: string | undefined;
+            
+            for (const b of blocks as any[]) {
+                const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
+                if (!t) continue;
+                
+                try {
+                    const payload = JSON.parse(t);
+                    console.debug('[createMuxUpload] Parsed MCP response:', JSON.stringify(payload, null, 2));
+                    
+                    uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
+                    uploadUrl = uploadUrl || payload.url || payload.upload?.url;
+                    assetId = assetId || payload.asset_id || payload.asset?.id;
+                    
+                    if (uploadId && uploadUrl) {
+                        break;
+                    }
+                } catch (parseError) {
+                    console.warn('[createMuxUpload] Failed to parse MCP response block:', parseError);
+                }
+            }
+            
+            if (!uploadUrl) {
+                throw new Error('No upload URL received from Mux MCP');
+            }
+            
+            console.debug(`[createMuxUpload] MCP upload created: id=${uploadId}, has_url=${!!uploadUrl}, asset_id=${assetId}`);
+            return { uploadId, uploadUrl, assetId };
+            
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error('[createMuxUpload] MCP upload creation failed:', errorMsg);
+            throw new Error(`Mux MCP upload creation failed: ${errorMsg}`);
+        }
+        
+    } else {
+        console.debug('[createMuxUpload] Using Mux REST API for upload creation');
+        
+        const muxTokenId = process.env.MUX_TOKEN_ID;
+        const muxTokenSecret = process.env.MUX_TOKEN_SECRET;
+        
+        if (!muxTokenId || !muxTokenSecret) {
+            throw new Error('MUX_TOKEN_ID and MUX_TOKEN_SECRET are required');
+        }
+        
+        const uploadPayload: any = {
+            cors_origin: corsOrigin
+        };
+        
+        // Add playback policy if specified
+        if (playbackPolicy && playbackPolicy !== 'public') {
+            uploadPayload.new_asset_settings = {
+                playback_policy: [playbackPolicy]
+            };
+        }
+        
+        const authHeader = 'Basic ' + Buffer.from(`${muxTokenId}:${muxTokenSecret}`).toString('base64');
+        
+        console.debug('[createMuxUpload] Creating upload via REST API');
+        
+        const createRes = await fetch('https://api.mux.com/video/v1/uploads', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': authHeader
+            },
+            body: JSON.stringify(uploadPayload)
+        } as any);
+        
+        if (!createRes.ok) {
+            const errorText = await createRes.text().catch(() => '');
+            throw new Error(`Mux API error ${createRes.status}: ${errorText}`);
+        }
+        
+        const createData = await createRes.json() as any;
+        console.debug('[createMuxUpload] REST API upload created successfully');
+        
+        // Parse REST API response
+        // Expected format: { data: { id: "...", url: "...", asset_id: "..." } }
+        if (createData && createData.data) {
+            const uploadId = createData.data.id;
+            const uploadUrl = createData.data.url;
+            const assetId = createData.data.asset_id;
+            
+            console.debug(`[createMuxUpload] REST API upload created: id=${uploadId}, has_url=${!!uploadUrl}, asset_id=${assetId}`);
+            return { uploadId, uploadUrl, assetId };
+        }
+        
+        throw new Error('Invalid response format from Mux REST API');
+    }
+}
+
+/**
+ * Retrieve asset ID from an upload using REST API
+ */
+async function retrieveAssetIdFromUpload(uploadId: string): Promise<string | undefined> {
+    const muxTokenId = process.env.MUX_TOKEN_ID;
+    const muxTokenSecret = process.env.MUX_TOKEN_SECRET;
+    
+    if (!muxTokenId || !muxTokenSecret) {
+        console.warn('[retrieveAssetIdFromUpload] Missing Mux credentials');
+        return undefined;
+    }
+    
+    try {
+        const authHeader = 'Basic ' + Buffer.from(`${muxTokenId}:${muxTokenSecret}`).toString('base64');
+        
+        const retrieveRes = await fetch(`https://api.mux.com/video/v1/uploads/${uploadId}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': authHeader
+            }
+        } as any);
+        
+        if (retrieveRes.ok) {
+            const retrieveData = await retrieveRes.json() as any;
+            console.debug('[retrieveAssetIdFromUpload] Retrieval response:', JSON.stringify(retrieveData, null, 2));
+            
+            if (retrieveData && retrieveData.data) {
+                const assetId = retrieveData.data.asset_id;
+                if (assetId) {
+                    console.debug(`[retrieveAssetIdFromUpload] Retrieved asset ID: ${assetId}`);
+                    return assetId;
+                }
+            }
+        } else {
+            console.warn('[retrieveAssetIdFromUpload] Failed to retrieve upload info:', retrieveRes.status);
+        }
+    } catch (error) {
+        console.warn('[retrieveAssetIdFromUpload] Retrieval failed:', error instanceof Error ? error.message : String(error));
+    }
+    
+    return undefined;
+}
+
 // Asset readiness check tool
 const assetReadinessTool = createTool({
     id: "check-asset-readiness",
@@ -701,8 +958,9 @@ const ttsWeatherTool = createTool({
                 weatherData = await weatherTool.execute({ context: { zipCode: zip } } as any);
                 finalText = buildAgriSpeechFromForecast(zip, weatherData);
             } else {
-                // If user provides text, still ensure we clearly say the ZIP for audio clarity
-                finalText = `For ZIP ${speakZip(zip)}. ${finalText}`;
+                // If user provides text, normalize it for TTS and include ZIP
+                finalText = `For zip code ${speakZip(zip)}. ${finalText}`;
+                finalText = normalizeForTTS(finalText);
             }
 
             // Synthesize TTS (Deepgram)
@@ -774,98 +1032,15 @@ const ttsWeatherTool = createTool({
             let playbackId: string | undefined;
 
             try {
-                // BYPASS MCP ENTIRELY - Use Mux REST API directly
-                // The @mux/mcp@12.8.0 package has a critical validation bug that prevents ANY upload creation
-                // Fallback to direct Mux API call
-                console.debug('[tts-weather-upload] Using direct Mux API (bypassing MCP due to validation bug)');
+                // Create upload using configurable method (MCP or REST API)
+                const useMcp = process.env.USE_MUX_MCP === 'true';
+                console.debug(`[tts-weather-upload] Using ${useMcp ? 'MCP' : 'REST API'} for upload (USE_MUX_MCP=${useMcp})`);
                 
-                const muxTokenId = process.env.MUX_TOKEN_ID;
-                const muxTokenSecret = process.env.MUX_TOKEN_SECRET;
-                
-                if (!muxTokenId || !muxTokenSecret) {
-                    throw new Error('MUX_TOKEN_ID and MUX_TOKEN_SECRET are required');
-                }
-                
-                // Create direct upload via Mux REST API
-                const corsOrigin = process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com';
-                const uploadPayload: any = {
-                    cors_origin: corsOrigin
-                };
-                
-                // Add playback policy if specified
-                const playbackPolicy = process.env.MUX_PLAYBACK_POLICY;
-                if (playbackPolicy && playbackPolicy !== 'public') {
-                    uploadPayload.new_asset_settings = {
-                        playback_policy: [playbackPolicy]
-                    };
-                }
-                
-                const authHeader = 'Basic ' + Buffer.from(`${muxTokenId}:${muxTokenSecret}`).toString('base64');
-                
-                console.debug('[tts-weather-upload] Creating Mux upload via REST API');
-                
-                const createRes = await fetch('https://api.mux.com/video/v1/uploads', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': authHeader
-                    },
-                    body: JSON.stringify(uploadPayload)
-                } as any);
-                
-                if (!createRes.ok) {
-                    const errorText = await createRes.text().catch(() => '');
-                    throw new Error(`Mux API error ${createRes.status}: ${errorText}`);
-                }
-                
-                const createData = await createRes.json() as any;
-                console.debug('[tts-weather-upload] Mux upload creation successful via REST API');
-                
-                // Parse Mux REST API response
-                // Expected format: { data: { id: "...", url: "...", asset_id: "..." } }
-                let uploadId: string | undefined;
-                let uploadUrl: string | undefined;
-                let parseSuccess = false;
-                
-                if (createData && createData.data) {
-                    uploadId = createData.data.id;
-                    uploadUrl = createData.data.url;
-                    assetId = createData.data.asset_id;
-                    parseSuccess = !!(uploadId && uploadUrl);
-                    
-                    if (parseSuccess) {
-                        console.debug(`[tts-weather-upload] Parsed upload successfully: id=${uploadId}, has_url=${!!uploadUrl}`);
-                    }
-                }
-                
-                // Fallback: Try old MCP response format just in case
-                const blocks = Array.isArray(createData) ? createData : [createData];
-                
-                for (const b of blocks as any[]) {
-                    const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
-                    if (!t) continue;
-                    
-                    try {
-                        const payload = JSON.parse(t);
-                        console.debug('[tts-weather-upload] Parsed Mux response:', JSON.stringify(payload, null, 2));
-                        
-                        // Extract IDs with better fallback logic
-                        uploadId = uploadId || payload.upload_id || payload.id || payload.upload?.id;
-                        uploadUrl = uploadUrl || payload.url || payload.upload?.url;
-                        assetId = assetId || payload.asset_id || payload.asset?.id;
-                        
-                        if (uploadId || uploadUrl || assetId) {
-                            parseSuccess = true;
-                        }
-                    } catch (parseError) {
-                        console.warn('[tts-weather-upload] Failed to parse Mux response block:', parseError instanceof Error ? parseError.message : String(parseError));
-                        console.warn('[tts-weather-upload] Raw response:', t);
-                    }
-                }
-                
-                if (!parseSuccess) {
-                    throw new Error('Failed to parse any meaningful data from Mux response');
-                }
+                // Create upload
+                const uploadData = await createMuxUpload();
+                const uploadId = uploadData.uploadId;
+                const uploadUrl = uploadData.uploadUrl;
+                assetId = uploadData.assetId;
                 
                 if (!uploadUrl) {
                     throw new Error('No upload URL received from Mux - cannot proceed with file upload');
@@ -879,34 +1054,10 @@ const ttsWeatherTool = createTool({
                 await putFileToMux(uploadUrl, resolve(audioPath));
                 console.debug('[tts-weather-upload] Audio file upload completed');
 
-                // Simplified asset retrieval - only if we don't already have assetId
+                // Retrieve asset ID if not provided
                 if (!assetId && uploadId) {
-                    console.debug('[tts-weather-upload] Retrieving asset ID from upload via REST API...');
-                    
-                    try {
-                        const retrieveRes = await fetch(`https://api.mux.com/video/v1/uploads/${uploadId}`, {
-                            method: 'GET',
-                            headers: {
-                                'Authorization': authHeader
-                            }
-                        } as any);
-                        
-                        if (retrieveRes.ok) {
-                            const retrieveData = await retrieveRes.json() as any;
-                            console.debug('[tts-weather-upload] Asset retrieval response:', JSON.stringify(retrieveData, null, 2));
-                            
-                            if (retrieveData && retrieveData.data) {
-                                assetId = retrieveData.data.asset_id;
-                                if (assetId) {
-                                    console.debug(`[tts-weather-upload] Retrieved asset ID: ${assetId}`);
-                                }
-                            }
-                        } else {
-                            console.warn('[tts-weather-upload] Failed to retrieve upload info:', retrieveRes.status);
-                        }
-                    } catch (retrieveError) {
-                        console.warn('[tts-weather-upload] Asset retrieval failed:', retrieveError instanceof Error ? retrieveError.message : String(retrieveError));
-                    }
+                    console.debug('[tts-weather-upload] Retrieving asset ID from upload...');
+                    assetId = await retrieveAssetIdFromUpload(uploadId);
                 }
 
                 if (!assetId) {
