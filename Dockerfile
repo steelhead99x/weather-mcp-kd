@@ -102,6 +102,9 @@ RUN mkdir -p /app/backend/dist && \
         rm -rf /app/backend/dist/backend; \
     fi
 
+# Create charts directory with proper permissions
+RUN mkdir -p /app/backend/files/charts && chown -R weatheruser:nodejs /app/backend/files
+
 # (No Mastra CLI output copied)
 
 # Copy production dependencies (hoisted workspaces install)

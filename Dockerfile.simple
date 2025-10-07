@@ -54,6 +54,9 @@ RUN mkdir -p /app/backend/dist && \
         rm -rf /app/backend/dist/backend; \
     fi
 
+# Create charts directory and set permissions
+RUN mkdir -p /app/backend/files/charts
+
 # Set working directory to backend
 WORKDIR /app/backend
 

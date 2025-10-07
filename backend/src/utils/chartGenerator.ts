@@ -158,9 +158,9 @@ export async function generateTemperatureChart(
     // Render chart
     await chart.render();
     
-    // Save chart as PNG to public directory for serving
+    // Save chart as PNG to files directory for serving
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const baseDir = resolve(process.cwd(), 'src/public/files/charts');
+    const baseDir = resolve(process.cwd(), 'files/charts');
     const chartPath = join(baseDir, `temperature-chart-${timestamp}.png`);
     
     await fs.mkdir(baseDir, { recursive: true });
@@ -212,7 +212,10 @@ export async function generateTemperatureChartFromForecast(
 }
 
 export async function getChartUrl(chartPath: string): Promise<string> {
-    const baseUrl = process.env.STREAMING_PORTFOLIO_BASE_URL || 'https://weather-mcp-kd.streamingportfolio.com';
+    // Use current server URL in development, production URL in production
+    const baseUrl = process.env.NODE_ENV === 'production' 
+        ? (process.env.STREAMING_PORTFOLIO_BASE_URL || 'https://weather-mcp-kd.streamingportfolio.com')
+        : `http://localhost:${process.env.PORT || 3001}`;
     const fileName = basename(chartPath);
     return `${baseUrl}/files/charts/${fileName}`;
 }
