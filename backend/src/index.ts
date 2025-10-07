@@ -61,8 +61,100 @@ app.use(cors({
 app.options(/.*/, cors());
 app.use(express.json());
 
-app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'weather-mcp-server', timestamp: new Date().toISOString() });
+// Enhanced health check with MCP status
+app.get('/health', async (_req, res) => {
+  try {
+    // Basic health check
+    const health: any = { 
+      status: 'healthy', 
+      service: 'weather-mcp-server',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      workingDirectory: process.cwd(),
+      mcpStatus: 'unknown'
+    };
+    
+    // Test MCP connection if credentials are available
+    if (process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET) {
+      try {
+        const { muxMcpClient } = await import('./mcp/mux-upload-client.js');
+        const tools = await muxMcpClient.getTools();
+        health.mcpStatus = 'connected';
+        health.mcpTools = Object.keys(tools).length;
+      } catch (mcpError: any) {
+        health.mcpStatus = 'error';
+        health.mcpError = mcpError?.message || String(mcpError);
+      }
+    } else {
+      health.mcpStatus = 'not_configured';
+    }
+    
+    res.json(health);
+  } catch (error: any) {
+    res.status(500).json({
+      status: 'error',
+      service: 'weather-mcp-server',
+      timestamp: new Date().toISOString(),
+      error: error?.message || String(error),
+      environment: process.env.NODE_ENV
+    });
+  }
+});
+
+// MCP Debug endpoint for troubleshooting
+app.get('/debug/mcp', async (_req, res) => {
+  try {
+    const debug: any = {
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      mcpConfig: {
+        muxTokenId: process.env.MUX_TOKEN_ID ? '[CONFIGURED]' : '[MISSING]',
+        muxTokenSecret: process.env.MUX_TOKEN_SECRET ? '[CONFIGURED]' : '[MISSING]',
+        mcpUploadArgs: process.env.MUX_MCP_UPLOAD_ARGS || '[DEFAULT]',
+        connectionTimeout: process.env.MUX_CONNECTION_TIMEOUT || '[DEFAULT]'
+      },
+      sdkVersion: 'unknown',
+      tools: [],
+      error: null
+    };
+    
+    // Get MCP SDK version
+    try {
+      const sdkPackage: any = await import('@modelcontextprotocol/sdk/package.json', { assert: { type: 'json' } });
+      debug.sdkVersion = sdkPackage.default?.version || sdkPackage.version || 'unknown';
+    } catch (e) {
+      debug.sdkVersion = 'unable to determine';
+    }
+    
+    // Test MCP connection
+    if (process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET) {
+      try {
+        const { muxMcpClient } = await import('./mcp/mux-upload-client.js');
+        const tools = await muxMcpClient.getTools();
+        debug.tools = Object.keys(tools);
+        debug.status = 'success';
+      } catch (mcpError: any) {
+        debug.error = {
+          message: mcpError?.message || String(mcpError),
+          stack: mcpError?.stack,
+          type: mcpError?.constructor?.name || typeof mcpError
+        };
+        debug.status = 'error';
+      }
+    } else {
+      debug.error = 'Mux credentials not configured';
+      debug.status = 'not_configured';
+    }
+    
+    res.json(debug);
+  } catch (error: any) {
+    res.status(500).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: error?.message || String(error),
+      stack: error?.stack
+    });
+  }
 });
 
 // Standard Mastra agent endpoints
