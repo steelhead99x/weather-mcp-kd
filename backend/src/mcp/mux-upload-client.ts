@@ -654,15 +654,15 @@ class MuxMCPClient {
         }
 
         try {
-            // Handle union types (anyOf, oneOf, allOf)
+            // Handle union types (anyOf, oneOf, allOf) - use z.any() to avoid validation issues
             if (inputSchema.anyOf) {
-                const unionTypes = inputSchema.anyOf.map((schema: any) => this.convertToZodSchema(schema));
-                return z.union(unionTypes as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+                // Use z.any() instead of z.union() to avoid Zod validation issues
+                return z.any();
             }
             
             if (inputSchema.oneOf) {
-                const unionTypes = inputSchema.oneOf.map((schema: any) => this.convertToZodSchema(schema));
-                return z.union(unionTypes as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+                // Use z.any() instead of z.union() to avoid Zod validation issues
+                return z.any();
             }
             
             if (inputSchema.allOf) {
@@ -717,7 +717,7 @@ class MuxMCPClient {
                     schemaObject[key] = zodType;
                 }
 
-                return z.object(schemaObject);
+                return z.object(schemaObject).passthrough();
             }
         } catch (error) {
             console.warn("Failed to convert schema, using fallback:", error);
