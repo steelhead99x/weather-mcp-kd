@@ -561,12 +561,33 @@ class MuxMCPClient {
 
                             // Filter out problematic arguments that cause union type issues
                             const filteredCtx = { ...ctx } as any;
-                            // Only filter out new_asset_settings if it's not explicitly needed for playback policy
-                            if (filteredCtx.new_asset_settings && !filteredCtx.new_asset_settings.playback_policies) {
-                                console.debug(`[invoke_api_endpoint] Filtering out new_asset_settings to avoid union type bug`);
-                                delete filteredCtx.new_asset_settings;
-                            } else if (filteredCtx.new_asset_settings?.playback_policies) {
-                                console.debug(`[invoke_api_endpoint] Keeping new_asset_settings for playback policy: ${filteredCtx.new_asset_settings.playback_policies}`);
+                            
+                            // Handle new_asset_settings to avoid union type validation errors
+                            if (filteredCtx.new_asset_settings) {
+                                // Create a simplified version that only includes essential fields
+                                const simplifiedSettings: any = {};
+                                
+                                // Keep playback_policies if present
+                                if (filteredCtx.new_asset_settings.playback_policies) {
+                                    simplifiedSettings.playback_policies = filteredCtx.new_asset_settings.playback_policies;
+                                    console.debug(`[invoke_api_endpoint] Keeping playback_policies: ${simplifiedSettings.playback_policies}`);
+                                }
+                                
+                                // Only keep inputs if they don't contain complex nested objects that cause union issues
+                                if (filteredCtx.new_asset_settings.inputs) {
+                                    // Filter inputs to remove complex overlay_settings that cause union validation errors
+                                    simplifiedSettings.inputs = filteredCtx.new_asset_settings.inputs.map((input: any) => {
+                                        const simplifiedInput: any = { type: input.type };
+                                        if (input.url) simplifiedInput.url = input.url;
+                                        // Skip overlay_settings as they cause union type validation issues
+                                        return simplifiedInput;
+                                    });
+                                    console.debug(`[invoke_api_endpoint] Simplified inputs to avoid union type bug`);
+                                }
+                                
+                                // Replace with simplified version
+                                filteredCtx.new_asset_settings = simplifiedSettings;
+                                console.debug(`[invoke_api_endpoint] Simplified new_asset_settings to avoid union type bug`);
                             }
                             
                             const attemptArgs = [
