@@ -1,5 +1,5 @@
 # Multi-stage build for production
-FROM node:20.18-alpine AS base
+FROM node:24-alpine AS base
 
 # Install system dependencies needed for native modules (canvas, etc.)
 RUN apk add --no-cache \
@@ -28,7 +28,7 @@ COPY shared/package*.json ./shared/
 # Install production dependencies for all workspaces using a single lockfile
 # Force update MCP SDK to prevent version conflicts
 RUN npm ci --workspaces --omit=dev && \
-    npm install @modelcontextprotocol/sdk@^1.17.5 --workspace=backend
+    npm install @modelcontextprotocol/sdk@^1.19.1 --workspace=backend
 
 # Build the application
 FROM base AS builder-deps
@@ -46,7 +46,7 @@ COPY shared/package*.json ./shared/
 # Install all dependencies for all workspaces (including dev)
 # Force update MCP SDK to prevent version conflicts during build
 RUN npm ci --workspaces --include=dev && \
-    npm install @modelcontextprotocol/sdk@^1.17.5 --workspace=backend
+    npm install @modelcontextprotocol/sdk@^1.19.1 --workspace=backend
 
 # Build shared package
 FROM builder-deps AS build-shared

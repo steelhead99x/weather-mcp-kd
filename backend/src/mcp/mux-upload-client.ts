@@ -489,7 +489,7 @@ class MuxMCPClient {
                                         });
                                         
                                         // Return a more user-friendly error with actionable information
-                                        throw new Error(`MCP tool ${tool.name} failed due to SDK version conflict. The @modelcontextprotocol/sdk version needs to be updated to 1.17.5 or higher to resolve this issue.`);
+                                        throw new Error(`MCP tool ${tool.name} failed due to SDK version conflict. The @modelcontextprotocol/sdk version needs to be updated to 1.19.1 or higher to resolve this issue.`);
                                     }
                                     throw error;
                                 }

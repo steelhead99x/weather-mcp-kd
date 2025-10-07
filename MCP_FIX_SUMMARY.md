@@ -21,7 +21,7 @@ Added MCP SDK version pinning to ensure compatibility:
 ```dockerfile
 # Force update MCP SDK to prevent version conflicts
 RUN npm ci --workspaces --omit=dev && \
-    npm install @modelcontextprotocol/sdk@^1.17.5 --workspace=backend
+    npm install @modelcontextprotocol/sdk@^1.19.1 --workspace=backend
 ```
 
 This helps with general MCP SDK compatibility but doesn't fix the `@mux/mcp` internal issue.

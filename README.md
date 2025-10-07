@@ -37,7 +37,7 @@ weather-agent-monorepo/
 
 ### Prerequisites
 
-- Node.js 20+ 
+- Node.js 24+ 
 - npm or yarn
 - API keys for Mux and Mastra (weather data is free from National Weather Service)
 

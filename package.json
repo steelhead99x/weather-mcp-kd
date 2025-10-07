@@ -38,7 +38,7 @@
     "docker:buildx": "bash scripts/docker-buildx.sh"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.0.0"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

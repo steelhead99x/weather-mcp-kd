@@ -18,7 +18,7 @@ echo "🛠️  Applying Fixes:"
 echo "==================="
 
 # 1. Update package.json to use compatible version
-echo "1. ✅ Updated backend/package.json to use @modelcontextprotocol/sdk ^1.17.5"
+echo "1. ✅ Updated backend/package.json to use @modelcontextprotocol/sdk ^1.19.1"
 
 # 2. Clean and reinstall dependencies
 echo "2. 🧹 Cleaning node_modules and package-lock.json..."
@@ -36,7 +36,7 @@ echo "   Resolved @modelcontextprotocol/sdk version: $MCP_VERSION"
 
 if [[ "$MCP_VERSION" == 1.11.5 ]]; then
     echo "   ⚠️  Warning: Still using old version. Forcing update..."
-    npm install @modelcontextprotocol/sdk@^1.17.5
+    npm install @modelcontextprotocol/sdk@^1.19.1
     MCP_VERSION=$(npm list @modelcontextprotocol/sdk --depth=0 2>/dev/null | grep @modelcontextprotocol/sdk | awk '{print $2}' | sed 's/[^0-9.]//g')
     echo "   Updated to version: $MCP_VERSION"
 fi
@@ -58,7 +58,7 @@ echo "🎉 Fix Applied Successfully!"
 echo "============================"
 echo ""
 echo "📝 What was changed:"
-echo "  • Updated @modelcontextprotocol/sdk from 1.11.5 to ^1.17.5"
+echo "  • Updated @modelcontextprotocol/sdk from 1.11.5 to ^1.19.1"
 echo "  • Enhanced error handling for version conflicts"
 echo "  • Added better error messages for debugging"
 echo ""

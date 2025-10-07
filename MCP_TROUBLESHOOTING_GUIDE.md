@@ -7,8 +7,8 @@
 ```bash
 # Check if the Docker build used the correct version
 # Look for these lines in the build logs:
-# "Installing @modelcontextprotocol/sdk@^1.17.5"
-# "npm install @modelcontextprotocol/sdk@^1.17.5 --workspace=backend"
+# "Installing @modelcontextprotocol/sdk@^1.19.1"
+# "npm install @modelcontextprotocol/sdk@^1.19.1 --workspace=backend"
 ```
 
 ### 2. Verify Environment Variables
@@ -71,11 +71,11 @@ MUX_MCP_UPLOAD_ARGS=@mux/mcp,client=cursor,--tools=static
 
 ### 6. Check Node.js Version Compatibility
 
-Ensure your Digital Ocean environment uses Node.js 20+:
+Ensure your Digital Ocean environment uses Node.js 24+:
 
 ```dockerfile
 # In your Dockerfile, verify this line:
-FROM node:20.18-alpine AS base
+FROM node:24-alpine AS base
 ```
 
 ### 7. Debug MCP Tool Execution

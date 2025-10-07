@@ -90,10 +90,10 @@ const retrieveRes = await fetch(
 
 ### Package Versions
 ```
-@modelcontextprotocol/sdk: 1.18.2 ✅
+@modelcontextprotocol/sdk: 1.19.1 ✅
 @mux/mcp: 12.8.0 ✅ (not used for uploads anymore)
 @mastra/core: 0.17.1 ✅
-Node.js: 20.x ✅
+Node.js: 24.x ✅
 ```
 
 ### Environment Variables Required
