@@ -418,7 +418,8 @@ const MAX_CONCURRENT_CONNECTIONS = 2; // Reduced to prevent overload
 const connectionQueue: Array<() => void> = [];
 const CONNECTION_TIMEOUT = 30000; // 30 seconds timeout
 
-// Mux MCP health check
+// Mux MCP health check - NOT USED since we're bypassing MCP entirely
+// @ts-ignore - Kept for reference but not used since we're using direct REST API
 async function checkMuxMCPHealth(): Promise<{ healthy: boolean; error?: string }> {
     try {
         console.debug("[HealthCheck] Starting Mux MCP health check...");
@@ -773,70 +774,72 @@ const ttsWeatherTool = createTool({
             let playbackId: string | undefined;
 
             try {
-                // Check Mux MCP health first
-                const healthCheck = await checkMuxMCPHealth();
-                if (!healthCheck.healthy) {
-                    console.warn('[tts-weather-upload] Mux MCP not healthy:', healthCheck.error);
-                    throw new Error(`Mux MCP not available: ${healthCheck.error}`);
-                }
-
-                console.debug('[tts-weather-upload] Starting Mux upload process...');
-
-                // Get tools after health check
-                const uploadTools = await uploadClient.getTools();
-
-                // Find the create upload tool with better error handling
-                const createToolNames = ['create_video_uploads', 'video.uploads.create'];
-                let create = null;
-                for (const toolName of createToolNames) {
-                    if (uploadTools[toolName]) {
-                        create = uploadTools[toolName];
-                        console.debug(`[tts-weather-upload] Using Mux tool: ${toolName}`);
-                        break;
-                    }
+                // BYPASS MCP ENTIRELY - Use Mux REST API directly
+                // The @mux/mcp@12.8.0 package has a critical validation bug that prevents ANY upload creation
+                // Fallback to direct Mux API call
+                console.debug('[tts-weather-upload] Using direct Mux API (bypassing MCP due to validation bug)');
+                
+                const muxTokenId = process.env.MUX_TOKEN_ID;
+                const muxTokenSecret = process.env.MUX_TOKEN_SECRET;
+                
+                if (!muxTokenId || !muxTokenSecret) {
+                    throw new Error('MUX_TOKEN_ID and MUX_TOKEN_SECRET are required');
                 }
                 
-                if (!create) {
-                    const availableTools = Object.keys(uploadTools);
-                    throw new Error(`Mux MCP missing upload tool. Available tools: ${availableTools.join(', ')}`);
-                }
-
-                // WORKAROUND: Use ABSOLUTE MINIMUM parameters due to MCP SDK version conflict
-                // The @mux/mcp@12.8.0 package has a bug where ANY complex parameter (audio_only_with_image, 
-                // new_asset_settings, etc.) causes "needle.evaluatedProperties.union is not a function" error.
-                // Use only the most basic parameters that don't trigger schema validation.
-                const createArgs: any = {
-                    cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com'
+                // Create direct upload via Mux REST API
+                const corsOrigin = process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com';
+                const uploadPayload: any = {
+                    cors_origin: corsOrigin
                 };
                 
-                // DO NOT add new_asset_settings - it also triggers the validation error!
-                // DO NOT add audio_only_with_image - it also triggers the validation error!
-                // Playback policies must be set via Mux dashboard or post-creation API call
-                
-                // Add test flag if specified (this is a simple boolean, should be safe)
-                if (process.env.MUX_UPLOAD_TEST === 'true') {
-                    createArgs.test = true;
+                // Add playback policy if specified
+                const playbackPolicy = process.env.MUX_PLAYBACK_POLICY;
+                if (playbackPolicy && playbackPolicy !== 'public') {
+                    uploadPayload.new_asset_settings = {
+                        playback_policy: [playbackPolicy]
+                    };
                 }
                 
-                console.debug('[tts-weather-upload] Using minimal upload parameters (avoiding MCP validation bug)');
-
-                console.debug('[tts-weather-upload] Creating Mux upload with simplified args');
+                const authHeader = 'Basic ' + Buffer.from(`${muxTokenId}:${muxTokenSecret}`).toString('base64');
                 
-                // Single attempt with proper error handling
-                let createRes;
-                try {
-                    createRes = await create.execute({ context: createArgs });
-                    console.debug('[tts-weather-upload] Mux upload creation successful');
-                } catch (mcpError) {
-                    console.error('[tts-weather-upload] Mux upload creation failed:', mcpError instanceof Error ? mcpError.message : String(mcpError));
-                    throw new Error(`Mux upload creation failed: ${mcpError instanceof Error ? mcpError.message : String(mcpError)}`);
+                console.debug('[tts-weather-upload] Creating Mux upload via REST API');
+                
+                const createRes = await fetch('https://api.mux.com/video/v1/uploads', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': authHeader
+                    },
+                    body: JSON.stringify(uploadPayload)
+                } as any);
+                
+                if (!createRes.ok) {
+                    const errorText = await createRes.text().catch(() => '');
+                    throw new Error(`Mux API error ${createRes.status}: ${errorText}`);
                 }
                 
-                // Parse Mux response with better error handling
-                const blocks = Array.isArray(createRes) ? createRes : [createRes];
+                const createData = await createRes.json() as any;
+                console.debug('[tts-weather-upload] Mux upload creation successful via REST API');
+                
+                // Parse Mux REST API response
+                // Expected format: { data: { id: "...", url: "...", asset_id: "..." } }
                 let uploadId: string | undefined;
                 let uploadUrl: string | undefined;
                 let parseSuccess = false;
+                
+                if (createData && createData.data) {
+                    uploadId = createData.data.id;
+                    uploadUrl = createData.data.url;
+                    assetId = createData.data.asset_id;
+                    parseSuccess = !!(uploadId && uploadUrl);
+                    
+                    if (parseSuccess) {
+                        console.debug(`[tts-weather-upload] Parsed upload successfully: id=${uploadId}, has_url=${!!uploadUrl}`);
+                    }
+                }
+                
+                // Fallback: Try old MCP response format just in case
+                const blocks = Array.isArray(createData) ? createData : [createData];
                 
                 for (const b of blocks as any[]) {
                     const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
@@ -878,48 +881,31 @@ const ttsWeatherTool = createTool({
 
                 // Simplified asset retrieval - only if we don't already have assetId
                 if (!assetId && uploadId) {
-                    console.debug('[tts-weather-upload] Retrieving asset ID from upload...');
-                    const retrieveToolNames = ['retrieve_video_uploads', 'video.uploads.get'];
-                    let retrieve = null;
+                    console.debug('[tts-weather-upload] Retrieving asset ID from upload via REST API...');
                     
-                    for (const toolName of retrieveToolNames) {
-                        if (uploadTools[toolName]) {
-                            retrieve = uploadTools[toolName];
-                            break;
-                        }
-                    }
-                    
-                    if (retrieve) {
-                        try {
-                            const retrieveRes = await retrieve.execute({
-                                context: { UPLOAD_ID: uploadId }
-                            });
+                    try {
+                        const retrieveRes = await fetch(`https://api.mux.com/video/v1/uploads/${uploadId}`, {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': authHeader
+                            }
+                        } as any);
+                        
+                        if (retrieveRes.ok) {
+                            const retrieveData = await retrieveRes.json() as any;
+                            console.debug('[tts-weather-upload] Asset retrieval response:', JSON.stringify(retrieveData, null, 2));
                             
-                            const retrieveBlocks = Array.isArray(retrieveRes) ? retrieveRes : [retrieveRes];
-                            for (const b of retrieveBlocks as any[]) {
-                                const t = b && typeof b === 'object' && typeof b.text === 'string' ? b.text : undefined;
-                                if (!t) continue;
-                                
-                                try {
-                                    const payload = JSON.parse(t);
-                                    console.debug('[tts-weather-upload] Asset retrieval response:', JSON.stringify(payload, null, 2));
-                                    
-                                    // Extract asset ID from various possible response structures
-                                    const data = (payload && typeof payload === 'object' && 'data' in payload) ? (payload as any).data : payload;
-                                    const upload = (data && typeof data === 'object' && 'upload' in data) ? (data as any).upload : data;
-                                    assetId = assetId || upload?.asset_id || upload?.assetId || upload?.asset?.id;
-                                    
-                                    if (assetId) {
-                                        console.debug(`[tts-weather-upload] Retrieved asset ID: ${assetId}`);
-                                        break;
-                                    }
-                                } catch (parseError) {
-                                    console.warn('[tts-weather-upload] Failed to parse asset retrieval response:', parseError instanceof Error ? parseError.message : String(parseError));
+                            if (retrieveData && retrieveData.data) {
+                                assetId = retrieveData.data.asset_id;
+                                if (assetId) {
+                                    console.debug(`[tts-weather-upload] Retrieved asset ID: ${assetId}`);
                                 }
                             }
-                        } catch (retrieveError) {
-                            console.warn('[tts-weather-upload] Asset retrieval failed:', retrieveError instanceof Error ? retrieveError.message : String(retrieveError));
+                        } else {
+                            console.warn('[tts-weather-upload] Failed to retrieve upload info:', retrieveRes.status);
                         }
+                    } catch (retrieveError) {
+                        console.warn('[tts-weather-upload] Asset retrieval failed:', retrieveError instanceof Error ? retrieveError.message : String(retrieveError));
                     }
                 }
 
