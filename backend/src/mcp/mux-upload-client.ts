@@ -562,33 +562,41 @@ class MuxMCPClient {
                             // Filter out problematic arguments that cause union type issues
                             const filteredCtx = { ...ctx } as any;
                             
-                            // Handle new_asset_settings to avoid union type validation errors
+                            // COMPLETE WORKAROUND: Remove all complex nested objects that cause union validation errors
+                            // This is a more aggressive approach to ensure compatibility across all MCP SDK versions
+                            
+                            // Remove new_asset_settings entirely if it contains complex structures
                             if (filteredCtx.new_asset_settings) {
-                                // Create a simplified version that only includes essential fields
-                                const simplifiedSettings: any = {};
+                                const settings = filteredCtx.new_asset_settings;
                                 
-                                // Keep playback_policies if present
-                                if (filteredCtx.new_asset_settings.playback_policies) {
-                                    simplifiedSettings.playback_policies = filteredCtx.new_asset_settings.playback_policies;
-                                    console.debug(`[invoke_api_endpoint] Keeping playback_policies: ${simplifiedSettings.playback_policies}`);
+                                // Check if settings contain problematic nested structures
+                                const hasComplexInputs = settings.inputs && settings.inputs.some((input: any) => 
+                                    input.overlay_settings || input.text_track_settings || input.audio_track_settings
+                                );
+                                
+                                if (hasComplexInputs) {
+                                    console.debug(`[invoke_api_endpoint] Removing complex new_asset_settings to avoid union type bug`);
+                                    delete filteredCtx.new_asset_settings;
+                                } else {
+                                    // Create a minimal version with only essential fields
+                                    const minimalSettings: any = {};
+                                    if (settings.playback_policies) {
+                                        minimalSettings.playback_policies = settings.playback_policies;
+                                        console.debug(`[invoke_api_endpoint] Keeping minimal playback_policies: ${minimalSettings.playback_policies}`);
+                                    }
+                                    filteredCtx.new_asset_settings = minimalSettings;
+                                    console.debug(`[invoke_api_endpoint] Simplified new_asset_settings to minimal version`);
                                 }
-                                
-                                // Only keep inputs if they don't contain complex nested objects that cause union issues
-                                if (filteredCtx.new_asset_settings.inputs) {
-                                    // Filter inputs to remove complex overlay_settings that cause union validation errors
-                                    simplifiedSettings.inputs = filteredCtx.new_asset_settings.inputs.map((input: any) => {
-                                        const simplifiedInput: any = { type: input.type };
-                                        if (input.url) simplifiedInput.url = input.url;
-                                        // Skip overlay_settings as they cause union type validation issues
-                                        return simplifiedInput;
-                                    });
-                                    console.debug(`[invoke_api_endpoint] Simplified inputs to avoid union type bug`);
-                                }
-                                
-                                // Replace with simplified version
-                                filteredCtx.new_asset_settings = simplifiedSettings;
-                                console.debug(`[invoke_api_endpoint] Simplified new_asset_settings to avoid union type bug`);
                             }
+                            
+                            // Additional safety: Remove any other potentially problematic nested objects
+                            const problematicKeys = ['overlay_settings', 'text_track_settings', 'audio_track_settings', 'video_settings'];
+                            problematicKeys.forEach(key => {
+                                if (filteredCtx[key]) {
+                                    console.debug(`[invoke_api_endpoint] Removing potentially problematic key: ${key}`);
+                                    delete filteredCtx[key];
+                                }
+                            });
                             
                             const attemptArgs = [
                                 // Correct Mux MCP format - endpoint_name with nested args
