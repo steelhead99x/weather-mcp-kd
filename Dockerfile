@@ -26,7 +26,9 @@ COPY frontend/package*.json ./frontend/
 COPY shared/package*.json ./shared/
 
 # Install production dependencies for all workspaces using a single lockfile
-RUN npm ci --workspaces --omit=dev
+# Force update MCP SDK to prevent version conflicts
+RUN npm ci --workspaces --omit=dev && \
+    npm install @modelcontextprotocol/sdk@^1.17.5 --workspace=backend
 
 # Build the application
 FROM base AS builder-deps
@@ -42,7 +44,9 @@ COPY frontend/package*.json ./frontend/
 COPY shared/package*.json ./shared/
 
 # Install all dependencies for all workspaces (including dev)
-RUN npm ci --workspaces --include=dev
+# Force update MCP SDK to prevent version conflicts during build
+RUN npm ci --workspaces --include=dev && \
+    npm install @modelcontextprotocol/sdk@^1.17.5 --workspace=backend
 
 # Build shared package
 FROM builder-deps AS build-shared
