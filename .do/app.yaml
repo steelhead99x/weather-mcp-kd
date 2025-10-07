@@ -1,26 +1,43 @@
-name: weather-agent
+name: weather-mcp-app
+region: nyc
 services:
-- name: weather-agent-backend
-  source_dir: /
-  github:
-    repo: your-username/weather-mcp-kd
-    branch: main
-  dockerfile_path: Dockerfile
-  instance_count: 1
-  instance_size_slug: basic-xxs
-  http_port: 3001
-  envs:
-  - key: NODE_ENV
-    value: production
-  - key: PORT
-    value: "3001"
-  - key: MASTRA_API_KEY
-    value: ${MASTRA_API_KEY}
-  - key: MUX_TOKEN_ID
-    value: ${MUX_TOKEN_ID}
-  - key: MUX_TOKEN_SECRET
-    value: ${MUX_TOKEN_SECRET}
-  - key: ANTHROPIC_API_KEY
-    value: ${ANTHROPIC_API_KEY}
-  - key: DEEPGRAM_API_KEY
-    value: ${DEEPGRAM_API_KEY}
+  - name: backend
+    dockerfile_path: Dockerfile
+    source_dir: /
+    github:
+      branch: main
+      deploy_on_push: true
+    http_port: 3001
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    
+    # Explicitly specify the run command
+    run_command: npm run start
+    
+    # Health check
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    
+    # Environment variables
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      # Add your other required environment variables here:
+      # - key: ANTHROPIC_API_KEY
+      #   scope: RUN_TIME
+      #   type: SECRET
+      # - key: OPENAI_API_KEY  
+      #   scope: RUN_TIME
+      #   type: SECRET
+      # etc.
+    
+    # Routes
+    routes:
+      - path: /

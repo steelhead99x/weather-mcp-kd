@@ -108,3 +108,4 @@ Thumbs.db
 test-results/
 playwright-report/
 playwright/.cache/
+backend/files/charts/temperature-chart-2025-10-07T07-20-11.png

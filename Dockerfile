@@ -114,6 +114,10 @@ COPY --from=deps --chown=weatheruser:nodejs /app/node_modules ./node_modules
 COPY --chown=weatheruser:nodejs package*.json ./
 COPY --chown=weatheruser:nodejs backend/package*.json ./backend/
 
+# Copy startup script
+COPY --chown=weatheruser:nodejs backend/start.sh ./backend/start.sh
+RUN chmod +x /app/backend/start.sh
+
 USER weatheruser
 
 EXPOSE 3001
@@ -123,4 +127,5 @@ ENV PORT=3001
 
 WORKDIR /app/backend
 
-CMD ["npm", "run", "start:production"]
+# Use the startup script for better error handling
+CMD ["./start.sh"]

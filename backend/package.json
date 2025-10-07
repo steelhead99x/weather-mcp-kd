@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "start": "NODE_ENV=development npm run dev",
+    "start": "if [ \"$NODE_ENV\" = \"production\" ]; then node dist/index.js; else npm run dev; fi",
     "start:prod": "npm run build && npm run start:production",
     "start:production": "NODE_ENV=production node dist/index.js",
     "typecheck": "tsc --noEmit",
