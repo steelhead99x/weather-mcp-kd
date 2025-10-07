@@ -811,24 +811,9 @@ const ttsWeatherTool = createTool({
                         image_fit: 'fill' as const
                     },
                     new_asset_settings: {
-                        playback_policies: [playbackPolicy],
-                        inputs: [
-                            {
-                                type: 'audio',
-                                // Audio file will be uploaded via direct upload
-                            },
-                            {
-                                type: 'video', // This is the key - use 'video' type for images
-                                url: imageUrl,
-                                overlay_settings: {
-                                    width: '100%',
-                                    height: '100%',
-                                    horizontal_align: 'center',
-                                    vertical_align: 'middle',
-                                    opacity: '100%'
-                                }
-                            }
-                        ]
+                        playback_policies: [playbackPolicy]
+                        // Note: Don't include inputs when using audio_only_with_image
+                        // as it conflicts with the convenience parameter
                     }
                 };
                 
