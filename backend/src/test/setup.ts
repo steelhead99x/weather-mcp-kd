@@ -1,8 +1,21 @@
 import { config } from 'dotenv';
 import { resolve as resolvePath } from 'path';
+import { existsSync } from 'fs';
 
-// Load environment variables from the root project directory for tests
-config({ path: resolvePath(process.cwd(), '../.env') });
+// Load environment variables - try multiple locations for tests
+const rootEnvPath = resolvePath(process.cwd(), '../.env');
+const localEnvPath = resolvePath(process.cwd(), '.env');
+const backendEnvPath = resolvePath(process.cwd(), 'backend/.env');
+
+if (existsSync(rootEnvPath)) {
+  config({ path: rootEnvPath });
+} else if (existsSync(localEnvPath)) {
+  config({ path: localEnvPath });
+} else if (existsSync(backendEnvPath)) {
+  config({ path: backendEnvPath });
+} else {
+  config(); // Load from default location
+}
 
 // Mock external services for tests
 process.env.NODE_ENV = 'test';

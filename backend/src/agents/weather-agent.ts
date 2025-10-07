@@ -1,8 +1,24 @@
 import { config } from 'dotenv';
 import { resolve as resolvePath } from 'path';
+import { existsSync } from 'fs';
 
-// Load environment variables from the root project directory
-config({ path: resolvePath(process.cwd(), '../.env') });
+// Load environment variables - try multiple locations
+// 1. First try root .env (when running from backend/)
+const rootEnvPath = resolvePath(process.cwd(), '../.env');
+// 2. Try current directory .env (when running from root)
+const localEnvPath = resolvePath(process.cwd(), '.env');
+// 3. Try backend/.env as fallback
+const backendEnvPath = resolvePath(process.cwd(), 'backend/.env');
+
+if (existsSync(rootEnvPath)) {
+  config({ path: rootEnvPath });
+} else if (existsSync(localEnvPath)) {
+  config({ path: localEnvPath });
+} else if (existsSync(backendEnvPath)) {
+  config({ path: backendEnvPath });
+} else {
+  config(); // Load from default location
+}
 import { Agent } from "@mastra/core";
 import { anthropic } from "@ai-sdk/anthropic";
 import { weatherTool } from "../tools/weather.js";

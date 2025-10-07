@@ -1,21 +1,43 @@
 import { config } from 'dotenv';
 import { resolve as resolvePath } from 'path';
+import { existsSync } from 'fs';
 
-// Load environment variables from the root project directory
-config({ path: resolvePath(process.cwd(), '../.env') });
+// Load environment variables - try multiple locations
+// 1. First try root .env (when running from backend/)
+const rootEnvPath = resolvePath(process.cwd(), '../.env');
+// 2. Try current directory .env (when running from root)
+const localEnvPath = resolvePath(process.cwd(), '.env');
+// 3. Try backend/.env as fallback
+const backendEnvPath = resolvePath(process.cwd(), 'backend/.env');
+
+if (existsSync(rootEnvPath)) {
+  console.log('[env] Loading from:', rootEnvPath);
+  config({ path: rootEnvPath });
+} else if (existsSync(localEnvPath)) {
+  console.log('[env] Loading from:', localEnvPath);
+  config({ path: localEnvPath });
+} else if (existsSync(backendEnvPath)) {
+  console.log('[env] Loading from:', backendEnvPath);
+  config({ path: backendEnvPath });
+} else {
+  console.warn('[env] No .env file found. Relying on system environment variables.');
+  config(); // Load from default location
+}
 
 import { Mastra } from '@mastra/core';
 import express from 'express';
 import cors from 'cors';
 import { weatherAgent } from './agents/weather-agent.js';
 import { resolve, join } from 'path';
-import { existsSync } from 'fs';
 
 // Set telemetry flag to suppress warnings when not using Mastra server environment
 (globalThis as any).___MASTRA_TELEMETRY___ = true;
 
 const mastra = new Mastra({
-  agents: { weatherAgent },
+  agents: { 
+    // Register with ID 'weather' to match API routes and frontend
+    weather: weatherAgent 
+  },
 });
 
 const app = express();
@@ -45,13 +67,13 @@ app.get('/health', (_req, res) => {
 
 // Standard Mastra agent endpoints
 app.get('/api/agents', (_req, res) => {
-  res.json([{ id: 'weather', name: 'weatherAgent' }]);
+  res.json([{ id: 'weather', name: 'weather' }]);
 });
 
 app.get('/api/agents/:agentId', (req, res) => {
   const agentId = req.params.agentId;
   if (agentId === 'weather') {
-    res.json({ id: 'weather', name: 'weatherAgent' });
+    res.json({ id: 'weather', name: 'weather' });
   } else {
     res.status(404).json({ error: 'Agent not found' });
   }

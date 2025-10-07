@@ -4,7 +4,10 @@ import { weatherMcpServer } from '../mcp/weather-server.js'
 
 export { default as mastra } from '../index.js'
 
-export const agents = { weatherAgent }
+// Export with consistent naming: agent ID 'weather' matches weatherAgent instance
+export const agents = { 
+  weather: weatherAgent  // Use 'weather' as the key to match API routes
+}
 export const tools = { weatherTool }
 export const mcpServers = { weatherMcpServer }
 
