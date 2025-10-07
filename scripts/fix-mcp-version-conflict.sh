@@ -73,3 +73,4 @@ echo "  • Verify the MCP SDK version: npm list @modelcontextprotocol/sdk"
 echo "  • Check the logs for the improved error messages"
 echo ""
 
+

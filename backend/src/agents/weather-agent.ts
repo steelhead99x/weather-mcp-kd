@@ -1120,6 +1120,14 @@ function extractZipAndQuotedText(messages: Array<{ role: string; content: string
 // Minimal .text shim
 async function textShim(args: { messages: Array<{ role: string; content: string }> }): Promise<{ text: string }> {
     const messages = args?.messages || [];
+    
+    // Handle empty messages array - provide a default greeting
+    if (messages.length === 0) {
+        return {
+            text: 'Hello! I\'m your agriculture-focused weather assistant. Please provide a 5-digit ZIP code to get started with weather information for your area.'
+        };
+    }
+    
     const lastUser = [...messages].reverse().find(m => m.role === 'user');
     const lastContent = lastUser?.content || '';
     const { zipCode, quotedText } = extractZipAndQuotedText(messages);
