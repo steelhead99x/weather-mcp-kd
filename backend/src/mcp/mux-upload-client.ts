@@ -584,8 +584,20 @@ class MuxMCPClient {
                                         minimalSettings.playback_policies = settings.playback_policies;
                                         console.debug(`[invoke_api_endpoint] Keeping minimal playback_policies: ${minimalSettings.playback_policies}`);
                                     }
-                                    filteredCtx.new_asset_settings = minimalSettings;
-                                    console.debug(`[invoke_api_endpoint] Simplified new_asset_settings to minimal version`);
+                                    if (settings.playback_policy) {
+                                        minimalSettings.playback_policy = settings.playback_policy;
+                                        console.debug(`[invoke_api_endpoint] Keeping minimal playback_policy: ${minimalSettings.playback_policy}`);
+                                    }
+                                    
+                                    // CRITICAL: Only set new_asset_settings if it has actual content
+                                    // An empty object {} also triggers the "union is not a function" error!
+                                    if (Object.keys(minimalSettings).length > 0) {
+                                        filteredCtx.new_asset_settings = minimalSettings;
+                                        console.debug(`[invoke_api_endpoint] Simplified new_asset_settings to minimal version`);
+                                    } else {
+                                        console.debug(`[invoke_api_endpoint] Removing empty new_asset_settings to avoid validation bug`);
+                                        delete filteredCtx.new_asset_settings;
+                                    }
                                 }
                             }
                             

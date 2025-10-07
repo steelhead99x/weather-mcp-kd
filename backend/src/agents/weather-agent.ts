@@ -801,25 +801,24 @@ const ttsWeatherTool = createTool({
                     throw new Error(`Mux MCP missing upload tool. Available tools: ${availableTools.join(', ')}`);
                 }
 
-                // WORKAROUND: Don't use audio_only_with_image due to MCP SDK version conflict
-                // The audio_only_with_image parameter causes "needle.evaluatedProperties.union is not a function"
-                // error in @mux/mcp@12.8.0. Use basic upload instead and handle image overlay separately.
+                // WORKAROUND: Use ABSOLUTE MINIMUM parameters due to MCP SDK version conflict
+                // The @mux/mcp@12.8.0 package has a bug where ANY complex parameter (audio_only_with_image, 
+                // new_asset_settings, etc.) causes "needle.evaluatedProperties.union is not a function" error.
+                // Use only the most basic parameters that don't trigger schema validation.
                 const createArgs: any = {
                     cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com'
                 };
                 
-                // Add new_asset_settings with playback policy
-                const playbackPolicy = process.env.MUX_PLAYBACK_POLICY || 'signed';
-                createArgs.new_asset_settings = {
-                    playback_policy: playbackPolicy
-                };
+                // DO NOT add new_asset_settings - it also triggers the validation error!
+                // DO NOT add audio_only_with_image - it also triggers the validation error!
+                // Playback policies must be set via Mux dashboard or post-creation API call
                 
-                // Add test flag if specified
+                // Add test flag if specified (this is a simple boolean, should be safe)
                 if (process.env.MUX_UPLOAD_TEST === 'true') {
                     createArgs.test = true;
                 }
                 
-                console.debug('[tts-weather-upload] Using basic upload (no audio_only_with_image due to MCP SDK compatibility)');
+                console.debug('[tts-weather-upload] Using minimal upload parameters (avoiding MCP validation bug)');
 
                 console.debug('[tts-weather-upload] Creating Mux upload with simplified args');
                 

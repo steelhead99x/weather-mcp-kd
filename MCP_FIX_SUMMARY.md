@@ -26,19 +26,23 @@ RUN npm ci --workspaces --omit=dev && \
 
 This helps with general MCP SDK compatibility but doesn't fix the `@mux/mcp` internal issue.
 
-### Solution 2: Removed audio_only_with_image Parameter (Active Fix)
+### Solution 2: Remove ALL Object Parameters (CRITICAL FIX)
 
-Modified `backend/src/agents/weather-agent.ts` to **NOT** use the `audio_only_with_image` convenience parameter:
+**CRITICAL DISCOVERY**: The `@mux/mcp@12.8.0` validation bug is triggered by **ANY** object parameter, even empty objects `{}`!
+
+Modified `backend/src/agents/weather-agent.ts` and `backend/src/mcp/mux-upload-client.ts`:
 
 **Before (causing error):**
 ```typescript
 const createArgs = {
     cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com',
-    audio_only_with_image: {
-        image_url: imageUrl,
-        image_duration: 'audio_duration',
-        image_fit: 'fill'
-    }
+    audio_only_with_image: { ... }  // ❌ Object triggers error
+};
+
+// OR even this fails:
+const createArgs = {
+    cors_origin: '...',
+    new_asset_settings: {}  // ❌ Even empty object triggers error!
 };
 ```
 
@@ -46,14 +50,14 @@ const createArgs = {
 ```typescript
 const createArgs: any = {
     cors_origin: process.env.MUX_CORS_ORIGIN || 'https://weather-mcp-kd.streamingportfolio.com'
-};
-
-// Add new_asset_settings with playback policy
-const playbackPolicy = process.env.MUX_PLAYBACK_POLICY || 'signed';
-createArgs.new_asset_settings = {
-    playback_policy: playbackPolicy
+    // ✅ ONLY primitive types (strings, booleans, numbers)
+    // ✅ NO object parameters at all
 };
 ```
+
+**Additional fix in `mux-upload-client.ts`:**
+- Added logic to completely remove `new_asset_settings` if it's empty
+- Only includes parameters that have actual primitive values
 
 ### Solution 3: Enhanced Debugging Tools
 
