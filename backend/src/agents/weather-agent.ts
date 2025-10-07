@@ -150,37 +150,6 @@ async function getRandomBackgroundImage(): Promise<string> {
     }
 }
 
-// Provide a bundled fallback background image
-async function getFallbackBackgroundPng(): Promise<string> {
-    const bundled = resolve('files/images/fallback-bg.png');
-    try {
-        await fs.access(bundled);
-        // Validate that it's a non-empty PNG (signature check)
-        const fd = await fs.open(bundled, 'r');
-        try {
-            const { size } = await fd.stat();
-            if (size < 8) throw new Error('fallback image too small');
-            const sig = Buffer.alloc(8);
-            await fd.read(sig, 0, 8, 0);
-            const pngSig = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
-            if (!sig.equals(pngSig)) throw new Error('fallback image invalid signature');
-            return bundled;
-        } finally {
-            await fd.close();
-        }
-    } catch {
-        console.warn('Bundled fallback background missing or invalid, creating minimal PNG');
-        const out = resolve('/tmp/fallback-bg.png');
-        await fs.mkdir(dirname(out), { recursive: true });
-        const tinyPng = Buffer.from(
-            '89504E470D0A1A0A0000000D4948445200000001000000010806000000' +
-            '1F15C4890000000A49444154789C6360000002000150A0A4' +
-            '1B0000000049454E44AE426082', 'hex'
-        );
-        await fs.writeFile(out, tinyPng);
-        return out;
-    }
-}
 
 // Pronounce ZIP digits clearly as spaced digits
 function speakZip(zip: string): string {
@@ -743,17 +712,39 @@ const ttsWeatherTool = createTool({
                 }
             }
 
-            // Background image or fallback - get URL instead of local path
+            // Background image or fallback - use publicly accessible URLs
             let imageUrl: string;
             try {
                 const finalImagePath = await getRandomBackgroundImage();
                 console.debug(`[tts-weather-upload] Using background image: ${finalImagePath}`);
-                // Convert local path to URL - assuming images are served from public directory
-                imageUrl = `${process.env.STREAMING_PORTFOLIO_BASE_URL || 'https://weather-mcp-kd.streamingportfolio.com'}/files/images/${basename(finalImagePath)}`;
+                
+                // Try local server first, then fallback to public URLs
+                const localUrl = `${process.env.STREAMING_PORTFOLIO_BASE_URL || 'https://weather-mcp-kd.streamingportfolio.com'}/files/images/${basename(finalImagePath)}`;
+                
+                // Test if local URL is accessible
+                try {
+                    const testResponse = await fetch(localUrl, { method: 'HEAD' });
+                    if (testResponse.ok) {
+                        imageUrl = localUrl;
+                        console.debug(`[tts-weather-upload] Using local image URL: ${imageUrl}`);
+                    } else {
+                        throw new Error('Local URL not accessible');
+                    }
+                } catch {
+                    // Fallback to a publicly accessible image
+                    const publicImages = [
+                        'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&h=1080&fit=crop&crop=center',
+                        'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&h=1080&fit=crop&crop=center',
+                        'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&h=1080&fit=crop&crop=center'
+                    ];
+                    const randomIndex = Math.floor(Math.random() * publicImages.length);
+                    imageUrl = publicImages[randomIndex]!;
+                    console.debug(`[tts-weather-upload] Using public fallback image URL: ${imageUrl}`);
+                }
             } catch {
-                const fallbackPath = await getFallbackBackgroundPng();
-                console.debug(`[tts-weather-upload] Using fallback background: ${fallbackPath}`);
-                imageUrl = `${process.env.STREAMING_PORTFOLIO_BASE_URL || 'https://weather-mcp-kd.streamingportfolio.com'}/files/images/${basename(fallbackPath)}`;
+                // Ultimate fallback to a simple public image
+                imageUrl = 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&h=1080&fit=crop&crop=center';
+                console.debug(`[tts-weather-upload] Using ultimate fallback image URL: ${imageUrl}`);
             }
 
             console.debug(`[tts-weather-upload] Image URL: ${imageUrl}`);
