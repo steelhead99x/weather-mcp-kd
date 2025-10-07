@@ -136,7 +136,7 @@ https://streamingportfolio.com/player?assetId=BmrQHufbaXc01IWtjaBM01TY6ZaF9ybNny
 ```env
 # Mux Configuration
 VITE_MUX_DEFAULT_ASSET_ID=00ixOU3x6YI02DXIzeQ00wEzTwAHyUojsiewp7fC4FNeNw
-VITE_MUX_KEY_SERVER_URL=https://streamingportfolio.com/streamingportfolio-mux-keyserver/api/tokens
+VITE_MUX_KEY_SERVER_URL=https://streamingportfolio.com/api/tokens
 
 # Debug Panel
 NODE_ENV=development  # Enables debug panel
