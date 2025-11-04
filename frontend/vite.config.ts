@@ -6,9 +6,17 @@ import path from 'path'
 export default defineConfig(({ mode }) => {
   // Load env file from root directory
   const env = loadEnv(mode, path.resolve(__dirname, '..'), '')
-  
+  const isProd = mode === 'production'
+
   return {
-    plugins: [react()],
+    plugins: [
+      react({
+        // Enable Fast Refresh for better DX
+        fastRefresh: true,
+        // Optimize JSX runtime
+        jsxRuntime: 'automatic',
+      }),
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
@@ -25,26 +33,70 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 3000,
+      host: true, // Listen on all addresses
+      strictPort: true,
       proxy: {
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true,
+          secure: false,
         },
       },
     },
     build: {
       outDir: 'dist',
-      sourcemap: true,
+      sourcemap: isProd ? false : true, // Disable sourcemaps in production for smaller bundles
+      minify: 'esbuild', // Fast minification with esbuild
+      target: 'es2020', // Modern target for better performance
+      cssMinify: true,
+      cssCodeSplit: true, // Split CSS for better caching
+      reportCompressedSize: true,
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ['react', 'react-dom'],
-            mux: ['@mux/mux-player-react'],
-            mastra: ['@mastra/client-js'],
+          // Better chunking strategy for optimal caching
+          manualChunks: (id) => {
+            // Core vendor dependencies
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('react-dom')) {
+                return 'vendor-react'
+              }
+              if (id.includes('@mux')) {
+                return 'vendor-mux'
+              }
+              if (id.includes('@mastra')) {
+                return 'vendor-mastra'
+              }
+              // All other node_modules go to vendor
+              return 'vendor'
+            }
           },
+          // Optimized file naming for better caching
+          chunkFileNames: 'assets/[name]-[hash].js',
+          entryFileNames: 'assets/[name]-[hash].js',
+          assetFileNames: 'assets/[name]-[hash].[ext]',
         },
       },
       chunkSizeWarningLimit: 1000,
+      // Better tree shaking
+      assetsInlineLimit: 4096, // Inline assets smaller than 4kb
+    },
+    // Optimize dependencies
+    optimizeDeps: {
+      include: ['react', 'react-dom', '@mux/mux-player-react', '@mastra/client-js'],
+      exclude: [],
+    },
+    // Performance optimizations
+    esbuild: {
+      logOverride: { 'this-is-undefined-in-esm': 'silent' },
+      legalComments: 'none', // Remove comments in production
+      treeShaking: true,
+    },
+    // CSS optimization
+    css: {
+      devSourcemap: !isProd,
+      postcss: {
+        plugins: [],
+      },
     },
   }
 })
