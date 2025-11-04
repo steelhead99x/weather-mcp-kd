@@ -4,6 +4,9 @@ import { useStreamVNext } from '../hooks/useStreamVNext'
 import type { StreamChunk } from '../types/streamVNext'
 import MuxSignedPlayer from './MuxSignedPlayer'
 import { useMuxAnalytics } from '../contexts/MuxAnalyticsContext'
+import { useTypewriter } from '../hooks/useTypewriter'
+import { FormattedMessage } from './FormattedMessage'
+import { StatusIndicator, TypingIndicator } from './StatusIndicator'
 
 /**
  * Enhanced WeatherChat Component with improved streamVNext implementation
@@ -184,8 +187,20 @@ ToolCallDisplay.displayName = 'ToolCallDisplay'
  * Memoized message component to prevent unnecessary re-renders
  * @param message - The message to display
  */
-const MessageComponent = memo(({ message }: { message: Message }) => {
+const MessageComponent = memo(({ message, isLatest }: { message: Message; isLatest?: boolean }) => {
   const [toolsExpanded, setToolsExpanded] = useState(false)
+
+  // Apply typewriter effect only to the latest assistant message
+  const shouldAnimate = isLatest && message.role === 'assistant' && message.content.length > 0
+  const { displayedText, isTyping, skip } = useTypewriter(
+    message.content,
+    {
+      speed: 30, // Slower, more readable speed (33 chars/second)
+      skipAnimation: !shouldAnimate,
+    }
+  )
+
+  const contentToDisplay = shouldAnimate ? displayedText : message.content
   
   // Function to detect and extract Mux video URLs
   const detectMuxVideo = (content: string) => {
@@ -250,31 +265,27 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
   const renderContent = (content: string) => {
     // Check for Mux video URL
     const muxVideoUrl = detectMuxVideo(content)
-    
+
     if (muxVideoUrl) {
       // Extract assetId from URL
       const url = new URL(muxVideoUrl)
       const assetId = url.searchParams.get('assetId')
-      
+
       if (assetId) {
         // Remove the video URL from the text content
         const textContent = content.replace(muxVideoUrl, '').trim()
-        
+
         return (
           <div className="space-y-3">
             {/* Render text content first */}
             {textContent && (
-              <div className="prose prose-sm max-w-none chat-message">
-                <div className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
-                  {formatTextContent(textContent)}
-                </div>
-              </div>
+              <FormattedMessage content={textContent} className="animate-fade-in" />
             )}
             {/* Then render the video player */}
-            <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
-              <MuxSignedPlayer 
+            <div className="mt-3 border-t pt-3 animate-slide-up" style={{ borderColor: 'var(--border)' }}>
+              <MuxSignedPlayer
                 assetId={assetId}
-                className="w-full max-w-lg mx-auto rounded-lg overflow-hidden"
+                className="w-full max-w-lg mx-auto rounded-lg overflow-hidden shadow-soft"
               />
               <div className="text-xs text-center mt-2" style={{ color: 'var(--fg-subtle)' }}>
                 📹 Video: {muxVideoUrl}
@@ -287,32 +298,28 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
     
     // Check for images
     const images = detectImages(content)
-    
+
     if (images.length > 0) {
       // Remove image references from text content
       let textContent = content
       images.forEach(img => {
         textContent = textContent.replace(img.fullMatch, '').trim()
       })
-      
+
       return (
         <div className="space-y-3">
           {/* Render text content first */}
           {textContent && (
-            <div className="prose prose-sm max-w-none chat-message">
-              <div className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
-                {formatTextContent(textContent)}
-              </div>
-            </div>
+            <FormattedMessage content={textContent} className="animate-fade-in" />
           )}
           {/* Then render the images */}
           <div className="space-y-3">
             {images.map((img, index) => (
-              <div key={index} className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+              <div key={index} className="border-t pt-3 animate-slide-up" style={{ borderColor: 'var(--border)' }}>
                 <img
                   src={img.url}
                   alt={img.alt || 'Image'}
-                  className="w-full max-w-lg mx-auto rounded-lg shadow-sm"
+                  className="w-full max-w-lg mx-auto rounded-lg shadow-soft transition-transform hover:scale-[1.02]"
                   style={{ maxHeight: '400px', objectFit: 'contain' }}
                   onError={(e) => {
                     // Fallback for broken images
@@ -335,42 +342,47 @@ const MessageComponent = memo(({ message }: { message: Message }) => {
         </div>
       )
     }
-    
+
     // Check for iframe content
     if (content.includes('<iframe')) {
       return (
-        <div 
-          className="whitespace-pre-wrap leading-relaxed text-sm md:text-base"
+        <div
+          className="whitespace-pre-wrap leading-relaxed text-sm md:text-base animate-fade-in"
           dangerouslySetInnerHTML={{ __html: content }}
         />
       )
     }
-    
+
     // Regular text content with improved formatting
-    return (
-      <div className="prose prose-sm max-w-none chat-message">
-        <div className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
-          {formatTextContent(content)}
-        </div>
-      </div>
-    )
+    return <FormattedMessage content={content} />
   }
   
   return (
-    <div className={message.role === 'user' ? 'text-right' : 'text-left'}>
+    <div
+      className={`${message.role === 'user' ? 'text-right animate-slide-in-right' : 'text-left animate-slide-in-left'}`}
+    >
       <div
-        className="inline-block px-3 py-2 rounded-2xl max-w-full break-words border"
+        className={`inline-block px-4 py-3 rounded-2xl max-w-full break-words border transition-all duration-300 ${
+          shouldAnimate && isTyping ? 'cursor-pointer' : ''
+        }`}
         style={{
-          background: message.role === 'user' 
-            ? 'var(--accent-muted)' 
+          background: message.role === 'user'
+            ? 'var(--accent-muted)'
             : 'var(--overlay)',
-          borderColor: message.role === 'user' 
-            ? 'var(--accent)' 
+          borderColor: message.role === 'user'
+            ? 'var(--accent)'
             : 'var(--border)',
           color: 'var(--fg)'
         }}
+        onClick={shouldAnimate && isTyping ? skip : undefined}
+        title={shouldAnimate && isTyping ? 'Click to show full message' : undefined}
       >
-        {renderContent(message.content)}
+        {renderContent(contentToDisplay)}
+
+        {/* Typing cursor indicator */}
+        {shouldAnimate && isTyping && (
+          <span className="inline-block w-0.5 h-4 ml-1 bg-[var(--accent)] animate-typing align-middle"></span>
+        )}
         
         {/* Enhanced Tool Calls Debug Info - Collapsed by default */}
         {message.debugInfo?.toolCalls && message.debugInfo.toolCalls.length > 0 && (
@@ -597,11 +609,17 @@ export default function WeatherChat() {
     }
   }, [])
 
-  // Auto-scroll when messages change (with debounce)
+  // Auto-scroll when messages change (with smoother debounce for typewriter effect)
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      scrollToBottom()
-    }, 100)
+      if (scrollRef.current) {
+        // Smooth scroll to bottom
+        scrollRef.current.scrollTo({
+          top: scrollRef.current.scrollHeight,
+          behavior: 'smooth'
+        })
+      }
+    }, 150) // Slightly longer debounce for smoother scrolling with typewriter
     return () => clearTimeout(timeoutId)
   }, [messages, scrollToBottom])
 
@@ -671,64 +689,90 @@ export default function WeatherChat() {
       </div>
 
       {/* Enhanced Status Display */}
-      {streamState.metrics && (
-        <div className="text-xs" style={{ color: 'var(--fg-subtle)' }}>
-          {streamState.isStreaming && (
-            <div className="flex items-center gap-2">
-              <span className="animate-pulse">🌾</span>
-              <span>Gathering weather data from satellites and weather stations...</span>
-            </div>
-          )}
-          {streamState.retryCount > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="animate-spin">🔄</span>
-              <span>Connection interrupted, reconnecting to weather services... ({streamState.retryCount}/3)</span>
-            </div>
-          )}
-        </div>
+      {streamState.isStreaming && (
+        <StatusIndicator
+          type="processing"
+          message="Gathering weather data from satellites and stations"
+          className="animate-fade-in"
+        />
+      )}
+      {streamState.retryCount > 0 && (
+        <StatusIndicator
+          type="loading"
+          message={`Reconnecting to weather services (${streamState.retryCount}/3)`}
+          className="animate-fade-in"
+        />
       )}
 
       <div
         aria-label="Chat messages"
         aria-live="polite"
-        className="max-h-[45vh] overflow-y-auto rounded-xl border p-4"
+        className="max-h-[45vh] overflow-y-auto rounded-xl border p-4 shadow-inner-soft transition-all duration-300"
         role="log"
         style={{ background: 'var(--overlay)', borderColor: 'var(--border)' }}
         ref={scrollRef}
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           {messages.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="mb-4">
-                <span className="text-4xl">🌾</span>
+            <div className="text-center py-12 px-4 animate-fade-in">
+              <div className="mb-6 animate-bounce-gentle">
+                <span className="text-5xl">🌾</span>
               </div>
-              <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--fg)' }}>
+              <h3 className="text-xl font-semibold mb-3" style={{ color: 'var(--fg)' }}>
                 Welcome to WeatherAgent
               </h3>
-              <p className="text-sm mb-4" style={{ color: 'var(--fg-subtle)' }}>
+              <p className="text-sm mb-6 max-w-md mx-auto leading-relaxed" style={{ color: 'var(--fg-subtle)' }}>
                 Get detailed weather forecasts tailored for farming decisions. Enter your ZIP code below to start.
               </p>
-              <div className="rounded-lg p-4 mb-4" style={{ 
-                backgroundColor: 'var(--accent-muted)', 
+              <div className="rounded-xl p-5 mb-4 max-w-md mx-auto shadow-soft animate-slide-up" style={{
+                backgroundColor: 'var(--accent-muted)',
                 borderColor: 'var(--accent)',
                 border: '1px solid'
               }}>
-                <p className="text-sm font-medium mb-2" style={{ color: 'var(--accent)' }}>
-                  What you'll get:
+                <p className="text-sm font-semibold mb-3 flex items-center justify-center gap-2" style={{ color: 'var(--accent)' }}>
+                  <span>✨</span>
+                  <span>What you'll get:</span>
                 </p>
-                <ul className="text-xs space-y-1 text-left" style={{ color: 'var(--fg-subtle)' }}>
-                  <li>• 7-day weather forecast with agricultural insights</li>
-                  <li>• Planting and irrigation recommendations</li>
-                  <li>• Pest and disease pressure alerts</li>
-                  <li>• Frost and heat stress warnings</li>
-                  <li>• Field access and spray condition updates</li>
+                <ul className="text-sm space-y-2 text-left" style={{ color: 'var(--fg)' }}>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[var(--ok)] mt-0.5">✓</span>
+                    <span>7-day weather forecast with agricultural insights</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[var(--ok)] mt-0.5">✓</span>
+                    <span>Planting and irrigation recommendations</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[var(--ok)] mt-0.5">✓</span>
+                    <span>Pest and disease pressure alerts</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[var(--ok)] mt-0.5">✓</span>
+                    <span>Frost and heat stress warnings</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[var(--ok)] mt-0.5">✓</span>
+                    <span>Field access and spray condition updates</span>
+                  </li>
                 </ul>
               </div>
             </div>
           ) : (
-            messages.map((message) => (
-              <MessageComponent key={message.id} message={message} />
-            ))
+            <>
+              {messages.map((message, index) => (
+                <MessageComponent
+                  key={message.id}
+                  message={message}
+                  isLatest={index === messages.length - 1}
+                />
+              ))}
+              {/* Show typing indicator when streaming and no content yet */}
+              {streamState.isStreaming && messages[messages.length - 1]?.content === '' && (
+                <div className="text-left">
+                  <TypingIndicator message="Weather Agent is analyzing data" />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -737,39 +781,47 @@ export default function WeatherChat() {
       {(streamState.error || agentError) && (
         <div
           aria-live="assertive"
-          className="text-sm p-3 rounded-lg border"
+          className="text-sm p-4 rounded-xl border shadow-soft animate-slide-up"
           id="error-message"
           role="alert"
-          style={{ 
+          style={{
             color: 'var(--error)',
             backgroundColor: 'var(--error-muted)',
             borderColor: 'var(--error)'
           }}
         >
-          <div className="flex items-center gap-2">
-            <span>⚠️</span>
-            <span>
-              {agentError || (typeof streamState.error === 'string' ? streamState.error : String(streamState.error || 'Unknown error'))}
-            </span>
+          <div className="flex items-start gap-3">
+            <span className="text-lg">⚠️</span>
+            <div className="flex-1">
+              <p className="font-medium mb-1">Connection Error</p>
+              <p className="text-xs opacity-90">
+                {agentError || (typeof streamState.error === 'string' ? streamState.error : String(streamState.error || 'Unknown error'))}
+              </p>
+              {streamState.retryCount > 0 && (
+                <button
+                  onClick={retry}
+                  className="mt-3 px-4 py-2 text-xs font-medium bg-white hover:bg-red-50 rounded-lg border border-[var(--error)] transition-all hover:shadow-md"
+                  style={{ color: 'var(--error)' }}
+                >
+                  Retry Connection ({streamState.retryCount}/3)
+                </button>
+              )}
+            </div>
           </div>
-          {streamState.retryCount > 0 && (
-            <button
-              onClick={retry}
-              className="mt-2 px-3 py-1 text-xs bg-red-100 hover:bg-red-200 rounded border border-red-300 transition-colors"
-            >
-              Retry ({streamState.retryCount}/3)
-            </button>
-          )}
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex gap-3 items-start">
         <div className="flex-1">
           <input
             aria-describedby="error-message zip-help"
             aria-label="Enter your 5-digit ZIP code for weather forecast"
             autoComplete="postal-code"
-            className={`input w-full ${!hasAssistantResponded && input && !/^\d{5}$/.test(input) ? 'border-red-300' : ''}`}
+            className={`input w-full transition-all duration-200 ${
+              !hasAssistantResponded && input && !/^\d{5}$/.test(input)
+                ? 'border-[var(--error)] focus:shadow-[0_0_0_3px_rgba(216,63,135,0.2)]'
+                : ''
+            }`}
             inputMode="numeric"
             pattern="\\d{5}"
             placeholder={hasAssistantResponded ? "Ask about weather..." : "Enter your ZIP code for detailed weather forecast..."}
@@ -785,24 +837,27 @@ export default function WeatherChat() {
             disabled={streamState.isLoading}
           />
           {!hasAssistantResponded && input && !/^\d{5}$/.test(input) && (
-            <div id="zip-help" className="text-xs text-red-600 mt-1">
-              Please enter a valid 5-digit ZIP code
+            <div id="zip-help" className="text-xs mt-2 animate-fade-in" style={{ color: 'var(--error)' }}>
+              ℹ️ Please enter a valid 5-digit ZIP code
             </div>
           )}
         </div>
         <button
           aria-label={hasAssistantResponded ? "Send message" : "Get forecast"}
-          className="btn whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn whitespace-nowrap shadow-soft"
           onClick={onSend}
           disabled={!agent || streamState.isLoading || !input.trim() || (!hasAssistantResponded && !/^\d{5}$/.test(input.trim()))}
         >
           {streamState.isLoading ? (
             <span className="flex items-center gap-2">
               <span className="animate-spin">⏳</span>
-              Please wait one moment...
+              <span className="hidden sm:inline">Processing...</span>
             </span>
           ) : (
-            hasAssistantResponded ? 'Ask' : 'Get Forecast'
+            <>
+              <span>{hasAssistantResponded ? 'Send' : 'Get Forecast'}</span>
+              <span className="text-lg">→</span>
+            </>
           )}
         </button>
       </div>
